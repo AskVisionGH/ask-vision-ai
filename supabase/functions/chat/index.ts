@@ -588,10 +588,12 @@ serve(async (req) => {
             let eventType: string | null = null;
 
             if (name === "get_wallet_balance") {
-              if (!walletAddress) {
+              const args = safeJson(tc.function?.arguments);
+              const target = (args.address ?? "").trim() || walletAddress;
+              if (!target) {
                 result = { error: "No wallet connected" };
               } else {
-                result = await invokeFn("wallet-balance", { address: walletAddress }, req);
+                result = await invokeFn("wallet-balance", { address: target }, req);
               }
               eventType = "wallet_balance";
             } else if (name === "get_token_info") {
