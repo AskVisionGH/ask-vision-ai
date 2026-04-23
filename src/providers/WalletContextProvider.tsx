@@ -19,13 +19,13 @@ const RPC_ENDPOINT = `${SUPABASE_URL}/functions/v1/rpc-url`;
 
 // Inject the Supabase anon key on every JSON-RPC request the wallet adapter
 // sends to our edge function — the gateway requires `apikey`/`Authorization`.
-const rpcFetch: typeof fetch = (input, init = {}) => {
-  const headers = new Headers(init.headers ?? {});
+const rpcFetch: typeof fetch = (input, init) => {
+  const headers = new Headers(init?.headers ?? {});
   headers.set("apikey", SUPABASE_ANON_KEY);
   if (!headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${SUPABASE_ANON_KEY}`);
   }
-  return fetch(input, { ...init, headers });
+  return fetch(input, { ...(init ?? {}), headers });
 };
 
 export const WalletContextProvider = ({ children }: Props) => {
