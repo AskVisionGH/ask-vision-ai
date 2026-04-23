@@ -35,12 +35,15 @@ const KNOWN_MINTS: Record<string, string> = {
 
 type Interval = "5m" | "15m" | "1h" | "4h" | "1d";
 
-const INTERVAL_RES: Record<Interval, number> = {
-  "5m": 5,
-  "15m": 15,
-  "1h": 60,
-  "4h": 240,
-  "1d": 1440,
+// GeckoTerminal OHLCV endpoint shape:
+// /networks/solana/pools/{pool}/ohlcv/{timeframe}?aggregate={n}&limit={l}
+// timeframe ∈ {minute, hour, day}, aggregate is the bucket multiplier.
+const INTERVAL_GT: Record<Interval, { timeframe: "minute" | "hour" | "day"; aggregate: number }> = {
+  "5m": { timeframe: "minute", aggregate: 5 },
+  "15m": { timeframe: "minute", aggregate: 15 },
+  "1h": { timeframe: "hour", aggregate: 1 },
+  "4h": { timeframe: "hour", aggregate: 4 },
+  "1d": { timeframe: "day", aggregate: 1 },
 };
 
 // How many bars we want per interval. Tuned for a tidy chart.
@@ -119,45 +122,45 @@ serve(async (req) => {
     pairs.sort((a: any, b: any) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0));
     const top = pairs[0];
 
-    // 2. Pull bars. DexScreener's bars endpoint is not officially documented
-    // but is what their site uses. Falls back to synthesising from priceChange
-    // buckets if the bars call ever fails.
-    const res = INTERVAL_RES[interval];
+    // 2. Pull OHLCV bars from GeckoTerminal — proper open/high/low/close,
+    // not synthesised. Falls back to a smoothed line if the call fails.
+    const { timeframe, aggregate } = INTERVAL_GT[interval];
     const wanted = INTERVAL_BARS[interval];
-    const now = Math.floor(Date.now() / 1000);
-    const from = now - wanted * res * 60;
 
     let candles: Candle[] = [];
     try {
-      const dex = String(top.dexId ?? "raydium");
-      const barsUrl =
-        `https://io.dexscreener.com/dex/chart/amm/${dex}/bars/${top.pairAddress}` +
-        `?from=${from}&to=${now}&res=${res}&cb=${Math.floor(Math.random() * 1e6)}`;
-      const barsResp = await fetch(barsUrl, {
+      const gtUrl =
+        `https://api.geckoterminal.com/api/v2/networks/solana/pools/${top.pairAddress}` +
+        `/ohlcv/${timeframe}?aggregate=${aggregate}&limit=${wanted}&currency=usd`;
+      const gtResp = await fetch(gtUrl, {
         headers: {
-          // Some Cloudflare layers require a UA + referer to return JSON.
-          "User-Agent": "Mozilla/5.0 (compatible; VisionBot/1.0)",
-          Referer: "https://dexscreener.com/",
-          Accept: "application/json",
+          Accept: "application/json;version=20230302",
+          "User-Agent": "VisionBot/1.0",
         },
       });
-      if (barsResp.ok) {
-        const barsJson = await barsResp.json();
-        const arr = barsJson?.bars ?? barsJson?.data ?? [];
+      if (gtResp.ok) {
+        const gtJson = await gtResp.json();
+        const arr = gtJson?.data?.attributes?.ohlcv_list ?? [];
+        // GeckoTerminal returns newest-first as [t, o, h, l, c, v]. Reverse for chart.
         candles = arr
-          .map((b: any) => ({
-            t: Number(b.timestamp ?? b.t ?? 0),
-            o: Number(b.open ?? b.o ?? 0),
-            h: Number(b.high ?? b.h ?? 0),
-            l: Number(b.low ?? b.l ?? 0),
-            c: Number(b.close ?? b.c ?? 0),
-            v: Number(b.volume ?? b.v ?? 0),
+          .map((row: number[]) => ({
+            t: Number(row[0]),
+            o: Number(row[1]),
+            h: Number(row[2]),
+            l: Number(row[3]),
+            c: Number(row[4]),
+            v: Number(row[5] ?? 0),
           }))
-          .filter((c: Candle) => c.t > 0 && c.c > 0);
+          .filter((c: Candle) => c.t > 0 && c.c > 0)
+          .sort((a: Candle, b: Candle) => a.t - b.t);
+      } else {
+        console.error("GeckoTerminal returned non-OK:", gtResp.status, await gtResp.text());
       }
     } catch (e) {
-      console.error("bars fetch failed:", e);
+      console.error("GeckoTerminal fetch failed:", e);
     }
+
+    const now = Math.floor(Date.now() / 1000);
 
     // Last-resort fallback: synthesise a flat-ish trace from the priceChange
     // buckets so the UI can still render something useful.
@@ -169,7 +172,6 @@ serve(async (req) => {
       const stepSecs = (24 * 60 * 60) / points;
       candles = Array.from({ length: points }, (_, i) => {
         const t = now - (points - 1 - i) * stepSecs;
-        // smooth interpolation
         const p = start + ((price - start) * i) / (points - 1);
         return { t, o: p, h: p, l: p, c: p, v: 0 };
       });
