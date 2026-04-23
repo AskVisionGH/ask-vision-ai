@@ -47,9 +47,6 @@ const Chat = () => {
   const [input, setInput] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  // When true, suppress the auto-select-most-recent effect so a freshly
-  // started "new chat" doesn't snap back to the latest existing thread.
-  const [draftingNew, setDraftingNew] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
 
   // Land users on a blank "new chat" by default — past threads remain in the
