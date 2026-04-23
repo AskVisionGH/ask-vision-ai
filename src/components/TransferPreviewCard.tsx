@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   RefreshCw,
@@ -7,7 +7,12 @@ import {
   ExternalLink,
   AlertCircle,
   AlertTriangle,
+  UserPlus,
+  Check,
 } from "lucide-react";
+import { toast } from "sonner";
+import { useContacts, findContactByAddress } from "@/hooks/useContacts";
+import { Input } from "@/components/ui/input";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import {
   ComputeBudgetProgram,
