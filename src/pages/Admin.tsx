@@ -490,6 +490,7 @@ const RolesTab = () => {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Name</TableHead>
                 <TableHead>User ID</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Granted</TableHead>
@@ -499,21 +500,31 @@ const RolesTab = () => {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="py-10 text-center">
+                  <TableCell colSpan={5} className="py-10 text-center">
                     <Loader2 className="mx-auto h-4 w-4 animate-spin text-muted-foreground" />
                   </TableCell>
                 </TableRow>
               ) : null}
               {!loading && roles.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="py-10 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
                     No roles assigned.
                   </TableCell>
                 </TableRow>
               ) : null}
-              {roles.map((r) => (
+              {roles.map((r) => {
+                const name = nameByUserId[r.user_id];
+                return (
                 <TableRow key={r.id}>
-                  <TableCell className="font-mono text-xs">{r.user_id}</TableCell>
+                  <TableCell className="font-medium">
+                    {name ?? <span className="text-muted-foreground">Unknown</span>}
+                    {r.user_id === user?.id ? (
+                      <Badge variant="outline" className="ml-2 text-[10px]">You</Badge>
+                    ) : null}
+                  </TableCell>
+                  <TableCell>
+                    <CopyId value={r.user_id} />
+                  </TableCell>
                   <TableCell>
                     <Badge variant="secondary" className="text-xs">{r.role}</Badge>
                   </TableCell>
