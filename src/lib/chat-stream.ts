@@ -117,6 +117,10 @@ export type ToolEvent =
   | { type: string; data: any };
 
 export interface ChatMessage {
+  /** Database id, present once persisted. Used for in-place edits. */
+  id?: string;
+  /** Database created_at, present once persisted. Used to truncate from a point. */
+  createdAt?: string;
   role: ChatRole;
   content: string;
   toolEvents?: ToolEvent[];

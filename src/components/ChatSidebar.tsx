@@ -1,6 +1,21 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { GripVertical, LogOut, MessageSquarePlus, MoreHorizontal, Pencil, Pin, PinOff, Settings as SettingsIcon, Trash2, Users } from "lucide-react";
+import {
+  GripVertical,
+  Link2,
+  Link2Off,
+  LogOut,
+  MessageSquarePlus,
+  MoreHorizontal,
+  Pencil,
+  Pin,
+  PinOff,
+  Search,
+  Settings as SettingsIcon,
+  Trash2,
+  Users,
+  X,
+} from "lucide-react";
 import {
   DndContext,
   PointerSensor,
@@ -21,6 +36,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -45,12 +61,18 @@ interface Props {
   conversations: ConversationRow[];
   activeId: string | null;
   loading: boolean;
+  /** Conversations matching the user's search query, by id. Empty/null = no filter. */
+  searchHits: Set<string> | null;
+  searchQuery: string;
+  onSearchQueryChange: (q: string) => void;
   onSelect: (id: string) => void;
   onNew: () => void;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
   onTogglePin: (id: string, pinned: boolean) => void;
   onReorderPinned: (orderedIds: string[]) => void;
+  onShare: (c: ConversationRow) => void;
+  onUnshare: (c: ConversationRow) => void;
 }
 
 interface RowProps {
@@ -65,6 +87,8 @@ interface RowProps {
   onChangeRename: (v: string) => void;
   onTogglePin: (id: string, pinned: boolean) => void;
   onRequestDelete: (c: ConversationRow) => void;
+  onShare: (c: ConversationRow) => void;
+  onUnshare: (c: ConversationRow) => void;
   draggable?: boolean;
 }
 
@@ -80,6 +104,8 @@ const ConversationRowItem = ({
   onChangeRename,
   onTogglePin,
   onRequestDelete,
+  onShare,
+  onUnshare,
   draggable = false,
 }: RowProps) => {
   const sortable = useSortable({ id: c.id, disabled: !draggable });
@@ -90,6 +116,8 @@ const ConversationRowItem = ({
         opacity: sortable.isDragging ? 0.5 : 1,
       }
     : undefined;
+
+  const isShared = !!c.share_id;
 
   return (
     <li
@@ -143,6 +171,12 @@ const ConversationRowItem = ({
             />
           )}
           <span className="truncate flex-1">{c.title}</span>
+          {isShared && (
+            <Link2
+              className="h-3 w-3 flex-shrink-0 text-primary/70"
+              aria-label="Shared"
+            />
+          )}
         </button>
       )}
 
@@ -160,7 +194,7 @@ const ConversationRowItem = ({
               <MoreHorizontal className="h-3.5 w-3.5" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-36">
+          <DropdownMenuContent align="end" className="w-44">
             <DropdownMenuItem onClick={() => onTogglePin(c.id, !c.pinned)}>
               {c.pinned ? (
                 <>
@@ -178,6 +212,25 @@ const ConversationRowItem = ({
               <Pencil className="mr-2 h-3.5 w-3.5" />
               Rename
             </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            {isShared ? (
+              <>
+                <DropdownMenuItem onClick={() => onShare(c)}>
+                  <Link2 className="mr-2 h-3.5 w-3.5" />
+                  Copy share link
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onUnshare(c)}>
+                  <Link2Off className="mr-2 h-3.5 w-3.5" />
+                  Stop sharing
+                </DropdownMenuItem>
+              </>
+            ) : (
+              <DropdownMenuItem onClick={() => onShare(c)}>
+                <Link2 className="mr-2 h-3.5 w-3.5" />
+                Share link
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={() => onRequestDelete(c)}
               className="text-destructive focus:text-destructive"
@@ -196,12 +249,17 @@ export const ChatSidebar = ({
   conversations,
   activeId,
   loading,
+  searchHits,
+  searchQuery,
+  onSearchQueryChange,
   onSelect,
   onNew,
   onRename,
   onDelete,
   onTogglePin,
   onReorderPinned,
+  onShare,
+  onUnshare,
 }: Props) => {
   const { user, signOut } = useAuth();
   const { profile } = useProfile();
@@ -223,9 +281,24 @@ export const ChatSidebar = ({
     setRenamingId(null);
   };
 
+  // Apply the search filter: match title client-side, content via the parent's
+  // server-side `searchHits` set. Either match counts.
+  const filtered = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return conversations;
+    return conversations.filter((c) => {
+      const titleMatch = c.title.toLowerCase().includes(q);
+      const contentMatch = searchHits?.has(c.id) ?? false;
+      return titleMatch || contentMatch;
+    });
+  }, [conversations, searchQuery, searchHits]);
+
+  const isSearching = searchQuery.trim().length > 0;
   const active = activeId ? conversations.find((c) => c.id === activeId) : null;
-  const pinned = conversations.filter((c) => c.pinned && c.id !== activeId);
-  const previous = conversations.filter((c) => !c.pinned && c.id !== activeId);
+  const pinned = filtered.filter((c) => c.pinned && c.id !== activeId);
+  const previous = filtered.filter((c) => !c.pinned && c.id !== activeId);
+  // When searching, the "current" conversation is only shown if it matches.
+  const showActiveSection = !isSearching && active;
 
   const handleDragEnd = (e: DragEndEvent) => {
     const { active: dragged, over } = e;
@@ -249,7 +322,11 @@ export const ChatSidebar = ({
     onChangeRename: setRenameValue,
     onTogglePin,
     onRequestDelete: setPendingDelete,
+    onShare,
+    onUnshare,
   });
+
+  const noResults = isSearching && filtered.length === 0;
 
   return (
     <aside className="flex h-full w-full flex-col border-r border-border/60 bg-background/80 backdrop-blur-md">
@@ -270,6 +347,28 @@ export const ChatSidebar = ({
         >
           <MessageSquarePlus className="h-4 w-4" />
         </Button>
+      </div>
+
+      {/* Search */}
+      <div className="shrink-0 border-b border-border/60 px-3 py-2">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
+          <Input
+            value={searchQuery}
+            onChange={(e) => onSearchQueryChange(e.target.value)}
+            placeholder="Search conversations…"
+            className="h-8 border-border/60 bg-secondary/40 pl-8 pr-7 text-xs placeholder:text-muted-foreground/50"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => onSearchQueryChange("")}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-label="Clear search"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Quick links */}
@@ -294,19 +393,23 @@ export const ChatSidebar = ({
               No conversations yet.
             </div>
           </>
+        ) : noResults ? (
+          <div className="px-3 py-6 text-center text-xs text-muted-foreground/60">
+            No matches for "{searchQuery.trim()}"
+          </div>
         ) : (
           <>
-            {active && (
+            {showActiveSection && (
               <>
                 <SectionHeader label="Current" />
                 <ul className="mb-3 space-y-0.5">
-                  <ConversationRowItem {...rowProps(active, true)} />
+                  <ConversationRowItem {...rowProps(active!, true)} />
                 </ul>
               </>
             )}
             {pinned.length > 0 && (
               <>
-                <SectionHeader label="Pinned" />
+                <SectionHeader label={isSearching ? "Pinned · matches" : "Pinned"} />
                 <DndContext
                   sensors={sensors}
                   collisionDetection={closestCenter}
@@ -321,7 +424,7 @@ export const ChatSidebar = ({
                         <ConversationRowItem
                           key={c.id}
                           {...rowProps(c, false)}
-                          draggable
+                          draggable={!isSearching}
                         />
                       ))}
                     </ul>
@@ -332,7 +435,13 @@ export const ChatSidebar = ({
             {previous.length > 0 && (
               <>
                 <SectionHeader
-                  label={active || pinned.length > 0 ? "Previous" : "Conversations"}
+                  label={
+                    isSearching
+                      ? "Matches"
+                      : showActiveSection || pinned.length > 0
+                        ? "Previous"
+                        : "Conversations"
+                  }
                 />
                 <ul className="space-y-0.5">
                   {previous.map((c) => (

@@ -9,6 +9,7 @@ import { useProfile } from "@/hooks/useProfile";
 import Index from "./pages/Index.tsx";
 import Auth from "./pages/Auth.tsx";
 import Chat from "./pages/Chat.tsx";
+import SharedChat from "./pages/SharedChat.tsx";
 import Onboarding from "./pages/Onboarding.tsx";
 import Settings from "./pages/Settings.tsx";
 import Contacts from "./pages/Contacts.tsx";
@@ -53,6 +54,7 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/auth" element={<Auth />} />
+              <Route path="/shared/:shareId" element={<SharedChat />} />
               <Route
                 path="/onboarding"
                 element={
