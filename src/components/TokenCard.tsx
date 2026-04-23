@@ -1,9 +1,17 @@
 import { useState } from "react";
-import { ArrowUpRight, TrendingUp, TrendingDown, Shield, Loader2 } from "lucide-react";
+import { ArrowUpRight, TrendingUp, TrendingDown, Shield, Loader2, LineChart, MessageCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TokenLogo } from "@/components/TokenLogo";
 import { RiskReportCard } from "@/components/RiskReportCard";
-import type { TokenInfoData, RiskReportData } from "@/lib/chat-stream";
+import { TokenChartCard } from "@/components/TokenChartCard";
+import { SocialSentimentCard } from "@/components/SocialSentimentCard";
+import type {
+  TokenInfoData,
+  RiskReportData,
+  TokenChartData,
+  SocialSentimentData,
+  SentimentVerdict,
+} from "@/lib/chat-stream";
 
 interface Props {
   data: TokenInfoData;
@@ -45,13 +53,35 @@ const fmtPct = (n: number | null | undefined) => {
 const SAFETY_PILL_MCAP_THRESHOLD = 50_000_000;
 
 const CONTRACT_ANALYZER_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/contract-analyzer`;
+const CHART_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/token-chart`;
+const SENTIMENT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/social-sentiment`;
 const ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
+type Pane = null | "safety" | "chart" | "vibe";
+
+const VIBE_DOT_COLOR: Record<SentimentVerdict, string> = {
+  very_bullish: "text-up",
+  bullish: "text-up",
+  neutral: "text-muted-foreground",
+  bearish: "text-down",
+  very_bearish: "text-down",
+  unknown: "text-muted-foreground",
+};
+
 export const TokenCard = ({ data }: Props) => {
-  const [expanded, setExpanded] = useState(false);
+  const [pane, setPane] = useState<Pane>(null);
+
   const [report, setReport] = useState<RiskReportData | null>(null);
   const [loadingReport, setLoadingReport] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
+
+  const [chart, setChart] = useState<TokenChartData | null>(null);
+  const [loadingChart, setLoadingChart] = useState(false);
+  const [chartError, setChartError] = useState<string | null>(null);
+
+  const [vibe, setVibe] = useState<SocialSentimentData | null>(null);
+  const [loadingVibe, setLoadingVibe] = useState(false);
+  const [vibeError, setVibeError] = useState<string | null>(null);
 
   if (data.error) {
     return (
@@ -64,21 +94,19 @@ export const TokenCard = ({ data }: Props) => {
   const change24h = data.priceChange24h;
   const isUp = (change24h ?? 0) >= 0;
 
-  // Show the safety pill for smaller/newer tokens where it actually helps.
-  // We don't fetch the report up-front — the pill is just an entry point;
-  // tapping it triggers the heavier RugCheck call on demand.
   const showSafetyPill =
     !!data.address &&
     (data.marketCapUsd == null || data.marketCapUsd < SAFETY_PILL_MCAP_THRESHOLD);
 
+  const togglePane = (next: Pane) => {
+    setPane((cur) => (cur === next ? null : next));
+  };
+
   const loadReport = async () => {
-    if (report || loadingReport) {
-      setExpanded((v) => !v);
-      return;
-    }
+    togglePane("safety");
+    if (report || loadingReport) return;
     setLoadingReport(true);
     setReportError(null);
-    setExpanded(true);
     try {
       const resp = await fetch(CONTRACT_ANALYZER_URL, {
         method: "POST",
@@ -89,15 +117,60 @@ export const TokenCard = ({ data }: Props) => {
         body: JSON.stringify({ query: data.address }),
       });
       const json = await resp.json();
-      if (!resp.ok || json?.error) {
-        setReportError(json?.error ?? "Couldn't load risk report");
-      } else {
-        setReport(json as RiskReportData);
-      }
+      if (!resp.ok || json?.error) setReportError(json?.error ?? "Couldn't load risk report");
+      else setReport(json as RiskReportData);
     } catch (e) {
       setReportError(e instanceof Error ? e.message : "Network error");
     } finally {
       setLoadingReport(false);
+    }
+  };
+
+  const loadChart = async () => {
+    togglePane("chart");
+    if (chart || loadingChart) return;
+    setLoadingChart(true);
+    setChartError(null);
+    try {
+      const resp = await fetch(CHART_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${ANON_KEY}`,
+        },
+        body: JSON.stringify({ query: data.address || data.symbol, interval: "15m" }),
+      });
+      const json = await resp.json();
+      if (!resp.ok || json?.error) setChartError(json?.error ?? "Couldn't load chart");
+      else setChart(json as TokenChartData);
+    } catch (e) {
+      setChartError(e instanceof Error ? e.message : "Network error");
+    } finally {
+      setLoadingChart(false);
+    }
+  };
+
+  const loadVibe = async () => {
+    togglePane("vibe");
+    if (vibe || loadingVibe) return;
+    setLoadingVibe(true);
+    setVibeError(null);
+    try {
+      const resp = await fetch(SENTIMENT_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${ANON_KEY}`,
+        },
+        body: JSON.stringify({ query: data.symbol }),
+      });
+      const json = await resp.json();
+      if (!resp.ok || json?.error) setVibeError(json?.error ?? "Couldn't load sentiment");
+      else setVibe(json as SocialSentimentData);
+    } catch (e) {
+      setVibeError(e instanceof Error ? e.message : "Network error");
+    } finally {
+      setLoadingVibe(false);
     }
   };
 
@@ -141,24 +214,27 @@ export const TokenCard = ({ data }: Props) => {
           <Stat label="1h Change" value={fmtPct(data.priceChange1h)} dim />
         </div>
 
-        {/* Footer row: safety pill + dexscreener */}
-        {(showSafetyPill || data.pairUrl) && (
-          <div className="flex items-center justify-between gap-2 border-t border-border/40 bg-secondary/30 px-5 py-2.5">
-            {showSafetyPill ? (
-              <button
-                type="button"
+        {/* Footer row: pills + dexscreener */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/40 bg-secondary/30 px-5 py-2.5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Pill
+              active={pane === "chart"}
+              loading={loadingChart}
+              onClick={loadChart}
+              icon={
+                <LineChart
+                  className={cn("h-3 w-3", chart ? "text-primary" : "text-muted-foreground")}
+                />
+              }
+              label={pane === "chart" ? "Hide chart" : "Chart"}
+            />
+
+            {showSafetyPill && (
+              <Pill
+                active={pane === "safety"}
+                loading={loadingReport}
                 onClick={loadReport}
-                disabled={loadingReport}
-                className={cn(
-                  "ease-vision flex items-center gap-1.5 rounded-full border border-border bg-background/60 px-2.5 py-1 font-mono text-[10px] tracking-wider uppercase text-muted-foreground",
-                  "hover:border-primary/30 hover:text-foreground",
-                  expanded && "border-primary/30 text-foreground",
-                )}
-                aria-expanded={expanded}
-              >
-                {loadingReport ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
+                icon={
                   <Shield
                     className={cn(
                       "h-3 w-3",
@@ -173,48 +249,122 @@ export const TokenCard = ({ data }: Props) => {
                         : "text-muted-foreground",
                     )}
                   />
-                )}
-                {expanded ? "Hide safety" : "Safety check"}
-              </button>
-            ) : (
-              <span />
+                }
+                label={pane === "safety" ? "Hide safety" : "Safety check"}
+              />
             )}
 
-            {data.pairUrl && (
-              <a
-                href={data.pairUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="ease-vision flex items-center gap-1 font-mono text-[10px] tracking-wider uppercase text-muted-foreground hover:text-foreground"
-              >
-                DexScreener
-                <ArrowUpRight className="h-3 w-3" />
-              </a>
-            )}
+            <Pill
+              active={pane === "vibe"}
+              loading={loadingVibe}
+              onClick={loadVibe}
+              icon={
+                <MessageCircle
+                  className={cn(
+                    "h-3 w-3",
+                    vibe ? VIBE_DOT_COLOR[vibe.sentimentVerdict] : "text-muted-foreground",
+                  )}
+                />
+              }
+              label={pane === "vibe" ? "Hide vibe" : "Vibe check"}
+            />
           </div>
-        )}
+
+          {data.pairUrl && (
+            <a
+              href={data.pairUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ease-vision flex items-center gap-1 font-mono text-[10px] tracking-wider uppercase text-muted-foreground hover:text-foreground"
+            >
+              DexScreener
+              <ArrowUpRight className="h-3 w-3" />
+            </a>
+          )}
+        </div>
       </div>
 
-      {/* Expanded risk report */}
-      {expanded && (
+      {/* Expanded panes */}
+      {pane === "safety" && (
         <>
           {reportError ? (
-            <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-              {reportError}
-            </div>
+            <ErrorBox text={reportError} />
           ) : report ? (
             <RiskReportCard data={report} />
           ) : loadingReport ? (
-            <div className="flex items-center gap-2 rounded-2xl border border-border bg-card/40 px-4 py-3 text-xs text-muted-foreground">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              Running safety checks…
-            </div>
+            <LoadingBox text="Running safety checks…" />
+          ) : null}
+        </>
+      )}
+
+      {pane === "chart" && (
+        <>
+          {chartError ? (
+            <ErrorBox text={chartError} />
+          ) : chart ? (
+            <TokenChartCard data={chart} />
+          ) : loadingChart ? (
+            <LoadingBox text="Loading chart…" />
+          ) : null}
+        </>
+      )}
+
+      {pane === "vibe" && (
+        <>
+          {vibeError ? (
+            <ErrorBox text={vibeError} />
+          ) : vibe ? (
+            <SocialSentimentCard data={vibe} />
+          ) : loadingVibe ? (
+            <LoadingBox text="Reading the room…" />
           ) : null}
         </>
       )}
     </div>
   );
 };
+
+const Pill = ({
+  active,
+  loading,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean;
+  loading: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    disabled={loading}
+    aria-pressed={active}
+    className={cn(
+      "ease-vision flex items-center gap-1.5 rounded-full border border-border bg-background/60 px-2.5 py-1 font-mono text-[10px] tracking-wider uppercase text-muted-foreground",
+      "hover:border-primary/30 hover:text-foreground",
+      active && "border-primary/30 text-foreground",
+    )}
+  >
+    {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : icon}
+    {label}
+  </button>
+);
+
+const ErrorBox = ({ text }: { text: string }) => (
+  <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+    {text}
+  </div>
+);
+
+const LoadingBox = ({ text }: { text: string }) => (
+  <div className="flex items-center gap-2 rounded-2xl border border-border bg-card/40 px-4 py-3 text-xs text-muted-foreground">
+    <Loader2 className="h-3 w-3 animate-spin" />
+    {text}
+  </div>
+);
 
 const Stat = ({ label, value, dim }: { label: string; value: string; dim?: boolean }) => (
   <div>

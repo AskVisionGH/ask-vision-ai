@@ -139,6 +139,95 @@ export interface RiskReportData {
   error?: string;
 }
 
+export interface ChartCandle {
+  t: number;
+  o: number;
+  h: number;
+  l: number;
+  c: number;
+  v: number;
+}
+
+export type ChartInterval = "5m" | "15m" | "1h" | "4h" | "1d";
+
+export interface TokenChartData {
+  symbol: string;
+  name: string;
+  address: string;
+  logo: string | null;
+  pairAddress: string;
+  pairUrl: string | null;
+  interval: ChartInterval;
+  candles: ChartCandle[];
+  priceUsd: number | null;
+  priceChangePct: number | null;
+  high: number | null;
+  low: number | null;
+  error?: string;
+}
+
+export interface TaIndicators {
+  rsi: number;
+  macdLine: number;
+  changePct: number;
+  atrPct: number;
+  volRatio: number;
+  high: number;
+  low: number;
+}
+
+export interface TaResponse {
+  symbol: string;
+  interval: ChartInterval;
+  commentary: string;
+  indicators: TaIndicators;
+  error?: string;
+}
+
+export type SentimentVerdict =
+  | "very_bullish"
+  | "bullish"
+  | "neutral"
+  | "bearish"
+  | "very_bearish"
+  | "unknown";
+
+export interface SentimentSeriesPoint {
+  t: number;
+  socialVolume: number;
+  sentimentPct: number;
+}
+
+export interface SocialPost {
+  id: string;
+  network: string;
+  url: string;
+  title: string;
+  creatorName: string | null;
+  creatorAvatar: string | null;
+  interactions24h: number;
+  sentiment: "positive" | "neutral" | "negative" | "unknown";
+  postedAt: number;
+}
+
+export interface SocialSentimentData {
+  symbol: string;
+  name: string;
+  topic: string;
+  bullishPct: number | null;
+  galaxyScore: number | null;
+  altRank: number | null;
+  socialVolume24h: number | null;
+  socialVolumeChangePct: number | null;
+  contributors24h: number | null;
+  sentimentVerdict: SentimentVerdict;
+  headline: string;
+  series: SentimentSeriesPoint[];
+  topPosts: SocialPost[];
+  sources: string[];
+  error?: string;
+}
+
 export type ToolEvent =
   | { type: "wallet_balance"; data: WalletBalanceData }
   | { type: "token_info"; data: TokenInfoData }
@@ -146,6 +235,8 @@ export type ToolEvent =
   | { type: "swap_quote"; data: SwapQuoteData }
   | { type: "transfer_quote"; data: TransferQuoteData }
   | { type: "risk_report"; data: RiskReportData }
+  | { type: "token_chart"; data: TokenChartData }
+  | { type: "social_sentiment"; data: SocialSentimentData }
   | { type: string; data: any };
 
 export interface ChatMessage {

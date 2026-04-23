@@ -25,6 +25,8 @@ Tools (call them whenever relevant — don't ask permission, don't pretend you c
 - \`list_contacts\` — returns the user's saved address book (names + wallets). Call when they ask "who are my contacts", "who have I saved", or want to pick a recipient.
 - \`save_contact\` — saves a wallet under a friendly name. Call when the user says "save this as Mom", "add 7xKX... to my contacts as Cold wallet", etc.
 - \`analyze_contract\` — runs a safety/rug-risk audit on any Solana token: mint authority, freeze authority, LP lock %, top-holder concentration, transfer tax, and known scam flags. Call this whenever the user asks "is X safe?", "is this a rug?", "should I be worried about this token?", "honeypot check", "who holds this", "is the LP locked", or any safety/legitimacy question. Also call it proactively when the user pastes a fresh mint address you don't recognize. Argument: \`query\` (ticker like "WIF" or full mint address). Don't run it for obvious blue-chips like SOL, USDC, USDT unless asked.
+- \`get_token_chart\` — fetches OHLCV price candles for a Solana token across 5m/15m/1h/4h/1d intervals and returns a renderable chart. Call this whenever the user asks for a chart, price action, the trend, "show me the chart", "how's it looking on the 5m", "draw a graph", etc. Arguments: \`query\` (ticker or mint), \`interval\` (one of "5m", "15m", "1h", "4h", "1d" — default "15m" if unspecified).
+- \`get_social_sentiment\` — pulls Twitter/X + Reddit + news sentiment, social volume, top posts and Galaxy Score for a token via LunarCrush. Call this for any "what's twitter saying about $X", "social sentiment", "what's the lore on X", "is X trending on twitter", "vibe check", "how bullish is the crowd". Argument: \`query\` (ticker like "BONK" or full mint).
 
 CRITICAL: If a user asks for live data (prices, balances, what's trending, swap quotes), you MUST call the matching tool. Never make up numbers. Never say "here are the top tokens" without first calling \`get_trending\`. Never quote a swap rate without calling \`prepare_swap\`.
 
@@ -185,6 +187,49 @@ const TOOLS = [
           query: {
             type: "string",
             description: "Token ticker (e.g. 'WIF') or full Solana mint address.",
+          },
+        },
+        required: ["query"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_token_chart",
+      description:
+        "Fetch OHLCV price candles for a Solana token across selectable intervals (5m, 15m, 1h, 4h, 1d). Use whenever the user asks for a chart, price action, trend, or to 'show' the price for a token.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "Token ticker (e.g. 'SOL', 'BONK') or full Solana mint address.",
+          },
+          interval: {
+            type: "string",
+            enum: ["5m", "15m", "1h", "4h", "1d"],
+            description: "Candle interval. Default to '15m' if user doesn't specify.",
+          },
+        },
+        required: ["query"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_social_sentiment",
+      description:
+        "Fetch Twitter/X + Reddit + news sentiment, social volume, contributor counts, top recent posts and Galaxy Score for a token. Use for any 'what's twitter saying', 'sentiment', 'is X trending', 'vibe check', 'lore', 'narrative' question.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "Token ticker (e.g. 'BONK', 'JUP') or full Solana mint address.",
           },
         },
         required: ["query"],
@@ -467,6 +512,18 @@ serve(async (req) => {
               const args = safeJson(tc.function?.arguments);
               result = await invokeFn("contract-analyzer", { query: args.query ?? "" }, req);
               eventType = "risk_report";
+            } else if (name === "get_token_chart") {
+              const args = safeJson(tc.function?.arguments);
+              result = await invokeFn(
+                "token-chart",
+                { query: args.query ?? "", interval: args.interval ?? "15m" },
+                req,
+              );
+              eventType = "token_chart";
+            } else if (name === "get_social_sentiment") {
+              const args = safeJson(tc.function?.arguments);
+              result = await invokeFn("social-sentiment", { query: args.query ?? "" }, req);
+              eventType = "social_sentiment";
             } else {
               result = { error: `Unknown tool: ${name}` };
             }

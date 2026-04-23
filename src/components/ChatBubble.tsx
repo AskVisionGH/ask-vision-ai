@@ -10,6 +10,8 @@ import { TrendingCard } from "@/components/TrendingCard";
 import { SwapPreviewCard } from "@/components/SwapPreviewCard";
 import { TransferPreviewCard } from "@/components/TransferPreviewCard";
 import { RiskReportCard } from "@/components/RiskReportCard";
+import { TokenChartCard } from "@/components/TokenChartCard";
+import { SocialSentimentCard } from "@/components/SocialSentimentCard";
 
 interface Props {
   message: ChatMessage;
@@ -166,6 +168,12 @@ export const ChatBubble = ({ message, onEdit, readOnly = false }: Props) => {
         }
         if (event.type === "risk_report") {
           return <RiskReportCard key={i} data={event.data} />;
+        }
+        if (event.type === "token_chart") {
+          return <TokenChartCard key={i} data={event.data} />;
+        }
+        if (event.type === "social_sentiment") {
+          return <SocialSentimentCard key={i} data={event.data} />;
         }
         return null;
       })}
