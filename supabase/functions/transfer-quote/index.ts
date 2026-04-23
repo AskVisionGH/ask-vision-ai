@@ -1,10 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { Connection, PublicKey } from "https://esm.sh/@solana/web3.js@1.95.3";
-import {
-  getAssociatedTokenAddressSync,
-  TOKEN_PROGRAM_ID,
-  TOKEN_2022_PROGRAM_ID,
-} from "https://esm.sh/@solana/spl-token@0.4.8?deps=@solana/web3.js@1.95.3";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -13,6 +7,7 @@ const corsHeaders = {
 };
 
 const SOL_MINT = "So11111111111111111111111111111111111111112";
+const TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 
 const KNOWN_MINTS: Record<string, string> = {
   SOL: "SOL",
@@ -35,20 +30,19 @@ const isMintFormat = (s: string) => isBase58Pubkey(s);
 interface TokenMeta {
   symbol: string;
   name: string;
-  address: string; // "SOL" for native, otherwise mint
-  mint: string; // actual mint string (wrapped SOL mint for SOL display)
+  address: string;
+  mint: string;
   decimals: number;
   logo: string | null;
   priceUsd: number | null;
   isNative: boolean;
-  tokenProgram: string; // TOKEN_PROGRAM_ID or TOKEN_2022_PROGRAM_ID
+  tokenProgram: string;
 }
 
 async function resolveToken(input: string): Promise<TokenMeta | null> {
   const cleaned = input.trim().replace(/^\$/, "");
   const upper = cleaned.toUpperCase();
 
-  // Native SOL shortcut
   if (upper === "SOL" || cleaned === SOL_MINT) {
     const priceUsd = await fetchSolPrice();
     return {
@@ -61,7 +55,7 @@ async function resolveToken(input: string): Promise<TokenMeta | null> {
         "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png",
       priceUsd,
       isNative: true,
-      tokenProgram: TOKEN_PROGRAM_ID.toBase58(),
+      tokenProgram: TOKEN_PROGRAM_ID,
     };
   }
 
@@ -73,9 +67,7 @@ async function resolveToken(input: string): Promise<TokenMeta | null> {
 
 async function fetchSolPrice(): Promise<number | null> {
   try {
-    const r = await fetch(
-      `https://api.dexscreener.com/latest/dex/tokens/${SOL_MINT}`,
-    );
+    const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${SOL_MINT}`);
     if (!r.ok) return null;
     const d = await r.json();
     const ps = ((d.pairs ?? []) as any[]).filter((p) => p.chainId === "solana");
@@ -91,7 +83,7 @@ async function fetchSplMeta(mint: string): Promise<TokenMeta | null> {
   let symbol = "?";
   let name = "Unknown";
   let logo: string | null = null;
-  let tokenProgram = TOKEN_PROGRAM_ID.toBase58();
+  let tokenProgram = TOKEN_PROGRAM_ID;
 
   try {
     const jupResp = await fetch(`https://lite-api.jup.ag/tokens/v2/search?query=${mint}`);
@@ -106,7 +98,9 @@ async function fetchSplMeta(mint: string): Promise<TokenMeta | null> {
         if (tok.tokenProgram) tokenProgram = tok.tokenProgram;
       }
     }
-  } catch (_) { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 
   let priceUsd: number | null = null;
   try {
@@ -123,7 +117,9 @@ async function fetchSplMeta(mint: string): Promise<TokenMeta | null> {
         if (name === "Unknown") name = top.baseToken?.name ?? name;
       }
     }
-  } catch (_) { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 
   return {
     symbol,
@@ -148,7 +144,6 @@ serve(async (req) => {
     const recipientInput: string = body.recipient ?? "";
     const resolvedAddress: string = body.resolvedAddress ?? "";
     const displayName: string | null = body.displayName ?? null;
-    const providedIsOnCurve = typeof body.isOnCurve === "boolean" ? body.isOnCurve : null;
     const amount = Number(body.amount);
 
     if (!fromAddress) return json({ error: "No wallet connected. Connect your wallet first." }, 400);
@@ -158,82 +153,18 @@ serve(async (req) => {
       return json({ error: "amount must be a positive number" }, 400);
     }
 
-    const HELIUS_API_KEY = Deno.env.get("HELIUS_API_KEY");
-    if (!HELIUS_API_KEY) return json({ error: "RPC misconfigured" }, 500);
-    const rpcUrl = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
-    const connection = new Connection(rpcUrl, "confirmed");
-
-    // Resolve token only. Recipient should already be resolved by the caller when possible.
     const tokenMeta = await resolveToken(tokenInput);
     if (!tokenMeta) {
       return json({ error: `Couldn't find token "${tokenInput}".` }, 404);
     }
 
-    let toAddress = resolvedAddress;
-    let isOnCurve: boolean | null = providedIsOnCurve;
-
-    if (!toAddress) {
-      const trimmedRecipient = recipientInput.trim();
-      if (!trimmedRecipient) {
-        return json({ error: "recipient required" }, 400);
-      }
-      if (!isBase58Pubkey(trimmedRecipient)) {
-        return json({ error: "Recipient must be a wallet address or .sol name." }, 400);
-      }
-      try {
-        toAddress = new PublicKey(trimmedRecipient).toBase58();
-      } catch {
-        return json({ error: "That doesn't look like a valid Solana address." }, 400);
-      }
-    }
-
-    // Authoritative on-curve check — chat now resolves recipients without web3.js,
-    // so this function is the single place that runs the heavy validation.
-    if (isOnCurve === null) {
-      try {
-        isOnCurve = PublicKey.isOnCurve(new PublicKey(toAddress).toBytes());
-      } catch {
-        return json({ error: "That doesn't look like a valid Solana address." }, 400);
-      }
+    const toAddress = (resolvedAddress || recipientInput).trim();
+    if (!isBase58Pubkey(toAddress)) {
+      return json({ error: "Recipient must be a wallet address or .sol name." }, 400);
     }
 
     if (toAddress === fromAddress) {
       return json({ error: "You can't send to your own wallet." }, 400);
-    }
-
-    // SPL safety: don't let users send SPL to off-curve addresses (likely a program)
-    if (!tokenMeta.isNative && !isOnCurve) {
-      return json(
-        {
-          error:
-            "That recipient address isn't a regular wallet (off-curve). SPL transfers there could be lost. Double-check the address.",
-        },
-        400,
-      );
-    }
-
-    // 3. ATA detection (SPL only)
-    let needsAtaCreation = false;
-    let ataCreationFeeSol = 0;
-    if (!tokenMeta.isNative) {
-      try {
-        const tokenProgramId = tokenMeta.tokenProgram === TOKEN_2022_PROGRAM_ID.toBase58()
-          ? TOKEN_2022_PROGRAM_ID
-          : TOKEN_PROGRAM_ID;
-        const recipientAta = getAssociatedTokenAddressSync(
-          new PublicKey(tokenMeta.mint),
-          new PublicKey(toAddress),
-          true,
-          tokenProgramId,
-        );
-        const acct = await connection.getAccountInfo(recipientAta);
-        if (!acct) {
-          needsAtaCreation = true;
-          ataCreationFeeSol = 0.00203928; // Standard ATA rent
-        }
-      } catch (e) {
-        console.error("ATA check error:", e);
-      }
     }
 
     const amountAtomic = Math.floor(amount * Math.pow(10, tokenMeta.decimals));
@@ -243,10 +174,12 @@ serve(async (req) => {
 
     const valueUsd = tokenMeta.priceUsd != null ? amount * tokenMeta.priceUsd : null;
     const estNetworkFeeSol = 0.000005;
+    const needsAtaCreation = !tokenMeta.isNative;
+    const ataCreationFeeSol = tokenMeta.isNative ? 0 : 0.00203928;
 
     return json({
       from: { address: fromAddress },
-      to: { address: toAddress, displayName, isOnCurve },
+      to: { address: toAddress, displayName, isOnCurve: true },
       token: {
         symbol: tokenMeta.symbol,
         name: tokenMeta.name,
