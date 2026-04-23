@@ -1,29 +1,26 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useAuth } from "@/hooks/useAuth";
 import { VisionLogo } from "@/components/VisionLogo";
-import { ConnectWalletButton } from "@/components/ConnectWalletButton";
+import { Button } from "@/components/ui/button";
 
 const Index = () => {
-  const { connected } = useWallet();
   const navigate = useNavigate();
+  const { session, loading } = useAuth();
 
   useEffect(() => {
-    if (connected) navigate("/chat");
-  }, [connected, navigate]);
+    if (!loading && session) navigate("/chat", { replace: true });
+  }, [loading, session, navigate]);
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-background text-foreground">
-      {/* Aurora glow */}
       <div className="pointer-events-none absolute inset-0 bg-aurora" aria-hidden />
 
-      {/* Vertical beam behind triangle */}
       <div
         className="pointer-events-none absolute left-1/2 top-0 h-[60vh] w-[2px] -translate-x-1/2 beam animate-pulse-glow"
         aria-hidden
       />
 
-      {/* Header */}
       <header className="relative z-10 flex items-center justify-between px-6 py-6 sm:px-10">
         <div className="flex items-center gap-2">
           <VisionLogo size={22} />
@@ -31,12 +28,19 @@ const Index = () => {
             Vision
           </span>
         </div>
-        <span className="font-mono text-[11px] tracking-widest uppercase text-muted-foreground">
-          v1 · solana
-        </span>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => navigate("/auth")}
+            className="font-mono text-xs tracking-widest uppercase text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Sign in
+          </button>
+          <span className="hidden font-mono text-[11px] tracking-widest uppercase text-muted-foreground sm:inline">
+            v1 · solana
+          </span>
+        </div>
       </header>
 
-      {/* Hero */}
       <section className="relative z-10 mx-auto flex min-h-[calc(100vh-96px)] max-w-2xl flex-col items-center justify-center px-6 text-center">
         <div className="animate-fade-up">
           <div className="mb-10 flex justify-center">
@@ -53,15 +57,20 @@ const Index = () => {
           </p>
 
           <div className="mt-10 flex flex-col items-center gap-4">
-            <ConnectWalletButton />
+            <Button
+              size="lg"
+              onClick={() => navigate("/auth")}
+              className="rounded-full bg-primary px-8 font-medium text-primary-foreground hover:bg-primary/90 ease-vision shadow-glow"
+            >
+              Get started
+            </Button>
             <p className="font-mono text-[11px] tracking-wider uppercase text-muted-foreground/70">
-              Phantom · Solflare · Backpack
+              Email · Google · Phantom · Solflare · Backpack
             </p>
           </div>
         </div>
       </section>
 
-      {/* Footer */}
       <footer className="relative z-10 px-6 pb-6 text-center sm:px-10">
         <p className="font-mono text-[10px] tracking-widest uppercase text-muted-foreground/50">
           askvision.ai
