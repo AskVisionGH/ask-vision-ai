@@ -47,20 +47,10 @@ const Chat = () => {
   const [input, setInput] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  // When true, suppress the auto-select-most-recent effect so a freshly
-  // started "new chat" doesn't snap back to the latest existing thread.
-  const [draftingNew, setDraftingNew] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
 
-  // Auto-select most recent conversation on first load (or none if list is empty).
-  useEffect(() => {
-    if (convosLoading) return;
-    if (activeId) return;
-    if (draftingNew) return;
-    if (conversations.length > 0) {
-      setSearchParams({ c: conversations[0].id }, { replace: true });
-    }
-  }, [convosLoading, conversations, activeId, draftingNew, setSearchParams]);
+  // Land users on a blank "new chat" by default — past threads remain in the
+  // sidebar for selection. Only honour an explicit `?c=...` from the URL.
 
   // Load messages when active conversation changes.
   useEffect(() => {
@@ -88,13 +78,11 @@ const Chat = () => {
   }, [messages, isThinking]);
 
   const selectConversation = (id: string) => {
-    setDraftingNew(false);
     setSearchParams({ c: id });
     setMobileOpen(false);
   };
 
   const startNewConversation = async () => {
-    setDraftingNew(true);
     setSearchParams({}, { replace: true });
     setMessages([]);
     setInput("");
@@ -126,7 +114,6 @@ const Chat = () => {
       }
       convoId = created.id;
       isFirstMessage = true;
-      setDraftingNew(false);
       setSearchParams({ c: convoId }, { replace: true });
     } else if (messages.length === 0) {
       isFirstMessage = true;
