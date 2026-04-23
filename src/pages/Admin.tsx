@@ -541,7 +541,8 @@ const RolesTab = () => {
                     </Button>
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         </CardContent>
