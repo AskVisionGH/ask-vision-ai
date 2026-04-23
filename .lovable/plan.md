@@ -1,103 +1,60 @@
 
+## Answer
 
-## Step 7: Transfers & SNS Resolution
+Not really. There is no project-side setting here to raise the CPU budget for just `resolve-recipient`. The current backend docs support per-function config like `verify_jwt`, `import_map`, and `entrypoint` in `supabase/config.toml`, and Lovable Cloud instance size can be upgraded in **Cloud → Overview → Advanced settings → Upgrade instance**, but that helps overall backend capacity — it does not remove the hosted Edge Function CPU ceiling that is causing this failure.
 
-Vision learns to **send tokens** — SOL or any SPL — to a wallet address or a `.sol` name. Same conversational pattern as swaps: AI prepares a preview card, the user reviews and signs, the card flips to a success state.
+## What’s actually going wrong
 
-### What you'll see
+`resolve-recipient` is still a separate Edge Function, and it imports Solana web3 just to normalize/check an address. That extra worker hop is the part still hitting the resource limit. The `.sol` lookup itself is cheap; the current architecture around it is not.
 
-Type **"send 0.05 SOL to toly.sol"** or **"send 10 USDC to 7xKX…9aPq"**. Vision replies with one short sentence and a card:
+## Implementation plan
 
-```text
-┌─────────────────────────────────────────┐
-│  Transfer preview                       │
-│                                         │
-│   You send       0.05 SOL               │
-│                  ≈ $7.42                │
-│                                         │
-│   To             toly.sol               │
-│                  4Nd1m…h2Cj             │
-│                                         │
-│   Network fee    ~0.000005 SOL          │
-│   Total          0.050005 SOL           │
-│                                         │
-│   [ Confirm & sign ]   [ Cancel ]       │
-└─────────────────────────────────────────┘
-```
+1. **Take `.sol` resolution out of the separate worker hot path**
+   - Stop calling `resolve-recipient` as its own Edge Function from `chat`.
+   - Add a small resolver helper directly inside `supabase/functions/chat/index.ts`.
+   - For `.sol` names, use the lightweight SNS proxy HTTP lookup.
+   - For raw addresses, use a lightweight base58-format check only.
+   - Pass the resolved address straight into `transfer-quote`.
 
-After signing, the card collapses to the same green success state used for swaps:
+2. **Retire or slim down `resolve-recipient`**
+   - Either remove it from the transfer flow entirely, or keep it as a zero-dependency helper endpoint.
+   - If kept, strip out `@solana/web3.js` so the function does not pay startup/CPU cost just to validate input.
 
-```text
-┌─────────────────────────────────────────┐
-│  ✓ Sent 0.05 SOL to toly.sol            │
-│    Confirmed in 1.2s                    │
-│    Tx  3yQ2…7nFp  ↗ Solscan             │
-└─────────────────────────────────────────┘
-```
+3. **Make `transfer-quote` the authoritative validator**
+   - Update `supabase/functions/transfer-quote/index.ts` so it can work from `resolvedAddress` alone.
+   - Keep the real Solana-specific checks there, since this function already loads web3 and token utilities anyway.
+   - Compute `isOnCurve` there when needed, and continue blocking SPL transfers to off-curve recipients.
 
-If the recipient address is invalid, the SNS name doesn't resolve, or the wallet has insufficient balance, the AI explains plainly and the card never renders.
+4. **Harden the contract between backend and UI**
+   - Make the transfer event shape tolerant of partial/error states.
+   - Treat `displayName`, `resolvedAddress`, and `isOnCurve` as optional until quote preparation succeeds.
+   - Keep `TransferPreviewCard` defensive so failed preparation never tries to read nested fields.
 
-### What gets built
+5. **Improve failure handling**
+   - If `.sol` lookup fails, return a clean message like:
+     - “I couldn’t resolve that `.sol` name right now. Try again or paste the wallet address.”
+   - Avoid surfacing raw worker-limit JSON to the chat UI.
 
-**1. New edge function — `supabase/functions/resolve-recipient/index.ts`**
-- Input: `{ recipient: string }` — either a base58 wallet address or a `.sol` name
-- If `.sol` suffix: resolves via Bonfida SNS SDK over Helius RPC (`@bonfida/spl-name-service` for Deno)
-- If raw address: validates it's a valid base58 32-byte public key
-- Returns `{ address, displayName, isOnCurve }` — `isOnCurve` flags PDAs (rare but worth catching to avoid sending to a program-owned account)
+6. **Regression-check the full transfer flow**
+   - Test:
+     - `send 0.5 usdc to toly.sol`
+     - `send 0.05 sol to <wallet address>`
+     - invalid `.sol`
+     - invalid base58 address
+     - SPL transfer to off-curve address
+   - Confirm the preview card renders and refreshes without re-triggering heavy resolution work.
 
-**2. New edge function — `supabase/functions/transfer-build/index.ts`**
-- Input: `{ fromAddress, toAddress, mint, amount }` (mint = `"SOL"` or SPL mint address; amount in human units)
-- For **SOL**: builds a `SystemProgram.transfer` instruction
-- For **SPL tokens**:
-  - Looks up sender's associated token account (ATA) for the mint
-  - Looks up recipient's ATA; if missing, prepends a `createAssociatedTokenAccountInstruction` (sender pays the ~0.002 SOL rent — this is shown in the preview)
-  - Adds a `createTransferCheckedInstruction` with proper decimals
-- Wraps in a `VersionedTransaction` with a recent blockhash from Helius
-- Returns `{ transaction: <base64>, lastValidBlockHeight, estNetworkFeeSol, ataCreationFeeSol }`
+## Files to update
 
-**3. New AI tool — `prepare_transfer`**
-Added to the `chat` edge function tool list:
-```ts
-{
-  name: "prepare_transfer",
-  description: "Prepare a transfer of SOL or an SPL token to another wallet. Use whenever the user wants to send, transfer, or pay tokens to an address or .sol name.",
-  parameters: {
-    token: "ticker (SOL, USDC, JUP) or full mint address",
-    amount: "decimal amount to send",
-    recipient: "wallet address or .sol name"
-  }
-}
-```
-The chat function calls `resolve-recipient` first; if it fails, it returns a clear error event so the AI can explain ("That .sol name doesn't resolve to anything"). On success it calls a new `transfer-quote` helper that bundles recipient resolution + USD pricing + fee estimate into the same event shape the UI expects.
+- `supabase/functions/chat/index.ts`
+- `supabase/functions/transfer-quote/index.ts`
+- `supabase/functions/resolve-recipient/index.ts` or remove it from active flow
+- `src/lib/chat-stream.ts`
+- `src/components/TransferPreviewCard.tsx`
 
-**4. New UI component — `src/components/TransferPreviewCard.tsx`**
-- Same visual language as `SwapPreviewCard` (dark panel, lilac accents, JetBrains Mono numbers)
-- Reuses the same state machine: `preview` → `building` → `awaiting_signature` → `submitting` → `confirming` → `success` | `error`
-- Reuses the existing `tx-submit` and `tx-status` edge functions verbatim — they're transaction-agnostic
-- Shows the resolved address under a `.sol` name so the user always sees where funds are actually going
-- Highlights ATA creation fee in amber when the recipient doesn't have a token account yet ("First-time send to this address — adds ~0.002 SOL")
+## Technical details
 
-**5. Wire-up**
-- `chat-stream.ts` → add `TransferQuoteData` type and `transfer_quote` to the `ToolEvent` union
-- `ChatBubble.tsx` → render `TransferPreviewCard` when `event.type === "transfer_quote"`
-- System prompt: add the `prepare_transfer` tool guidance and the rule "Always show the resolved address alongside any `.sol` name in your reply, so the user can sanity-check the destination."
-
-### Technical details
-
-- **SNS resolution**: Bonfida's `@bonfida/spl-name-service` Deno-compatible build resolves `name.sol` → owner pubkey via on-chain account reads through Helius RPC. No API key needed beyond what we already have.
-- **ATA detection**: Use `getAssociatedTokenAddressSync` for the address, then `connection.getAccountInfo` to check existence. Missing ATA → prepend creation instruction.
-- **Decimals**: Pulled from the same Jupiter token list cache that `swap-quote` already uses — no extra RPC call for known tokens.
-- **Safety check**: `PublicKey.isOnCurve()` flags PDAs. We block sending SPL tokens to non-curve addresses (programs) but allow SOL (some valid recipients are off-curve, e.g. Squads vaults). The card surfaces a warning either way.
-- **Reuse**: `tx-submit` and `tx-status` are unchanged — any signed `VersionedTransaction` flows through them.
-
-### What we explicitly defer to a later step
-- Address book / contacts ("send to mom")
-- Batch sends (one tx, multiple recipients)
-- Memo field on transfers
-- NFT transfers (separate intent — different account model)
-
-### Notes
-- No new secrets needed — Helius RPC and Jupiter token list are already in place
-- New Deno dep: `@bonfida/spl-name-service` (imported via esm.sh in the edge function — no package install)
-- Real mainnet money — same wallet popup safety gate as swaps
-
+- Current `supabase/config.toml` has no function-specific overrides.
+- Per-function config is useful for auth/import behavior, not CPU budget.
+- Hosted Edge Functions have a fixed CPU-time limit, so the real fix is to reduce synchronous compute and remove unnecessary worker boundaries.
+- Upgrading Lovable Cloud instance size is still worth knowing for general scaling, but it is not the right fix for this specific resolver failure.
