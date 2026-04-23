@@ -65,60 +65,25 @@ const KNOWN_MINTS: Record<string, string> = {
 };
 
 const POSITIVE_WORDS = [
-  "surge",
-  "rally",
-  "bullish",
-  "breakout",
-  "gain",
-  "gains",
-  "jump",
-  "jumps",
-  "soar",
-  "soars",
-  "rise",
-  "rises",
-  "record",
-  "adoption",
-  "partnership",
-  "approval",
-  "launch",
-  "wins",
-  "rebound",
-  "recovery",
-  "strength",
-  "momentum",
-  "uptrend",
-  "outperform",
-  "accumulate",
+  "moon","mooning","pump","pumping","bullish","bull","based","gem","ape","aping",
+  "send","sending","ath","100x","10x","wagmi","lfg","lfgg","🚀","🔥","💎","👑",
+  "bag","bags","accumulating","buying","loading","longing","up only","green",
+  "rally","breakout","gains","jump","soar","rise","record","adoption","partnership",
+  "approval","launch","wins","rebound","recovery","strength","momentum","uptrend",
+  "support","holding","love","alpha",
 ];
 
 const NEGATIVE_WORDS = [
-  "drop",
-  "drops",
-  "plunge",
-  "plunges",
-  "crash",
-  "crashes",
-  "bearish",
-  "selloff",
-  "slump",
-  "hack",
-  "exploit",
-  "breach",
-  "lawsuit",
-  "fraud",
-  "scam",
-  "risk",
-  "risks",
-  "concern",
-  "concerns",
-  "dump",
-  "weakness",
-  "liquidation",
-  "probe",
-  "investigation",
-  "downtrend",
+  "rug","rugged","scam","scammer","dump","dumped","dumping","dead","dying","crash",
+  "crashed","bearish","bear","ngmi","rekt","liq","liquidated","exit","jeet","jeets",
+  "down","red","selling","sold","short","shorting","sus","fud","fake","honeypot",
+  "drop","plunge","selloff","slump","hack","exploit","breach","lawsuit","fraud",
+  "risk","concern","weakness","liquidation","probe","investigation","downtrend",
+  "panic","fear",
 ];
+
+const NOW = () => Math.floor(Date.now() / 1000);
+const DAY = 24 * 60 * 60;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -131,19 +96,339 @@ serve(async (req) => {
 
     const resolved = await resolveToken(query);
 
-    const apiKey = Deno.env.get("LUNARCRUSH_API_KEY");
-    if (apiKey) {
-      const primary = await tryLunarCrush(resolved, apiKey);
+    // Try LunarCrush first if credits are available — it's the richest signal.
+    const lunarKey = Deno.env.get("LUNARCRUSH_API_KEY");
+    if (lunarKey) {
+      const primary = await tryLunarCrush(resolved, lunarKey);
       if (primary) return json(primary);
     }
 
-    const fallback = await buildGoogleNewsFallback(resolved);
-    return json(fallback);
+    // Free sources, merged. Always runs.
+    const merged = await buildFreeSentiment(resolved);
+    return json(merged);
   } catch (e) {
     console.error("social-sentiment error:", e);
     return json({ error: e instanceof Error ? e.message : "Unknown error" }, 500);
   }
 });
+
+// ─── Free sentiment: Pump.fun + Reddit + Farcaster + (optional) Twitter ──────
+
+async function buildFreeSentiment(resolved: ResolvedToken): Promise<SocialSentimentData> {
+  const sources: string[] = [];
+  const allPosts: SocialPost[] = [];
+
+  // Run all in parallel — any failure is silently dropped.
+  const tasks: Promise<{ source: string; posts: SocialPost[] } | null>[] = [];
+
+  if (resolved.address) {
+    tasks.push(
+      fetchPumpFunComments(resolved.address)
+        .then((posts) => (posts.length ? { source: "Pump.fun", posts } : null))
+        .catch((e) => {
+          console.warn("pump.fun fetch failed:", e);
+          return null;
+        }),
+    );
+  }
+
+  tasks.push(
+    fetchRedditPosts(resolved)
+      .then((posts) => (posts.length ? { source: "Reddit", posts } : null))
+      .catch((e) => {
+        console.warn("reddit fetch failed:", e);
+        return null;
+      }),
+  );
+
+  const neynarKey = Deno.env.get("NEYNAR_API_KEY");
+  if (neynarKey) {
+    tasks.push(
+      fetchFarcasterCasts(resolved, neynarKey)
+        .then((posts) => (posts.length ? { source: "Farcaster", posts } : null))
+        .catch((e) => {
+          console.warn("farcaster fetch failed:", e);
+          return null;
+        }),
+    );
+  }
+
+  const twitterToken = Deno.env.get("TWITTER_BEARER_TOKEN");
+  if (twitterToken) {
+    tasks.push(
+      fetchTwitterPosts(resolved, twitterToken)
+        .then((posts) => (posts.length ? { source: "Twitter/X", posts } : null))
+        .catch((e) => {
+          console.warn("twitter fetch failed:", e);
+          return null;
+        }),
+    );
+  }
+
+  const settled = await Promise.all(tasks);
+  for (const result of settled) {
+    if (!result) continue;
+    sources.push(result.source);
+    allPosts.push(...result.posts);
+  }
+
+  if (allPosts.length === 0) {
+    return {
+      symbol: resolved.symbol,
+      name: resolved.name,
+      topic: resolved.topic,
+      bullishPct: null,
+      galaxyScore: null,
+      altRank: null,
+      socialVolume24h: null,
+      socialVolumeChangePct: null,
+      contributors24h: null,
+      sentimentVerdict: "unknown",
+      headline: `No social chatter found for $${resolved.symbol} in the last 48h`,
+      series: [],
+      topPosts: [],
+      sources: ["Pump.fun", "Reddit", neynarKey ? "Farcaster" : null].filter(Boolean) as string[],
+      reportUrl: null,
+      error: `No reliable social data for $${resolved.symbol} yet — too new or too quiet.`,
+    };
+  }
+
+  const now = NOW();
+  const dayAgo = now - DAY;
+  const twoDaysAgo = now - 2 * DAY;
+
+  const last48h = allPosts.filter((p) => p.postedAt >= twoDaysAgo);
+  const last24h = last48h.filter((p) => p.postedAt >= dayAgo);
+  const prev24h = last48h.filter((p) => p.postedAt < dayAgo);
+
+  const bullishPct = computeBullishPct(last24h);
+  const contributors24h = new Set(last24h.map((p) => p.creatorName).filter(Boolean)).size || null;
+  const currentCount = last24h.length;
+  const previousCount = prev24h.length;
+  const socialVolumeChangePct = previousCount > 0
+    ? ((currentCount - previousCount) / previousCount) * 100
+    : currentCount > 0
+      ? 100
+      : 0;
+
+  // Surface the most-engaged posts up to 8.
+  const topPosts = [...last24h]
+    .sort((a, b) => b.interactions24h - a.interactions24h || b.postedAt - a.postedAt)
+    .slice(0, 8);
+
+  const reportUrl = sources.includes("Pump.fun") && resolved.address
+    ? `https://pump.fun/${resolved.address}`
+    : `https://www.google.com/search?q=${encodeURIComponent(`${resolved.symbol} ${resolved.name} crypto`)}`;
+
+  return {
+    symbol: resolved.symbol,
+    name: resolved.name,
+    topic: resolved.topic,
+    bullishPct,
+    galaxyScore: null,
+    altRank: null,
+    socialVolume24h: currentCount,
+    socialVolumeChangePct,
+    contributors24h,
+    sentimentVerdict: bucketSentiment(bullishPct),
+    headline: buildHeadline({
+      symbol: resolved.symbol,
+      bullishPct,
+      socialVolumeChangePct,
+      galaxyScore: null,
+      sourceName: sources.join(" + ") || "Social",
+    }),
+    series: buildHourlySeries(last24h, now),
+    topPosts,
+    sources,
+    reportUrl,
+  };
+}
+
+// ─── Source: Pump.fun comments ───────────────────────────────────────────────
+// Public endpoint: https://frontend-api.pump.fun/replies/{mint}?limit=...
+async function fetchPumpFunComments(mint: string): Promise<SocialPost[]> {
+  const resp = await fetch(`https://frontend-api-v3.pump.fun/replies/${mint}?limit=200&offset=0`, {
+    headers: { "User-Agent": "Mozilla/5.0 VisionBot/1.0", Accept: "application/json" },
+  });
+  if (!resp.ok) {
+    // fallback to v2 host
+    const r2 = await fetch(`https://frontend-api.pump.fun/replies/${mint}?limit=200&offset=0`, {
+      headers: { "User-Agent": "Mozilla/5.0 VisionBot/1.0", Accept: "application/json" },
+    });
+    if (!r2.ok) {
+      console.warn("pump.fun replies non-OK", resp.status, r2.status);
+      return [];
+    }
+    return parsePumpReplies(await r2.json(), mint);
+  }
+  return parsePumpReplies(await resp.json(), mint);
+}
+
+function parsePumpReplies(json: any, mint: string): SocialPost[] {
+  const arr = Array.isArray(json?.replies) ? json.replies : Array.isArray(json) ? json : [];
+  return arr
+    .map((r: any, idx: number) => {
+      const text = String(r.text ?? r.content ?? "").trim();
+      if (!text) return null;
+      const ts = Number(r.timestamp ?? r.created_timestamp ?? r.created_at ?? 0);
+      // Pump.fun timestamps are ms.
+      const postedAt = ts > 1e12 ? Math.floor(ts / 1000) : ts;
+      const author = r.username ?? r.user ?? r.creator ?? null;
+      return {
+        id: `pump-${r.id ?? idx}-${postedAt}`,
+        network: "pumpfun",
+        url: `https://pump.fun/${mint}`,
+        title: text.slice(0, 240),
+        creatorName: author ? String(author) : null,
+        creatorAvatar: r.profile_image ?? null,
+        interactions24h: Number(r.likes ?? 0),
+        sentiment: classifyText(text),
+        postedAt: Number.isFinite(postedAt) && postedAt > 0 ? postedAt : 0,
+      } satisfies SocialPost;
+    })
+    .filter((p): p is SocialPost => !!p && p.postedAt > 0);
+}
+
+// ─── Source: Reddit search (no key required) ─────────────────────────────────
+async function fetchRedditPosts(resolved: ResolvedToken): Promise<SocialPost[]> {
+  // Search the whole site for the symbol, restricted to last week. We dedupe
+  // and filter to last 48h afterwards. Use a unique UA — Reddit blocks bare ones.
+  const term = resolved.symbol.length >= 3
+    ? `"$${resolved.symbol}" OR "${resolved.name}"`
+    : `"${resolved.name}"`;
+  const url =
+    `https://www.reddit.com/search.json?q=${encodeURIComponent(term)}&sort=new&t=week&limit=50`;
+
+  const resp = await fetch(url, {
+    headers: {
+      "User-Agent": "VisionBot/1.0 (+https://lovable.dev)",
+      Accept: "application/json",
+    },
+  });
+  if (!resp.ok) {
+    console.warn("reddit non-OK", resp.status);
+    return [];
+  }
+  const json = await resp.json();
+  const children = json?.data?.children ?? [];
+  return children
+    .map((child: any, idx: number) => {
+      const d = child?.data ?? {};
+      const title = String(d.title ?? "").trim();
+      const body = String(d.selftext ?? "").trim();
+      const text = [title, body].filter(Boolean).join(" — ");
+      if (!text) return null;
+      const postedAt = Number(d.created_utc ?? 0);
+      return {
+        id: `reddit-${d.id ?? idx}`,
+        network: "reddit",
+        url: `https://reddit.com${d.permalink ?? ""}`,
+        title: text.slice(0, 240),
+        creatorName: d.author ? `u/${d.author}` : null,
+        creatorAvatar: null,
+        interactions24h: Number(d.score ?? 0) + Number(d.num_comments ?? 0),
+        sentiment: classifyText(text),
+        postedAt,
+      } satisfies SocialPost;
+    })
+    .filter((p: SocialPost | null): p is SocialPost => !!p && p.postedAt > 0);
+}
+
+// ─── Source: Farcaster casts via Neynar ──────────────────────────────────────
+async function fetchFarcasterCasts(resolved: ResolvedToken, apiKey: string): Promise<SocialPost[]> {
+  const term = resolved.address ?? resolved.symbol;
+  const url =
+    `https://api.neynar.com/v2/farcaster/cast/search?q=${encodeURIComponent(term)}&limit=50`;
+
+  const resp = await fetch(url, {
+    headers: { "x-api-key": apiKey, Accept: "application/json" },
+  });
+  if (!resp.ok) {
+    console.warn("neynar non-OK", resp.status, await resp.text().catch(() => ""));
+    return [];
+  }
+  const json = await resp.json();
+  const casts = json?.result?.casts ?? json?.casts ?? [];
+  return casts
+    .map((c: any, idx: number) => {
+      const text = String(c.text ?? "").trim();
+      if (!text) return null;
+      const postedAt = Math.floor(new Date(c.timestamp ?? 0).getTime() / 1000);
+      const reactions = Number(c.reactions?.likes_count ?? 0)
+        + Number(c.reactions?.recasts_count ?? 0)
+        + Number(c.replies?.count ?? 0);
+      const username = c.author?.username ? `@${c.author.username}` : null;
+      return {
+        id: `fc-${c.hash ?? idx}`,
+        network: "farcaster",
+        url: c.author?.username
+          ? `https://warpcast.com/${c.author.username}/${String(c.hash ?? "").slice(0, 10)}`
+          : "https://warpcast.com",
+        title: text.slice(0, 240),
+        creatorName: username,
+        creatorAvatar: c.author?.pfp_url ?? null,
+        interactions24h: reactions,
+        sentiment: classifyText(text),
+        postedAt,
+      } satisfies SocialPost;
+    })
+    .filter((p: SocialPost | null): p is SocialPost => !!p && p.postedAt > 0);
+}
+
+// ─── Source: Twitter/X (placeholder) ─────────────────────────────────────────
+// Only runs if TWITTER_BEARER_TOKEN is configured. Free read access requires
+// the X API Basic plan ($200/mo) at the moment, so this is wired but inert
+// unless/until a key is added.
+async function fetchTwitterPosts(resolved: ResolvedToken, bearer: string): Promise<SocialPost[]> {
+  const term = resolved.address ?? `$${resolved.symbol}`;
+  const url =
+    `https://api.x.com/2/tweets/search/recent?query=${encodeURIComponent(term)}&max_results=50` +
+    `&tweet.fields=created_at,public_metrics,author_id&expansions=author_id` +
+    `&user.fields=username,profile_image_url`;
+
+  const resp = await fetch(url, {
+    headers: { Authorization: `Bearer ${bearer}`, Accept: "application/json" },
+  });
+  if (!resp.ok) {
+    console.warn("twitter non-OK", resp.status, await resp.text().catch(() => ""));
+    return [];
+  }
+  const json = await resp.json();
+  const tweets = json?.data ?? [];
+  const users = new Map<string, any>();
+  for (const u of json?.includes?.users ?? []) users.set(u.id, u);
+
+  return tweets
+    .map((t: any, idx: number) => {
+      const text = String(t.text ?? "").trim();
+      if (!text) return null;
+      const postedAt = Math.floor(new Date(t.created_at ?? 0).getTime() / 1000);
+      const m = t.public_metrics ?? {};
+      const reactions = Number(m.like_count ?? 0)
+        + Number(m.retweet_count ?? 0)
+        + Number(m.reply_count ?? 0)
+        + Number(m.quote_count ?? 0);
+      const author = users.get(t.author_id);
+      const username = author?.username ? `@${author.username}` : null;
+      return {
+        id: `tw-${t.id ?? idx}`,
+        network: "twitter",
+        url: author?.username
+          ? `https://x.com/${author.username}/status/${t.id}`
+          : `https://x.com/i/status/${t.id}`,
+        title: text.slice(0, 240),
+        creatorName: username,
+        creatorAvatar: author?.profile_image_url ?? null,
+        interactions24h: reactions,
+        sentiment: classifyText(text),
+        postedAt,
+      } satisfies SocialPost;
+    })
+    .filter((p: SocialPost | null): p is SocialPost => !!p && p.postedAt > 0);
+}
+
+// ─── LunarCrush (kept as primary if key works) ───────────────────────────────
 
 async function tryLunarCrush(resolved: ResolvedToken, apiKey: string): Promise<SocialSentimentData | null> {
   const headers = {
@@ -247,104 +532,7 @@ async function tryLunarCrush(resolved: ResolvedToken, apiKey: string): Promise<S
   };
 }
 
-async function buildGoogleNewsFallback(resolved: ResolvedToken): Promise<SocialSentimentData> {
-  if (resolved.address) {
-    return {
-      symbol: resolved.symbol,
-      name: resolved.name,
-      topic: resolved.topic,
-      bullishPct: null,
-      galaxyScore: null,
-      altRank: null,
-      socialVolume24h: null,
-      socialVolumeChangePct: null,
-      contributors24h: null,
-      sentimentVerdict: "unknown",
-      headline: `No reliable public news match for $${resolved.symbol} yet`,
-      series: [],
-      topPosts: [],
-      sources: ["Google News"],
-      reportUrl: null,
-      error: "No reliable public social source found for this token yet.",
-    };
-  }
-
-  const searchTerms = [resolved.symbol, resolved.name]
-    .filter(Boolean)
-    .map((term) => `\"${term}\"`)
-    .join(" OR ");
-  const rssQuery = `${searchTerms} crypto when:2d`;
-  const reportUrl = `https://news.google.com/search?q=${encodeURIComponent(`${resolved.symbol} ${resolved.name} crypto`)}`;
-  const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(rssQuery)}&hl=en-US&gl=US&ceid=US:en`;
-
-  const resp = await fetch(rssUrl, {
-    headers: { "User-Agent": "Mozilla/5.0 VisionBot/1.0" },
-  });
-  if (!resp.ok) {
-    return {
-      symbol: resolved.symbol,
-      name: resolved.name,
-      topic: resolved.topic,
-      bullishPct: null,
-      galaxyScore: null,
-      altRank: null,
-      socialVolume24h: null,
-      socialVolumeChangePct: null,
-      contributors24h: null,
-      sentimentVerdict: "unknown",
-      headline: `No sentiment source available for $${resolved.symbol}`,
-      series: [],
-      topPosts: [],
-      sources: ["Google News"],
-      reportUrl,
-      error: "Couldn't reach fallback sentiment data",
-    };
-  }
-
-  const xml = await resp.text();
-  const items = parseGoogleNewsItems(xml);
-  const now = Math.floor(Date.now() / 1000);
-  const dayAgo = now - 24 * 60 * 60;
-  const twoDaysAgo = now - 48 * 60 * 60;
-
-  const last48h = items.filter((item) => item.postedAt >= twoDaysAgo);
-  const last24h = last48h.filter((item) => item.postedAt >= dayAgo);
-  const prev24h = last48h.filter((item) => item.postedAt < dayAgo);
-
-  const bullishPct = computeBullishPct(last24h);
-  const contributors24h = new Set(last24h.map((item) => item.creatorName).filter(Boolean)).size || null;
-  const currentCount = last24h.length;
-  const previousCount = prev24h.length;
-  const socialVolumeChangePct = previousCount > 0
-    ? ((currentCount - previousCount) / previousCount) * 100
-    : currentCount > 0
-      ? 100
-      : 0;
-
-  return {
-    symbol: resolved.symbol,
-    name: resolved.name,
-    topic: resolved.topic,
-    bullishPct,
-    galaxyScore: null,
-    altRank: null,
-    socialVolume24h: currentCount,
-    socialVolumeChangePct,
-    contributors24h,
-    sentimentVerdict: bucketSentiment(bullishPct),
-    headline: buildHeadline({
-      symbol: resolved.symbol,
-      bullishPct,
-      socialVolumeChangePct,
-      galaxyScore: null,
-      sourceName: "Google News",
-    }),
-    series: buildHourlySeries(last24h, now),
-    topPosts: last24h.slice(0, 8),
-    sources: ["Google News"],
-    reportUrl,
-  };
-}
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 async function resolveToken(queryRaw: string): Promise<ResolvedToken> {
   const cleaned = queryRaw.trim().replace(/^\$/, "");
@@ -389,27 +577,6 @@ async function resolveToken(queryRaw: string): Promise<ResolvedToken> {
   };
 }
 
-function parseGoogleNewsItems(xml: string): SocialPost[] {
-  const items = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].map((match) => match[1]);
-  return items.map((item, idx) => {
-    const title = decodeXml(extractTag(item, "title") ?? "").replace(/^<!\[CDATA\[|\]\]>$/g, "");
-    const url = decodeXml(extractTag(item, "link") ?? "");
-    const source = decodeXml(extractSource(item) ?? "Google News");
-    const postedAt = Math.floor(new Date(extractTag(item, "pubDate") ?? 0).getTime() / 1000);
-    return {
-      id: `${postedAt}-${idx}-${title.slice(0, 24)}`,
-      network: "news",
-      url,
-      title: title.replace(/\s+-\s+[^-]+$/, "").slice(0, 240),
-      creatorName: source,
-      creatorAvatar: null,
-      interactions24h: 0,
-      sentiment: classifyHeadline(title),
-      postedAt: Number.isFinite(postedAt) ? postedAt : 0,
-    } satisfies SocialPost;
-  }).filter((item) => item.url && item.title && item.postedAt > 0);
-}
-
 function buildHourlySeries(posts: SocialPost[], now: number): SentimentPoint[] {
   const buckets = Array.from({ length: 24 }, (_, i) => {
     const end = now - (23 - i) * 3600;
@@ -437,7 +604,7 @@ function computeBullishPct(posts: SocialPost[]): number | null {
   return Math.max(0, Math.min(100, score));
 }
 
-function classifyHeadline(text: string): SocialPost["sentiment"] {
+function classifyText(text: string): SocialPost["sentiment"] {
   const lower = text.toLowerCase();
   let score = 0;
   for (const word of POSITIVE_WORDS) if (lower.includes(word)) score += 1;
@@ -451,26 +618,6 @@ function sentimentToScore(sentiment: SocialPost["sentiment"]): number {
   if (sentiment === "positive") return 100;
   if (sentiment === "negative") return 0;
   return 50;
-}
-
-function extractTag(xml: string, tag: string): string | null {
-  const match = xml.match(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`, "i"));
-  return match?.[1] ?? null;
-}
-
-function extractSource(xml: string): string | null {
-  const match = xml.match(/<source[^>]*>([\s\S]*?)<\/source>/i);
-  return match?.[1] ?? null;
-}
-
-function decodeXml(text: string): string {
-  return text
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .trim();
 }
 
 function numOrNull(v: unknown): number | null {
@@ -506,8 +653,8 @@ function buildHeadline(args: {
   if (args.socialVolumeChangePct != null && Math.abs(args.socialVolumeChangePct) >= 25) {
     parts.push(
       args.socialVolumeChangePct > 0
-        ? `coverage +${args.socialVolumeChangePct.toFixed(0)}% vs prior day`
-        : `coverage ${args.socialVolumeChangePct.toFixed(0)}% vs prior day`,
+        ? `chatter +${args.socialVolumeChangePct.toFixed(0)}% vs prior day`
+        : `chatter ${args.socialVolumeChangePct.toFixed(0)}% vs prior day`,
     );
   }
   if (args.galaxyScore != null && args.galaxyScore >= 70) {
