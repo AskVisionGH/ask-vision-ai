@@ -177,207 +177,274 @@ const TOOLS = [
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+  let payload: any;
   try {
-    const { messages, walletAddress, profile, contacts } = await req.json();
-    const contactList: { name: string; address: string; resolved_address: string | null }[] =
-      Array.isArray(contacts) ? contacts : [];
-
-    if (!Array.isArray(messages)) {
-      return json({ error: "messages must be an array" }, 400);
-    }
-
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY missing");
-
-    // Build a personalisation block from the user's profile so the AI can
-    // tailor depth, interests, and risk framing without re-asking.
-    const profileBlock = buildProfileBlock(profile);
-    const contactsBlock = buildContactsBlock(contactList);
-    const systemContent = [SYSTEM_PROMPT, profileBlock, contactsBlock]
-      .filter(Boolean)
-      .join("\n\n");
-
-    // Multi-turn tool loop. Max 3 iterations to bound cost.
-    const conversation: any[] = [
-      { role: "system", content: systemContent },
-      ...messages,
-    ];
-
-    const toolEvents: any[] = []; // structured events to send back alongside the text
-
-    for (let iter = 0; iter < 3; iter++) {
-      const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: conversation,
-          tools: TOOLS,
-          tool_choice: "auto",
-        }),
-      });
-
-      if (!aiResp.ok) {
-        if (aiResp.status === 429) {
-          return json({ error: "Rate limit hit. Wait a moment and try again." }, 429);
-        }
-        if (aiResp.status === 402) {
-          return json(
-            { error: "AI credits exhausted. Add funds in Settings → Workspace → Usage." },
-            402,
-          );
-        }
-        const errText = await aiResp.text();
-        console.error("AI gateway error:", aiResp.status, errText);
-        return json({ error: "AI gateway error" }, 500);
-      }
-
-      const data = await aiResp.json();
-      const choice = data.choices?.[0];
-      const msg = choice?.message;
-      if (!msg) {
-        return json({ error: "No response from AI" }, 500);
-      }
-
-      const toolCalls = msg.tool_calls;
-      if (!toolCalls || toolCalls.length === 0) {
-        // Final answer
-        return json({
-          content: msg.content ?? "",
-          toolEvents,
-        });
-      }
-
-      // Push assistant message verbatim so tool_call_ids match
-      conversation.push(msg);
-
-      // Execute each tool
-      for (const tc of toolCalls) {
-        const name = tc.function?.name;
-        let result: any;
-
-        if (name === "get_wallet_balance") {
-          if (!walletAddress) {
-            result = { error: "No wallet connected" };
-          } else {
-            result = await invokeFn("wallet-balance", { address: walletAddress }, req);
-          }
-          toolEvents.push({ type: "wallet_balance", data: result });
-        } else if (name === "get_token_info") {
-          let args: any = {};
-          try {
-            args = JSON.parse(tc.function?.arguments ?? "{}");
-          } catch { /* ignore */ }
-          result = await invokeFn("token-info", { query: args.query ?? "" }, req);
-          toolEvents.push({ type: "token_info", data: result });
-        } else if (name === "get_trending") {
-          result = await invokeFn("trending-tokens", {}, req);
-          toolEvents.push({ type: "trending", data: result });
-        } else if (name === "prepare_swap") {
-          let args: any = {};
-          try {
-            args = JSON.parse(tc.function?.arguments ?? "{}");
-          } catch { /* ignore */ }
-          result = await invokeFn("swap-quote", {
-            inputToken: args.inputToken ?? "",
-            outputToken: args.outputToken ?? "",
-            amount: args.amount,
-            slippageBps: args.slippageBps,
-          }, req);
-          toolEvents.push({ type: "swap_quote", data: result });
-        } else if (name === "prepare_transfer") {
-          let args: any = {};
-          try {
-            args = JSON.parse(tc.function?.arguments ?? "{}");
-          } catch { /* ignore */ }
-          if (!walletAddress) {
-            result = { error: "No wallet connected. Connect your wallet first." };
-          } else {
-            // First check if the recipient matches a saved contact name —
-            // if so, swap it for the saved address before resolving.
-            let recipientInput: string = args.recipient ?? "";
-            let contactDisplayName: string | null = null;
-            const matchedContact = findContact(contactList, recipientInput);
-            if (matchedContact) {
-              recipientInput = matchedContact.resolved_address || matchedContact.address;
-              contactDisplayName = matchedContact.name;
-            }
-
-            const recipientResolved = await resolveRecipientInline(recipientInput);
-
-            if (recipientResolved?.error) {
-              result = recipientResolved;
-            } else {
-              result = await invokeFn("transfer-quote", {
-                fromAddress: walletAddress,
-                token: args.token ?? "",
-                amount: args.amount,
-                recipient: args.recipient ?? "",
-                resolvedAddress: recipientResolved.address,
-                displayName: contactDisplayName ?? recipientResolved.displayName ?? null,
-              }, req);
-              // Tag whether this destination is already a saved contact, so
-              // the UI can prompt to save it after a successful send.
-              if (result && typeof result === "object" && !result.error) {
-                result.savedContact = !!matchedContact || !!findContactByAddress(contactList, recipientResolved.address);
-              }
-            }
-          }
-          toolEvents.push({ type: "transfer_quote", data: result });
-        } else if (name === "list_contacts") {
-          result = {
-            contacts: contactList.map((c) => ({
-              name: c.name,
-              address: c.address,
-              resolvedAddress: c.resolved_address,
-            })),
-          };
-          toolEvents.push({ type: "contact_list", data: result });
-        } else if (name === "save_contact") {
-          let args: any = {};
-          try {
-            args = JSON.parse(tc.function?.arguments ?? "{}");
-          } catch { /* ignore */ }
-          const cname = String(args.name ?? "").trim();
-          const caddr = String(args.address ?? "").trim();
-          if (!cname || !caddr) {
-            result = { error: "Both name and address are required to save a contact." };
-          } else if (findContact(contactList, cname)) {
-            result = {
-              error: `You already have a contact named "${cname}". Pick a different name.`,
-            };
-          } else {
-            // The client persists this via the save_contact_request tool event.
-            result = { ok: true, name: cname, address: caddr };
-          }
-          toolEvents.push({
-            type: "save_contact_request",
-            data: { name: cname, address: caddr, error: result.error ?? null },
-          });
-        } else {
-          result = { error: `Unknown tool: ${name}` };
-        }
-
-        conversation.push({
-          role: "tool",
-          tool_call_id: tc.id,
-          content: JSON.stringify(result),
-        });
-      }
-    }
-
-    return json({
-      content: "I tried but couldn't complete that — let's try a different angle.",
-      toolEvents,
-    });
-  } catch (e) {
-    console.error("chat error:", e);
-    return json({ error: e instanceof Error ? e.message : "Unknown error" }, 500);
+    payload = await req.json();
+  } catch {
+    return json({ error: "Invalid JSON body" }, 400);
   }
+
+  const { messages, walletAddress, profile, contacts } = payload;
+  const contactList: { name: string; address: string; resolved_address: string | null }[] =
+    Array.isArray(contacts) ? contacts : [];
+
+  if (!Array.isArray(messages)) {
+    return json({ error: "messages must be an array" }, 400);
+  }
+
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) {
+    return json({ error: "LOVABLE_API_KEY missing" }, 500);
+  }
+
+  const profileBlock = buildProfileBlock(profile);
+  const contactsBlock = buildContactsBlock(contactList);
+  const systemContent = [SYSTEM_PROMPT, profileBlock, contactsBlock]
+    .filter(Boolean)
+    .join("\n\n");
+
+  const conversation: any[] = [
+    { role: "system", content: systemContent },
+    ...messages,
+  ];
+
+  // Build an SSE response. We emit three event types:
+  //   event: tool   -> tool result card payloads
+  //   event: delta  -> assistant text token chunks
+  //   event: error  -> { error, status } before stream closes
+  //   event: done   -> end-of-stream marker
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (event: string, data: unknown) => {
+        controller.enqueue(
+          encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
+        );
+      };
+
+      try {
+        for (let iter = 0; iter < 3; iter++) {
+          const isLastIter = iter === 2;
+
+          // For non-final iterations we use non-streaming so we can inspect
+          // tool_calls atomically. Once we *suspect* this could be the final
+          // answer (no tool calls), we re-issue with streaming. To keep it
+          // simple we always do a non-streaming probe first; the user-perceived
+          // latency cost is one round trip on the FINAL turn only, which is
+          // dwarfed by the streaming gains.
+          const probeResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${LOVABLE_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "google/gemini-2.5-flash",
+              messages: conversation,
+              tools: TOOLS,
+              tool_choice: "auto",
+            }),
+          });
+
+          if (!probeResp.ok) {
+            if (probeResp.status === 429) {
+              send("error", { error: "Rate limit hit. Wait a moment and try again.", status: 429 });
+              break;
+            }
+            if (probeResp.status === 402) {
+              send("error", {
+                error: "AI credits exhausted. Add funds in Settings → Workspace → Usage.",
+                status: 402,
+              });
+              break;
+            }
+            const errText = await probeResp.text();
+            console.error("AI gateway error:", probeResp.status, errText);
+            send("error", { error: "AI gateway error", status: 500 });
+            break;
+          }
+
+          const data = await probeResp.json();
+          const choice = data.choices?.[0];
+          const msg = choice?.message;
+          if (!msg) {
+            send("error", { error: "No response from AI", status: 500 });
+            break;
+          }
+
+          const toolCalls = msg.tool_calls;
+
+          if (!toolCalls || toolCalls.length === 0) {
+            // Final answer. We already have it — stream it out as fake deltas
+            // so the client sees the same SSE shape it does for real streams.
+            // (Issuing a second streaming request would double the cost for
+            // no UX gain since we already have the full text.)
+            const finalText: string = typeof msg.content === "string" ? msg.content : "";
+            // Chunk into ~12-char pieces so the typewriter feels alive even
+            // though it's coming from cache.
+            const CHUNK = 12;
+            for (let i = 0; i < finalText.length; i += CHUNK) {
+              send("delta", { text: finalText.slice(i, i + CHUNK) });
+              // Yield to event loop occasionally so the runtime can flush.
+              if ((i / CHUNK) % 8 === 0) await Promise.resolve();
+            }
+            break;
+          }
+
+          if (isLastIter) {
+            // Tool calls on the last allowed iteration — give up.
+            send("delta", {
+              text: "I tried but couldn't complete that — let's try a different angle.",
+            });
+            break;
+          }
+
+          // Push assistant message verbatim so tool_call_ids match
+          conversation.push(msg);
+
+          for (const tc of toolCalls) {
+            const name = tc.function?.name;
+            let result: any;
+            let eventType: string | null = null;
+
+            if (name === "get_wallet_balance") {
+              if (!walletAddress) {
+                result = { error: "No wallet connected" };
+              } else {
+                result = await invokeFn("wallet-balance", { address: walletAddress }, req);
+              }
+              eventType = "wallet_balance";
+            } else if (name === "get_token_info") {
+              const args = safeJson(tc.function?.arguments);
+              result = await invokeFn("token-info", { query: args.query ?? "" }, req);
+              eventType = "token_info";
+            } else if (name === "get_trending") {
+              result = await invokeFn("trending-tokens", {}, req);
+              eventType = "trending";
+            } else if (name === "prepare_swap") {
+              const args = safeJson(tc.function?.arguments);
+              result = await invokeFn("swap-quote", {
+                inputToken: args.inputToken ?? "",
+                outputToken: args.outputToken ?? "",
+                amount: args.amount,
+                slippageBps: args.slippageBps,
+              }, req);
+              eventType = "swap_quote";
+            } else if (name === "prepare_transfer") {
+              const args = safeJson(tc.function?.arguments);
+              if (!walletAddress) {
+                result = { error: "No wallet connected. Connect your wallet first." };
+              } else {
+                let recipientInput: string = args.recipient ?? "";
+                let contactDisplayName: string | null = null;
+                const matchedContact = findContact(contactList, recipientInput);
+                if (matchedContact) {
+                  recipientInput = matchedContact.resolved_address || matchedContact.address;
+                  contactDisplayName = matchedContact.name;
+                }
+
+                const recipientResolved = await resolveRecipientInline(recipientInput);
+
+                if ((recipientResolved as any)?.error) {
+                  result = recipientResolved;
+                } else {
+                  result = await invokeFn("transfer-quote", {
+                    fromAddress: walletAddress,
+                    token: args.token ?? "",
+                    amount: args.amount,
+                    recipient: args.recipient ?? "",
+                    resolvedAddress: (recipientResolved as any).address,
+                    displayName: contactDisplayName ?? (recipientResolved as any).displayName ?? null,
+                  }, req);
+                  if (result && typeof result === "object" && !result.error) {
+                    result.savedContact = !!matchedContact ||
+                      !!findContactByAddress(contactList, (recipientResolved as any).address);
+                  }
+                }
+              }
+              eventType = "transfer_quote";
+            } else if (name === "list_contacts") {
+              result = {
+                contacts: contactList.map((c) => ({
+                  name: c.name,
+                  address: c.address,
+                  resolvedAddress: c.resolved_address,
+                })),
+              };
+              eventType = "contact_list";
+            } else if (name === "save_contact") {
+              const args = safeJson(tc.function?.arguments);
+              const cname = String(args.name ?? "").trim();
+              const caddr = String(args.address ?? "").trim();
+              if (!cname || !caddr) {
+                result = { error: "Both name and address are required to save a contact." };
+              } else if (findContact(contactList, cname)) {
+                result = {
+                  error: `You already have a contact named "${cname}". Pick a different name.`,
+                };
+              } else {
+                result = { ok: true, name: cname, address: caddr };
+              }
+              send("tool", {
+                type: "save_contact_request",
+                data: { name: cname, address: caddr, error: result.error ?? null },
+              });
+              conversation.push({
+                role: "tool",
+                tool_call_id: tc.id,
+                content: JSON.stringify(result),
+              });
+              continue;
+            } else {
+              result = { error: `Unknown tool: ${name}` };
+            }
+
+            // Emit the tool card immediately so the user sees it before the
+            // model finishes writing its framing text.
+            if (eventType) {
+              send("tool", { type: eventType, data: result });
+            }
+
+            conversation.push({
+              role: "tool",
+              tool_call_id: tc.id,
+              content: JSON.stringify(result),
+            });
+          }
+        }
+
+        send("done", {});
+      } catch (e) {
+        console.error("chat stream error:", e);
+        send("error", {
+          error: e instanceof Error ? e.message : "Unknown error",
+          status: 500,
+        });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      "X-Accel-Buffering": "no",
+    },
+  });
 });
+
+function safeJson(s: unknown): any {
+  if (typeof s !== "string") return {};
+  try {
+    return JSON.parse(s);
+  } catch {
+    return {};
+  }
+}
 
 async function invokeFn(name: string, body: unknown, req: Request) {
   const supaUrl = Deno.env.get("SUPABASE_URL");
@@ -401,10 +468,6 @@ async function invokeFn(name: string, body: unknown, req: Request) {
 
 const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
-// Lightweight recipient resolver — no @solana/web3.js, no extra worker hop.
-// .sol names go through the SNS HTTP proxy. Raw addresses are format-checked only.
-// Full on-curve / Solana validation happens inside transfer-quote where web3.js
-// is already loaded.
 async function resolveRecipientInline(
   recipient: string,
 ): Promise<{ address: string; displayName: string | null } | { error: string }> {
@@ -451,8 +514,6 @@ function json(body: unknown, status = 200) {
   });
 }
 
-// Builds a short personalisation block appended to the system prompt.
-// Only includes fields that are actually set so absent profiles add no noise.
 function buildProfileBlock(profile: any): string | null {
   if (!profile || typeof profile !== "object") return null;
   const lines: string[] = [];
