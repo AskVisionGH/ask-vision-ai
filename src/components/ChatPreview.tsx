@@ -6,10 +6,16 @@ import { useEffect, useState } from "react";
 const PROMPTS = [
   "what's in my wallet?",
   "swap 0.5 sol to usdc",
+  "bridge 100 usdc from eth to solana",
+  "analyze this contract: 7xKX...Tons",
+  "track toly's wallet for new buys",
+  "show binance sol inflows today",
   "what's trending on solana?",
   "send 10 usdc to alex",
+  "alert me if $wif drops 10%",
+  "find smart money buying memecoins",
   "explain jupiter routing",
-  "show me $bonk price",
+  "is this token a honeypot?",
 ];
 
 const TYPE_MS = 55;
