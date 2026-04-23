@@ -296,6 +296,7 @@ serve(async (req) => {
       // cards if the model decides to call the same tool again.
       const emittedToolKeys = new Set<string>();
       let cardEmitted = false;
+      let toolErrored = false;
 
       try {
         for (let iter = 0; iter < 3; iter++) {
@@ -399,9 +400,9 @@ serve(async (req) => {
           // No tool calls -> the streamed text IS the final answer unless we
           // need to force a live-data tool for the latest user request.
           if (pendingToolCalls.length === 0) {
-            // If a card was already shown this turn, the assistant text is
-            // the wrap-up — we're done. Don't force another tool call.
-            if (cardEmitted) break;
+            // If a card was already shown OR a tool errored this turn, the
+            // assistant text is the wrap-up — we're done. Don't force again.
+            if (cardEmitted || toolErrored) break;
             const forced = inferForcedToolCall(lastUserMessage?.content ?? "");
             if (forced) {
               pendingToolCalls.push({
@@ -576,6 +577,7 @@ serve(async (req) => {
             const hasError = result && typeof result === "object" && "error" in result && result.error;
             if (hasError) {
               console.error(`[chat] tool ${name} returned error:`, result.error);
+              toolErrored = true;
             }
 
             // Emit the tool card immediately so the user sees it before the
@@ -585,10 +587,20 @@ serve(async (req) => {
               cardEmitted = true;
             }
 
+            // When a tool errors, append a strict instruction so the model
+            // writes ONE brief explanation and stops — no second paraphrase.
+            const toolPayload = hasError
+              ? {
+                  error: result.error,
+                  instructions:
+                    "Write exactly ONE short, friendly sentence telling the user what couldn't be done and stop. Do not repeat yourself. Do not call any more tools.",
+                }
+              : result;
+
             conversation.push({
               role: "tool",
               tool_call_id: tc.id,
-              content: JSON.stringify(result),
+              content: JSON.stringify(toolPayload),
             });
           }
         }
