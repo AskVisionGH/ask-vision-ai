@@ -19,4 +19,17 @@ export default defineConfig(({ mode }) => ({
     },
     dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime", "@tanstack/react-query", "@tanstack/query-core"],
   },
+  // @solana/spl-token (used by TransferPreviewCard) references Node's `global`
+  // and `Buffer`. Map `global` → `globalThis` for esbuild's dep pre-bundle and
+  // for the runtime, then polyfill Buffer in main.tsx.
+  define: {
+    global: "globalThis",
+  },
+  optimizeDeps: {
+    esbuildOptions: {
+      define: {
+        global: "globalThis",
+      },
+    },
+  },
 }));
