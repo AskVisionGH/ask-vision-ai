@@ -78,13 +78,11 @@ const Chat = () => {
   }, [messages, isThinking]);
 
   const selectConversation = (id: string) => {
-    setDraftingNew(false);
     setSearchParams({ c: id });
     setMobileOpen(false);
   };
 
   const startNewConversation = async () => {
-    setDraftingNew(true);
     setSearchParams({}, { replace: true });
     setMessages([]);
     setInput("");
