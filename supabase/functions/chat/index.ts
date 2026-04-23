@@ -194,6 +194,49 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "get_token_chart",
+      description:
+        "Fetch OHLCV price candles for a Solana token across selectable intervals (5m, 15m, 1h, 4h, 1d). Use whenever the user asks for a chart, price action, trend, or to 'show' the price for a token.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "Token ticker (e.g. 'SOL', 'BONK') or full Solana mint address.",
+          },
+          interval: {
+            type: "string",
+            enum: ["5m", "15m", "1h", "4h", "1d"],
+            description: "Candle interval. Default to '15m' if user doesn't specify.",
+          },
+        },
+        required: ["query"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_social_sentiment",
+      description:
+        "Fetch Twitter/X + Reddit + news sentiment, social volume, contributor counts, top recent posts and Galaxy Score for a token. Use for any 'what's twitter saying', 'sentiment', 'is X trending', 'vibe check', 'lore', 'narrative' question.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "Token ticker (e.g. 'BONK', 'JUP') or full Solana mint address.",
+          },
+        },
+        required: ["query"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 serve(async (req) => {
