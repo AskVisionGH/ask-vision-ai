@@ -611,7 +611,13 @@ async function invokeFn(name: string, body: unknown, req: Request) {
   });
   if (!resp.ok) {
     const t = await resp.text();
-    return { error: `${name} failed: ${t}` };
+    console.error(`[invokeFn] ${name} HTTP ${resp.status}:`, t);
+    let cleanError = "The data source is unavailable right now.";
+    try {
+      const parsed = JSON.parse(t);
+      if (parsed && typeof parsed.error === "string") cleanError = parsed.error;
+    } catch { /* ignore */ }
+    return { error: cleanError };
   }
   return await resp.json();
 }
