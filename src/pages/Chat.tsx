@@ -231,8 +231,20 @@ const Chat = () => {
                   className="mb-6 drop-shadow-[0_0_24px_hsl(var(--primary-glow)/0.6)]"
                 />
                 <h2 className="text-2xl font-light tracking-tight sm:text-3xl">
-                  What can I help you{" "}
-                  <span className="font-serif-italic text-primary">do</span>?
+                  {profile?.display_name ? (
+                    <>
+                      Hey{" "}
+                      <span className="font-serif-italic text-primary">
+                        {profile.display_name.split(" ")[0]}
+                      </span>
+                      , what can I help you with?
+                    </>
+                  ) : (
+                    <>
+                      What can I help you{" "}
+                      <span className="font-serif-italic text-primary">do</span>?
+                    </>
+                  )}
                 </h2>
                 <p className="mt-3 max-w-sm text-sm text-muted-foreground">
                   Ask anything about Solana — your wallet, tokens, protocols, or how something works.
