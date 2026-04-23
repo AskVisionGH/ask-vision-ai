@@ -58,8 +58,17 @@ const TOOLS = [
     function: {
       name: "get_wallet_balance",
       description:
-        "Fetch the connected user's Solana wallet holdings: SOL balance, all SPL tokens, USD values, and total portfolio value. Use whenever the user asks about their balance, holdings, portfolio, or what they own.",
-      parameters: { type: "object", properties: {}, additionalProperties: false },
+        "Fetch Solana wallet holdings (SOL + SPL tokens, USD values, total portfolio value). Defaults to the connected user's wallet. If the user pastes or mentions any other wallet address (base58, ~32-44 chars), pass it as the `address` argument so we look up THAT wallet, not the connected one.",
+      parameters: {
+        type: "object",
+        properties: {
+          address: {
+            type: "string",
+            description: "Optional Solana wallet address to look up. Omit to use the connected user's wallet.",
+          },
+        },
+        additionalProperties: false,
+      },
     },
   },
   {
