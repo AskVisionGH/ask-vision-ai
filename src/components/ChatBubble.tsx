@@ -13,6 +13,7 @@ import { RiskReportCard } from "@/components/RiskReportCard";
 import { TokenChartCard } from "@/components/TokenChartCard";
 import { SocialSentimentCard } from "@/components/SocialSentimentCard";
 import { NewsCard } from "@/components/NewsCard";
+import { EarlyBuyersCard, SmartMoneyActivityCard } from "@/components/SmartMoneyCard";
 
 interface Props {
   message: ChatMessage;
@@ -178,6 +179,12 @@ export const ChatBubble = ({ message, onEdit, readOnly = false }: Props) => {
         }
         if (event.type === "solana_news") {
           return <NewsCard key={i} data={event.data} />;
+        }
+        if (event.type === "early_buyers") {
+          return <EarlyBuyersCard key={i} data={event.data} />;
+        }
+        if (event.type === "smart_money_activity") {
+          return <SmartMoneyActivityCard key={i} data={event.data} />;
         }
         return null;
       })}

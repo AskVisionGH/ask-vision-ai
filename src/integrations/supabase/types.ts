@@ -184,6 +184,72 @@ export type Database = {
         }
         Relationships: []
       }
+      smart_wallets: {
+        Row: {
+          address: string
+          created_at: string
+          id: string
+          is_default: boolean
+          label: string
+          notes: string | null
+          twitter_handle: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          address: string
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          label: string
+          notes?: string | null
+          twitter_handle?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          address?: string
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          label?: string
+          notes?: string | null
+          twitter_handle?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      smart_wallets_global_seed: {
+        Row: {
+          address: string
+          category: string | null
+          created_at: string
+          id: string
+          label: string
+          notes: string | null
+          twitter_handle: string | null
+        }
+        Insert: {
+          address: string
+          category?: string | null
+          created_at?: string
+          id?: string
+          label: string
+          notes?: string | null
+          twitter_handle?: string | null
+        }
+        Update: {
+          address?: string
+          category?: string | null
+          created_at?: string
+          id?: string
+          label?: string
+          notes?: string | null
+          twitter_handle?: string | null
+        }
+        Relationships: []
+      }
       wallet_links: {
         Row: {
           created_at: string

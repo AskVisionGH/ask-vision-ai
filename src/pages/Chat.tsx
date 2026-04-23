@@ -185,6 +185,7 @@ const Chat = () => {
     await streamChat({
       messages: history,
       walletAddress: wallet ?? undefined,
+      userId: user?.id ?? null,
       profile: profile
         ? {
             displayName: profile.display_name,
