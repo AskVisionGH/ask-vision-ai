@@ -539,6 +539,7 @@ serve(async (req) => {
                 name: forced.name,
                 arguments: JSON.stringify(forced.args),
               });
+              isForcedFallbackTurn = true;
             } else {
               break;
             }
