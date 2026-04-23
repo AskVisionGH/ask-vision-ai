@@ -85,9 +85,9 @@ export interface SwapQuoteData {
 }
 
 export interface TransferQuoteData {
-  from: { address: string };
-  to: { address: string; displayName: string | null; isOnCurve: boolean };
-  token: {
+  from?: { address: string };
+  to?: { address: string; displayName: string | null; isOnCurve: boolean };
+  token?: {
     symbol: string;
     name: string;
     mint: string;
@@ -97,13 +97,13 @@ export interface TransferQuoteData {
     isNative: boolean;
     tokenProgram: string;
   };
-  amountUi: number;
-  amountAtomic: number;
-  valueUsd: number | null;
-  needsAtaCreation: boolean;
-  ataCreationFeeSol: number;
-  estNetworkFeeSol: number;
-  quotedAt: number;
+  amountUi?: number;
+  amountAtomic?: number;
+  valueUsd?: number | null;
+  needsAtaCreation?: boolean;
+  ataCreationFeeSol?: number;
+  estNetworkFeeSol?: number;
+  quotedAt?: number;
   error?: string;
 }
 
