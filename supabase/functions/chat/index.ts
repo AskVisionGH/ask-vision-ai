@@ -422,6 +422,10 @@ serve(async (req) => {
       const emittedToolKeys = new Set<string>();
       let cardEmitted = false;
       let toolErrored = false;
+      // Set when we forcibly inject a tool call because the model already
+      // produced text without invoking the right tool. After the card is
+      // emitted we exit the loop so the model can't write a second framing.
+      let isForcedFallbackTurn = false;
 
       try {
         for (let iter = 0; iter < 3; iter++) {
