@@ -1,6 +1,5 @@
 import { ExternalLink, Newspaper } from "lucide-react";
 import type { SolanaNewsData, NewsItem } from "@/lib/chat-stream";
-import { cn } from "@/lib/utils";
 
 interface Props {
   data: SolanaNewsData;
