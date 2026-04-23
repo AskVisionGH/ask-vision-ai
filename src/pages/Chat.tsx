@@ -11,9 +11,9 @@ import { cn } from "@/lib/utils";
 
 const SUGGESTIONS = [
   "What's in my wallet?",
-  "Show my SOL balance",
+  "Show me $SOL price",
+  "What's trending on Solana?",
   "Explain Jupiter routing in plain English",
-  "What are SPL tokens?",
 ];
 
 const Chat = () => {

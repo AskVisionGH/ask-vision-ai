@@ -3,6 +3,8 @@ import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/lib/chat-stream";
 import { PortfolioCard } from "@/components/PortfolioCard";
+import { TokenCard } from "@/components/TokenCard";
+import { TrendingCard } from "@/components/TrendingCard";
 
 interface Props {
   message: ChatMessage;
@@ -28,6 +30,12 @@ export const ChatBubble = ({ message }: Props) => {
       {message.toolEvents?.map((event, i) => {
         if (event.type === "wallet_balance") {
           return <PortfolioCard key={i} data={event.data} />;
+        }
+        if (event.type === "token_info") {
+          return <TokenCard key={i} data={event.data} />;
+        }
+        if (event.type === "trending") {
+          return <TrendingCard key={i} data={event.data} />;
         }
         return null;
       })}
