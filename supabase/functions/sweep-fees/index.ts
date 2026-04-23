@@ -15,10 +15,10 @@
 // worth burning that on dust).
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { Connection, Keypair, PublicKey, VersionedTransaction } from "https://esm.sh/@solana/web3.js@1.95.3";
-import { ReferralProvider } from "https://esm.sh/@jup-ag/referral-sdk@0.2.1?bundle";
-import bs58 from "https://esm.sh/bs58@5.0.0";
+import { createClient } from "npm:@supabase/supabase-js@2.45.0";
+import { Connection, Keypair, PublicKey, VersionedTransaction } from "npm:@solana/web3.js@1.95.3";
+import { ReferralProvider } from "npm:@jup-ag/referral-sdk@0.3.0";
+import bs58 from "npm:bs58@5.0.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
