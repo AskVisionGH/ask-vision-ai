@@ -157,9 +157,19 @@ serve(async (req) => {
           if (!walletAddress) {
             result = { error: "No wallet connected" };
           } else {
-            result = await invokeWalletBalance(walletAddress, req);
+            result = await invokeFn("wallet-balance", { address: walletAddress }, req);
           }
           toolEvents.push({ type: "wallet_balance", data: result });
+        } else if (name === "get_token_info") {
+          let args: any = {};
+          try {
+            args = JSON.parse(tc.function?.arguments ?? "{}");
+          } catch { /* ignore */ }
+          result = await invokeFn("token-info", { query: args.query ?? "" }, req);
+          toolEvents.push({ type: "token_info", data: result });
+        } else if (name === "get_trending") {
+          result = await invokeFn("trending-tokens", {}, req);
+          toolEvents.push({ type: "trending", data: result });
         } else {
           result = { error: `Unknown tool: ${name}` };
         }
@@ -182,22 +192,22 @@ serve(async (req) => {
   }
 });
 
-async function invokeWalletBalance(address: string, req: Request) {
+async function invokeFn(name: string, body: unknown, req: Request) {
   const supaUrl = Deno.env.get("SUPABASE_URL");
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
   if (!supaUrl || !anonKey) return { error: "Backend misconfigured" };
 
-  const resp = await fetch(`${supaUrl}/functions/v1/wallet-balance`, {
+  const resp = await fetch(`${supaUrl}/functions/v1/${name}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: req.headers.get("Authorization") ?? `Bearer ${anonKey}`,
     },
-    body: JSON.stringify({ address }),
+    body: JSON.stringify(body),
   });
   if (!resp.ok) {
     const t = await resp.text();
-    return { error: `wallet fetch failed: ${t}` };
+    return { error: `${name} failed: ${t}` };
   }
   return await resp.json();
 }
