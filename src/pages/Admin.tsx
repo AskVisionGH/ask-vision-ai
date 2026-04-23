@@ -60,6 +60,34 @@ const formatUsd = (n: number | null | undefined) =>
     ? n.toLocaleString("en-US", { style: "currency", currency: "USD" })
     : "—";
 
+const shortId = (id: string) => `${id.slice(0, 8)}…${id.slice(-4)}`;
+
+const CopyId = ({ value, label }: { value: string; label?: string }) => {
+  const [copied, setCopied] = useState(false);
+  const onCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      toast({ title: "Copied", description: shortId(value) });
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast({ title: "Copy failed", variant: "destructive" });
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={onCopy}
+      title={`Copy ${value}`}
+      className="inline-flex items-center gap-1.5 rounded-md border border-border/50 bg-secondary/40 px-2 py-1 font-mono text-[10px] text-muted-foreground ease-vision hover:border-border hover:bg-secondary hover:text-foreground"
+    >
+      <span>{label ?? shortId(value)}</span>
+      {copied ? <Check className="h-3 w-3 text-primary" /> : <Copy className="h-3 w-3" />}
+    </button>
+  );
+};
+
 const Admin = () => {
   const { isAdmin, loading } = useIsAdmin();
 
@@ -360,8 +388,8 @@ const UsersTab = () => {
                     )}
                   </TableCell>
                   <TableCell className="text-xs">{format(new Date(p.created_at), "MMM d, yyyy")}</TableCell>
-                  <TableCell className="font-mono text-[10px] text-muted-foreground">
-                    {p.user_id.slice(0, 8)}…{p.user_id.slice(-4)}
+                  <TableCell>
+                    <CopyId value={p.user_id} />
                   </TableCell>
                 </TableRow>
               ))}
@@ -378,20 +406,28 @@ const UsersTab = () => {
 const RolesTab = () => {
   const { user } = useAuth();
   const [roles, setRoles] = useState<RoleRow[]>([]);
+  const [nameByUserId, setNameByUserId] = useState<Record<string, string | null>>({});
   const [loading, setLoading] = useState(true);
   const [granting, setGranting] = useState(false);
   const [newUserId, setNewUserId] = useState("");
 
   const load = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("user_roles")
-      .select("*")
-      .order("created_at", { ascending: false });
-    if (error) {
-      toast({ title: "Failed to load roles", description: error.message, variant: "destructive" });
+    const [rolesRes, profilesRes] = await Promise.all([
+      supabase.from("user_roles").select("*").order("created_at", { ascending: false }),
+      supabase.from("profiles").select("user_id, display_name"),
+    ]);
+    if (rolesRes.error) {
+      toast({ title: "Failed to load roles", description: rolesRes.error.message, variant: "destructive" });
     } else {
-      setRoles((data ?? []) as RoleRow[]);
+      setRoles((rolesRes.data ?? []) as RoleRow[]);
+    }
+    if (!profilesRes.error && profilesRes.data) {
+      const map: Record<string, string | null> = {};
+      for (const p of profilesRes.data as { user_id: string; display_name: string | null }[]) {
+        map[p.user_id] = p.display_name;
+      }
+      setNameByUserId(map);
     }
     setLoading(false);
   };
