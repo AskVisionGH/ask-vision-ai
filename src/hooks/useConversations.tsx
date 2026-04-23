@@ -59,7 +59,7 @@ export const useConversations = () => {
           wallet_address: walletAddress,
           title: "New chat",
         })
-        .select("id, title, wallet_address, pinned, created_at, updated_at")
+        .select("id, title, wallet_address, pinned, pin_order, created_at, updated_at")
         .single();
       if (error || !data) return null;
       const row = data as ConversationRow;
