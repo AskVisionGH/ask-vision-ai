@@ -13,6 +13,7 @@ import { RiskReportCard } from "@/components/RiskReportCard";
 import { TokenChartCard } from "@/components/TokenChartCard";
 import { SocialSentimentCard } from "@/components/SocialSentimentCard";
 import { NewsCard } from "@/components/NewsCard";
+import { EarlyBuyersCard, SmartMoneyActivityCard } from "@/components/SmartMoneyCard";
 
 interface Props {
   message: ChatMessage;
