@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, RefreshCw } from "lucide-react";
+import { ArrowRight, RefreshCw, Loader2, CheckCircle2, ExternalLink, AlertCircle } from "lucide-react";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { VersionedTransaction } from "@solana/web3.js";
 import { cn } from "@/lib/utils";
 import { TokenLogo } from "@/components/TokenLogo";
 import { Button } from "@/components/ui/button";
@@ -11,8 +13,19 @@ interface Props {
 }
 
 const REFRESH_MS = 15000;
-const SWAP_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/swap-quote`;
+const POLL_INTERVAL_MS = 1500;
+const POLL_TIMEOUT_MS = 60000;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const AUTH_TOKEN = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+type Phase =
+  | { name: "preview" }
+  | { name: "building" }
+  | { name: "awaiting_signature" }
+  | { name: "submitting"; signature?: string }
+  | { name: "confirming"; signature: string; startedAt: number }
+  | { name: "success"; signature: string; durationMs: number; finalOutUi: number }
+  | { name: "error"; message: string; cancelled?: boolean };
 
 const fmtUsd = (n: number | null | undefined) => {
   if (n == null) return "—";
@@ -32,6 +45,8 @@ const fmtAmount = (n: number) => {
   return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 };
 
+const truncSig = (s: string) => `${s.slice(0, 4)}…${s.slice(-4)}`;
+
 const impactBucket = (pct: number | null) => {
   if (pct == null) return { label: "—", color: "text-muted-foreground", dot: "bg-muted-foreground" };
   const a = Math.abs(pct);
@@ -40,11 +55,27 @@ const impactBucket = (pct: number | null) => {
   return { label: "high", color: "text-down", dot: "bg-down" };
 };
 
+const supaPost = async (fn: string, body: unknown) => {
+  const resp = await fetch(`${SUPABASE_URL}/functions/v1/${fn}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${AUTH_TOKEN}`,
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(data?.error ?? `${fn} failed`);
+  return data;
+};
+
 export const SwapPreviewCard = ({ data: initial }: Props) => {
   const [data, setData] = useState<SwapQuoteData>(initial);
+  const [phase, setPhase] = useState<Phase>({ name: "preview" });
   const [refreshing, setRefreshing] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const mounted = useRef(true);
+  const { publicKey, signTransaction, connected } = useWallet();
 
   useEffect(() => {
     mounted.current = true;
@@ -53,29 +84,20 @@ export const SwapPreviewCard = ({ data: initial }: Props) => {
     };
   }, []);
 
+  // Auto-refresh quote — paused once user starts confirming
   useEffect(() => {
-    if (data.error || dismissed) return;
+    if (data.error || dismissed || phase.name !== "preview") return;
     const timer = setInterval(async () => {
       if (!mounted.current) return;
       setRefreshing(true);
       try {
-        const resp = await fetch(SWAP_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${AUTH_TOKEN}`,
-          },
-          body: JSON.stringify({
-            inputToken: data.input.address,
-            outputToken: data.output.address,
-            amount: data.input.amountUi,
-            slippageBps: data.slippageBps,
-          }),
+        const fresh = await supaPost("swap-quote", {
+          inputToken: data.input.address,
+          outputToken: data.output.address,
+          amount: data.input.amountUi,
+          slippageBps: data.slippageBps,
         });
-        if (resp.ok) {
-          const fresh = await resp.json();
-          if (mounted.current && !fresh.error) setData(fresh);
-        }
+        if (mounted.current && !fresh.error) setData(fresh);
       } catch {
         /* silent — keep last good quote */
       } finally {
@@ -83,7 +105,108 @@ export const SwapPreviewCard = ({ data: initial }: Props) => {
       }
     }, REFRESH_MS);
     return () => clearInterval(timer);
-  }, [data.error, dismissed, data.input.address, data.output.address, data.input.amountUi, data.slippageBps]);
+  }, [data.error, dismissed, phase.name, data.input.address, data.output.address, data.input.amountUi, data.slippageBps]);
+
+  const handleConfirm = async () => {
+    if (!connected || !publicKey || !signTransaction) {
+      setPhase({ name: "error", message: "Connect a wallet that supports signing." });
+      return;
+    }
+
+    let signature: string | undefined;
+    const startedAt = Date.now();
+
+    try {
+      // 1. Build
+      setPhase({ name: "building" });
+      const built = await supaPost("swap-build", {
+        userPublicKey: publicKey.toBase58(),
+        inputMint: data.input.address,
+        outputMint: data.output.address,
+        amount: data.input.amountAtomic,
+        slippageBps: data.slippageBps,
+      });
+      if (!built.swapTransaction) throw new Error("No transaction returned");
+
+      // 2. Deserialize + sign
+      setPhase({ name: "awaiting_signature" });
+      const txBytes = Uint8Array.from(atob(built.swapTransaction), (c) => c.charCodeAt(0));
+      const tx = VersionedTransaction.deserialize(txBytes);
+
+      let signed: VersionedTransaction;
+      try {
+        signed = await signTransaction(tx);
+      } catch (e) {
+        // User rejected
+        if (mounted.current) {
+          setPhase({
+            name: "error",
+            message: "Cancelled — try again or adjust the amount.",
+            cancelled: true,
+          });
+        }
+        return;
+      }
+
+      // 3. Submit through our Helius-backed edge function
+      setPhase({ name: "submitting" });
+      const signedB64 = btoa(String.fromCharCode(...signed.serialize()));
+      const submitted = await supaPost("tx-submit", { signedTransaction: signedB64 });
+      signature = submitted.signature as string;
+      if (!signature) throw new Error("No signature returned from submit");
+
+      // 4. Poll for confirmation
+      setPhase({ name: "confirming", signature, startedAt });
+      const deadline = Date.now() + POLL_TIMEOUT_MS;
+      while (Date.now() < deadline) {
+        if (!mounted.current) return;
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+        try {
+          const status = await supaPost("tx-status", { signature });
+          if (status.status === "confirmed") {
+            if (!mounted.current) return;
+            setPhase({
+              name: "success",
+              signature,
+              durationMs: Date.now() - startedAt,
+              finalOutUi: data.output.amountUi,
+            });
+            return;
+          }
+          if (status.status === "failed") {
+            throw new Error(status.err ?? "Transaction failed on-chain");
+          }
+        } catch (e) {
+          // Transient poll error — keep trying
+          continue;
+        }
+      }
+      throw new Error("Confirmation timed out. Check Solscan for status.");
+    } catch (e) {
+      if (!mounted.current) return;
+      const message = e instanceof Error ? e.message : "Something went wrong.";
+      setPhase({ name: "error", message });
+    }
+  };
+
+  const handleRetry = async () => {
+    setPhase({ name: "preview" });
+    // Force a quote refresh immediately
+    setRefreshing(true);
+    try {
+      const fresh = await supaPost("swap-quote", {
+        inputToken: data.input.address,
+        outputToken: data.output.address,
+        amount: data.input.amountUi,
+        slippageBps: data.slippageBps,
+      });
+      if (mounted.current && !fresh.error) setData(fresh);
+    } catch {
+      /* keep previous quote */
+    } finally {
+      if (mounted.current) setRefreshing(false);
+    }
+  };
 
   if (dismissed) return null;
 
@@ -95,10 +218,60 @@ export const SwapPreviewCard = ({ data: initial }: Props) => {
     );
   }
 
+  // Success — compact card
+  if (phase.name === "success") {
+    return (
+      <div className="ease-vision animate-fade-up overflow-hidden rounded-2xl border border-up/30 bg-up/5 p-4">
+        <div className="flex items-start gap-3">
+          <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-up" />
+          <div className="min-w-0 flex-1">
+            <p className="font-mono text-[13px] text-foreground">
+              Swapped <span className="font-medium">{fmtAmount(data.input.amountUi)} {data.input.symbol}</span>
+              {" → "}
+              <span className="font-medium">{fmtAmount(phase.finalOutUi)} {data.output.symbol}</span>
+            </p>
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              <span>Confirmed in {(phase.durationMs / 1000).toFixed(1)}s</span>
+              <a
+                href={`https://solscan.io/tx/${phase.signature}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ease-vision inline-flex items-center gap-1 text-primary transition-colors hover:text-primary/80"
+              >
+                Tx {truncSig(phase.signature)}
+                <ExternalLink className="h-2.5 w-2.5" />
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const impact = impactBucket(data.priceImpactPct);
   const routeLabels = data.route.length > 0
     ? Array.from(new Set(data.route.map((r) => r.label))).join(" → ")
     : "Direct";
+
+  const isBusy =
+    phase.name === "building" ||
+    phase.name === "awaiting_signature" ||
+    phase.name === "submitting" ||
+    phase.name === "confirming";
+
+  const busyLabel =
+    phase.name === "building"
+      ? "Building transaction…"
+      : phase.name === "awaiting_signature"
+        ? "Approve in wallet…"
+        : phase.name === "submitting"
+          ? "Submitting…"
+          : phase.name === "confirming"
+            ? "Confirming on-chain…"
+            : "";
+
+  const isError = phase.name === "error";
+  const errorMsg = isError ? (phase as Extract<Phase, { name: "error" }>).message : "";
 
   return (
     <TooltipProvider delayDuration={150}>
@@ -108,12 +281,20 @@ export const SwapPreviewCard = ({ data: initial }: Props) => {
           <span className="font-mono text-[10px] tracking-widest uppercase text-muted-foreground">
             Swap preview
           </span>
-          <div className="flex items-center gap-2 font-mono text-[10px] text-muted-foreground/70">
-            <RefreshCw
-              className={cn("h-3 w-3", refreshing && "animate-spin text-primary")}
-            />
-            <span>refreshes 15s</span>
-          </div>
+          {phase.name === "preview" && (
+            <div className="flex items-center gap-2 font-mono text-[10px] text-muted-foreground/70">
+              <RefreshCw
+                className={cn("h-3 w-3", refreshing && "animate-spin text-primary")}
+              />
+              <span>refreshes 15s</span>
+            </div>
+          )}
+          {isBusy && (
+            <div className="flex items-center gap-2 font-mono text-[10px] text-primary">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              <span>{busyLabel}</span>
+            </div>
+          )}
         </div>
 
         {/* Amounts */}
@@ -175,25 +356,51 @@ export const SwapPreviewCard = ({ data: initial }: Props) => {
           />
         </div>
 
+        {/* Inline error banner */}
+        {isError && (
+          <div className="flex items-start gap-2 border-t border-destructive/30 bg-destructive/5 px-5 py-3">
+            <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-destructive" />
+            <p className="font-mono text-[11px] leading-relaxed text-destructive">{errorMsg}</p>
+          </div>
+        )}
+
         {/* Actions */}
         <div className="flex items-center gap-2 border-t border-border/40 bg-secondary/30 px-5 py-3">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="flex-1">
-                <Button
-                  disabled
-                  className="ease-vision w-full font-mono text-[11px] tracking-wider uppercase"
-                >
-                  Confirm & sign
-                </Button>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="top">
-              Signing ships in the next update.
-            </TooltipContent>
-          </Tooltip>
+          {!connected ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="flex-1">
+                  <Button
+                    disabled
+                    className="ease-vision w-full font-mono text-[11px] tracking-wider uppercase"
+                  >
+                    Confirm & sign
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top">Connect a wallet to sign.</TooltipContent>
+            </Tooltip>
+          ) : (
+            <Button
+              onClick={isError ? handleRetry : handleConfirm}
+              disabled={isBusy}
+              className="ease-vision flex-1 font-mono text-[11px] tracking-wider uppercase"
+            >
+              {isBusy ? (
+                <>
+                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                  {busyLabel}
+                </>
+              ) : isError ? (
+                "Retry"
+              ) : (
+                "Confirm & sign"
+              )}
+            </Button>
+          )}
           <Button
             variant="ghost"
+            disabled={isBusy}
             onClick={() => setDismissed(true)}
             className="ease-vision font-mono text-[11px] tracking-wider uppercase text-muted-foreground hover:text-foreground"
           >
