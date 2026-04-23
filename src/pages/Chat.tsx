@@ -88,13 +88,16 @@ const Chat = () => {
   }, [messages, isThinking]);
 
   const selectConversation = (id: string) => {
+    setDraftingNew(false);
     setSearchParams({ c: id });
     setMobileOpen(false);
   };
 
   const startNewConversation = async () => {
+    setDraftingNew(true);
     setSearchParams({}, { replace: true });
     setMessages([]);
+    setInput("");
     setMobileOpen(false);
   };
 
@@ -123,6 +126,7 @@ const Chat = () => {
       }
       convoId = created.id;
       isFirstMessage = true;
+      setDraftingNew(false);
       setSearchParams({ c: convoId }, { replace: true });
     } else if (messages.length === 0) {
       isFirstMessage = true;
