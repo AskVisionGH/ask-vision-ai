@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { Connection, PublicKey } from "https://esm.sh/@solana/web3.js@1.95.3";
-import { resolve as resolveSns } from "https://esm.sh/@bonfida/spl-name-service@3.0.7?deps=@solana/web3.js@1.95.3";
+import { PublicKey } from "https://esm.sh/@solana/web3.js@1.95.3";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -19,33 +18,34 @@ serve(async (req) => {
       return json({ error: "recipient required" }, 400);
     }
 
-    const HELIUS_API_KEY = Deno.env.get("HELIUS_API_KEY");
-    if (!HELIUS_API_KEY) return json({ error: "RPC misconfigured" }, 500);
-    const rpcUrl = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
-
     const trimmed = recipient.trim();
     let address: string | null = null;
     let displayName: string | null = null;
 
     if (trimmed.toLowerCase().endsWith(".sol")) {
-      // SNS resolution
       try {
-        const connection = new Connection(rpcUrl, "confirmed");
-        const domain = trimmed.replace(/\.sol$/i, "");
-        const owner = await resolveSns(connection, domain);
-        address = owner.toBase58();
+        const resp = await fetch(`https://sdk-proxy.sns.id/resolve/${encodeURIComponent(trimmed)}`);
+        const data = await resp.json().catch(() => null);
+
+        if (!resp.ok || !data || data.s !== "ok" || typeof data.result !== "string") {
+          return json(
+            { error: `Couldn't resolve "${trimmed}" — that .sol name doesn't exist or has no owner.` },
+            404,
+          );
+        }
+
+        address = new PublicKey(data.result).toBase58();
         displayName = trimmed.toLowerCase();
       } catch (e) {
-        console.error("SNS resolve error:", e);
+        console.error("SNS proxy resolve error:", e);
         return json(
-          { error: `Couldn't resolve "${trimmed}" — that .sol name doesn't exist or has no owner.` },
-          404,
+          { error: `Couldn't resolve "${trimmed}" — please try again in a moment.` },
+          502,
         );
       }
     } else if (isBase58Pubkey(trimmed)) {
       try {
-        const pk = new PublicKey(trimmed);
-        address = pk.toBase58();
+        address = new PublicKey(trimmed).toBase58();
       } catch {
         return json({ error: "That doesn't look like a valid Solana address." }, 400);
       }
@@ -53,7 +53,6 @@ serve(async (req) => {
       return json({ error: "Recipient must be a wallet address or .sol name." }, 400);
     }
 
-    // Safety: detect off-curve (PDA) addresses
     let isOnCurve = true;
     try {
       isOnCurve = PublicKey.isOnCurve(new PublicKey(address!).toBytes());
@@ -74,3 +73,4 @@ function json(body: unknown, status = 200) {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
+
