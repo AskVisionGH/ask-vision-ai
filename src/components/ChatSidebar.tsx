@@ -426,17 +426,27 @@ export const ChatSidebar = ({
             )}
             {(showActiveSection || previous.length > 0) && (
               <>
-                <SectionHeader
-                  label={isSearching ? "Matches" : "Conversations"}
-                />
-                <ul className="space-y-0.5">
-                  {showActiveSection && (
-                    <ConversationRowItem {...rowProps(active!, true)} />
-                  )}
-                  {previous.map((c) => (
-                    <ConversationRowItem key={c.id} {...rowProps(c, false)} />
-                  ))}
-                </ul>
+                <SectionHeader label={isSearching ? "Matches" : "Conversations"} />
+                {showActiveSection && (
+                  <>
+                    <SubSectionHeader label="Current" />
+                    <ul className="mb-2 space-y-0.5">
+                      <ConversationRowItem {...rowProps(active!, true)} />
+                    </ul>
+                  </>
+                )}
+                {previous.length > 0 && (
+                  <>
+                    {!isSearching && showActiveSection && (
+                      <SubSectionHeader label="Previous" />
+                    )}
+                    <ul className="space-y-0.5">
+                      {previous.map((c) => (
+                        <ConversationRowItem key={c.id} {...rowProps(c, false)} />
+                      ))}
+                    </ul>
+                  </>
+                )}
               </>
             )}
           </>
@@ -516,6 +526,12 @@ export const ChatSidebar = ({
 
 const SectionHeader = ({ label }: { label: string }) => (
   <div className="px-3 pb-1 pt-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/60">
+    {label}
+  </div>
+);
+
+const SubSectionHeader = ({ label }: { label: string }) => (
+  <div className="px-3 pb-0.5 pt-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/40">
     {label}
   </div>
 );
