@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2, Sparkles, TrendingUp, TrendingDown, ArrowUpRight } from "lucide-react";
 import { Bar, ComposedChart, ResponsiveContainer, YAxis, Tooltip } from "recharts";
 import { cn } from "@/lib/utils";
