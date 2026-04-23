@@ -213,10 +213,10 @@ export const TransferPreviewCard = ({ data: initial }: Props) => {
 
   if (dismissed) return null;
 
-  if (data.error) {
+  if (data.error || !data.from || !data.to || !data.token) {
     return (
-      <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-        {data.error}
+      <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 font-mono text-[12px] leading-relaxed text-destructive">
+        {data.error ?? "I couldn't prepare that transfer. Try again, or paste the wallet address."}
       </div>
     );
   }
