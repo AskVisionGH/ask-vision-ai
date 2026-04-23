@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils";
+import { TokenLogo } from "@/components/TokenLogo";
 import type { WalletBalanceData } from "@/lib/chat-stream";
 
 interface Props {
