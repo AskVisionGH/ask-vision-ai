@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { LogOut, MessageSquarePlus, MoreHorizontal, Pencil, Settings as SettingsIcon, Trash2 } from "lucide-react";
+import { LogOut, MessageSquarePlus, MoreHorizontal, Pencil, Settings as SettingsIcon, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
