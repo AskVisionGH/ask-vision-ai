@@ -22,7 +22,7 @@ import {
   useConversations,
   type ConversationRow,
 } from "@/hooks/useConversations";
-import { sendChat, type ChatMessage } from "@/lib/chat-stream";
+import { streamChat, type ChatMessage, type ToolEvent } from "@/lib/chat-stream";
 import { cn } from "@/lib/utils";
 
 const SUGGESTIONS = [
@@ -156,14 +156,24 @@ const Chat = () => {
   };
 
   /**
-   * Runs the AI for the current message list and appends the assistant reply.
-   * Used by both the normal send flow and the edit-and-regenerate flow.
+   * Runs the AI for the current message list, streaming the assistant reply
+   * into a placeholder message in real time. Used by both the normal send
+   * flow and the edit-and-regenerate flow.
    */
   const runAssistant = async (history: ChatMessage[], convoId: string) => {
     const wallet = publicKey?.toBase58() ?? null;
     setIsThinking(true);
 
-    const result = await sendChat({
+    // Create a placeholder assistant message we'll mutate as deltas arrive.
+    const placeholder: ChatMessage = { role: "assistant", content: "", toolEvents: [] };
+    setMessages((prev) => [...prev, placeholder]);
+
+    let accumulated = "";
+    const collectedEvents: ToolEvent[] = [];
+    let firstDelta = true;
+    let errored: { message: string; status: number } | null = null;
+
+    await streamChat({
       messages: history,
       walletAddress: wallet ?? undefined,
       profile: profile
@@ -179,23 +189,67 @@ const Chat = () => {
         address: c.address,
         resolved_address: c.resolved_address,
       })),
+      onDelta: (text) => {
+        if (firstDelta) {
+          // Hide the typing dots once the first token lands.
+          setIsThinking(false);
+          firstDelta = false;
+        }
+        accumulated += text;
+        setMessages((prev) => {
+          const copy = prev.slice();
+          const last = copy[copy.length - 1];
+          if (last && last.role === "assistant") {
+            copy[copy.length - 1] = { ...last, content: accumulated };
+          }
+          return copy;
+        });
+      },
+      onToolEvent: (ev) => {
+        collectedEvents.push(ev);
+        setMessages((prev) => {
+          const copy = prev.slice();
+          const last = copy[copy.length - 1];
+          if (last && last.role === "assistant") {
+            copy[copy.length - 1] = {
+              ...last,
+              toolEvents: [...(last.toolEvents ?? []), ev],
+            };
+          }
+          return copy;
+        });
+      },
+      onError: (message, status) => {
+        errored = { message, status };
+      },
+      onDone: () => {
+        /* handled below */
+      },
     });
 
     setIsThinking(false);
 
-    if ("error" in result) {
-      if (result.status === 429) {
-        toast.error("Slow down", { description: result.error });
-      } else if (result.status === 402) {
-        toast.error("Out of AI credits", { description: result.error });
-      } else if (result.status !== 0) {
-        toast.error("Vision hit a snag", { description: result.error });
-      }
+    if (errored) {
+      // Drop the placeholder on hard error.
+      setMessages((prev) => {
+        const copy = prev.slice();
+        if (copy.length && copy[copy.length - 1] === placeholder) copy.pop();
+        // Also drop if we replaced placeholder with an empty assistant msg.
+        const last = copy[copy.length - 1];
+        if (last && last.role === "assistant" && !last.content && !(last.toolEvents?.length)) {
+          copy.pop();
+        }
+        return copy;
+      });
+      const e = errored as { message: string; status: number };
+      if (e.status === 429) toast.error("Slow down", { description: e.message });
+      else if (e.status === 402) toast.error("Out of AI credits", { description: e.message });
+      else if (e.status !== 0) toast.error("Vision hit a snag", { description: e.message });
       return;
     }
 
-    // If the AI asked to save a contact, persist it client-side now.
-    for (const ev of result.toolEvents) {
+    // Persist the contact requests the AI asked for.
+    for (const ev of collectedEvents) {
       if (ev.type === "save_contact_request" && ev.data && !ev.data.error && ev.data.name && ev.data.address) {
         const r = await addContact({ name: ev.data.name, address: ev.data.address });
         if ("error" in r) toast.error("Couldn't save contact", { description: r.error });
@@ -203,13 +257,12 @@ const Chat = () => {
       }
     }
 
-    const assistantMsg: ChatMessage = {
+    const finalMsg: ChatMessage = {
       role: "assistant",
-      content: result.content,
-      toolEvents: result.toolEvents,
+      content: accumulated,
+      toolEvents: collectedEvents,
     };
-    setMessages((prev) => [...prev, assistantMsg]);
-    if (user) void saveMessage(convoId, user.id, assistantMsg);
+    if (user) void saveMessage(convoId, user.id, finalMsg);
   };
 
   const send = async (text: string) => {

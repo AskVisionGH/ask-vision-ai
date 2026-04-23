@@ -146,15 +146,27 @@ export interface ContactContext {
   resolved_address: string | null;
 }
 
-export async function sendChat(args: {
+export interface StreamChatCallbacks {
+  /** Called for each text delta from the assistant. */
+  onDelta: (text: string) => void;
+  /** Called when a tool result card arrives. */
+  onToolEvent: (event: ToolEvent) => void;
+  /** Called once at the end on success. */
+  onDone: () => void;
+  /** Called on stream error. status=0 for network/abort errors. */
+  onError: (error: string, status: number) => void;
+}
+
+export async function streamChat(args: {
   messages: ChatMessage[];
   walletAddress?: string;
   profile?: UserProfileContext;
   contacts?: ContactContext[];
   signal?: AbortSignal;
-}): Promise<{ content: string; toolEvents: ToolEvent[] } | { error: string; status: number }> {
+} & StreamChatCallbacks): Promise<void> {
+  let resp: Response;
   try {
-    const resp = await fetch(CHAT_URL, {
+    resp = await fetch(CHAT_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -168,25 +180,100 @@ export async function sendChat(args: {
       }),
       signal: args.signal,
     });
-
-    if (!resp.ok) {
-      let msg = "Something went wrong.";
-      try {
-        const data = await resp.json();
-        if (data?.error) msg = data.error;
-      } catch {
-        /* ignore */
-      }
-      return { error: msg, status: resp.status };
-    }
-
-    const data = await resp.json();
-    return {
-      content: data.content ?? "",
-      toolEvents: Array.isArray(data.toolEvents) ? data.toolEvents : [],
-    };
   } catch (e) {
-    if ((e as Error).name === "AbortError") return { error: "Cancelled", status: 0 };
-    return { error: "Network error. Check your connection.", status: 0 };
+    if ((e as Error).name === "AbortError") {
+      args.onError("Cancelled", 0);
+      return;
+    }
+    args.onError("Network error. Check your connection.", 0);
+    return;
   }
+
+  if (!resp.ok || !resp.body) {
+    let msg = "Something went wrong.";
+    try {
+      const data = await resp.json();
+      if (data?.error) msg = data.error;
+    } catch {
+      /* ignore */
+    }
+    args.onError(msg, resp.status);
+    return;
+  }
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  // SSE parser keyed on event type. Each block is delimited by a blank line.
+  let currentEvent = "message";
+  let currentData = "";
+
+  const flushEvent = () => {
+    if (!currentData) {
+      currentEvent = "message";
+      return;
+    }
+    let parsed: any = null;
+    try {
+      parsed = JSON.parse(currentData);
+    } catch {
+      currentEvent = "message";
+      currentData = "";
+      return;
+    }
+    if (currentEvent === "delta") {
+      if (typeof parsed?.text === "string") args.onDelta(parsed.text);
+    } else if (currentEvent === "tool") {
+      if (parsed?.type) args.onToolEvent(parsed as ToolEvent);
+    } else if (currentEvent === "error") {
+      args.onError(parsed?.error ?? "Stream error", parsed?.status ?? 500);
+    }
+    currentEvent = "message";
+    currentData = "";
+  };
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let nl: number;
+      while ((nl = buffer.indexOf("\n")) !== -1) {
+        let line = buffer.slice(0, nl);
+        buffer = buffer.slice(nl + 1);
+        if (line.endsWith("\r")) line = line.slice(0, -1);
+        if (line === "") {
+          flushEvent();
+          continue;
+        }
+        if (line.startsWith(":")) continue; // comment
+        if (line.startsWith("event:")) {
+          currentEvent = line.slice(6).trim();
+        } else if (line.startsWith("data:")) {
+          currentData = line.slice(5).trim();
+        }
+      }
+    }
+    // Flush whatever's left.
+    if (buffer) {
+      for (const raw of buffer.split("\n")) {
+        const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
+        if (line === "") flushEvent();
+        else if (line.startsWith("event:")) currentEvent = line.slice(6).trim();
+        else if (line.startsWith("data:")) currentData = line.slice(5).trim();
+      }
+      flushEvent();
+    }
+  } catch (e) {
+    if ((e as Error).name === "AbortError") {
+      args.onError("Cancelled", 0);
+      return;
+    }
+    args.onError("Stream interrupted", 0);
+    return;
+  }
+
+  args.onDone();
 }
+
