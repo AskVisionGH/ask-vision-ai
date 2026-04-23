@@ -443,6 +443,21 @@ serve(async (req) => {
 
           for (const tc of toolCalls) {
             const name = tc.function?.name;
+            const dedupeKey = `${name}:${(tc.function?.arguments ?? "").trim()}`;
+            // If this exact tool was already invoked in this turn, skip it
+            // entirely — feed the model a hint and don't emit a duplicate card.
+            if (emittedToolKeys.has(dedupeKey)) {
+              conversation.push({
+                role: "tool",
+                tool_call_id: tc.id,
+                content: JSON.stringify({
+                  note: "Already shown to the user above. Do not call this tool again. Reply with nothing more.",
+                }),
+              });
+              continue;
+            }
+            emittedToolKeys.add(dedupeKey);
+
             let result: any;
             let eventType: string | null = null;
 
