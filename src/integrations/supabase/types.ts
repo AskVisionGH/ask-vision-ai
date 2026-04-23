@@ -250,6 +250,72 @@ export type Database = {
         }
         Relationships: []
       }
+      sweep_runs: {
+        Row: {
+          accounts_claimed: number
+          accounts_scanned: number
+          created_at: string
+          error_message: string | null
+          finished_at: string | null
+          id: string
+          per_token: Json | null
+          signatures: string[]
+          started_at: string
+          status: string
+          total_value_usd: number | null
+          trigger: string
+        }
+        Insert: {
+          accounts_claimed?: number
+          accounts_scanned?: number
+          created_at?: string
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          per_token?: Json | null
+          signatures?: string[]
+          started_at?: string
+          status: string
+          total_value_usd?: number | null
+          trigger: string
+        }
+        Update: {
+          accounts_claimed?: number
+          accounts_scanned?: number
+          created_at?: string
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          per_token?: Json | null
+          signatures?: string[]
+          started_at?: string
+          status?: string
+          total_value_usd?: number | null
+          trigger?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
       wallet_links: {
         Row: {
           created_at: string
@@ -276,9 +342,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
+      app_role: "admin" | "user"
       crypto_experience: "new" | "intermediate" | "advanced"
       risk_tolerance: "cautious" | "balanced" | "aggressive"
     }
@@ -408,6 +481,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      app_role: ["admin", "user"],
       crypto_experience: ["new", "intermediate", "advanced"],
       risk_tolerance: ["cautious", "balanced", "aggressive"],
     },
