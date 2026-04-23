@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { LogOut, MessageSquarePlus, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Link } from "react-router-dom";
+import { LogOut, MessageSquarePlus, MoreHorizontal, Pencil, Settings as SettingsIcon, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -19,6 +20,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
+import { useProfile } from "@/hooks/useProfile";
+import { UserAvatar } from "@/components/UserAvatar";
 import { VisionLogo } from "@/components/VisionLogo";
 import { cn } from "@/lib/utils";
 import type { ConversationRow } from "@/hooks/useConversations";
