@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { forwardRef, useEffect, useState } from "react";
 import { Loader2, Sparkles, TrendingUp, TrendingDown, ArrowUpRight } from "lucide-react";
 import { Bar, ComposedChart, ResponsiveContainer, YAxis, Tooltip } from "recharts";
 import { cn } from "@/lib/utils";
@@ -63,7 +63,13 @@ export const TokenChartCard = ({ data: initial }: Props) => {
   const [loadingTa, setLoadingTa] = useState(false);
   const [taError, setTaError] = useState<string | null>(null);
 
-  // Refetch when the user picks a new interval.
+  useEffect(() => {
+    setData(initial);
+    setIntervalState(initial.interval);
+    setTa(null);
+    setTaError(null);
+  }, [initial]);
+
   useEffect(() => {
     if (interval === data.interval) return;
     let cancelled = false;
@@ -79,9 +85,9 @@ export const TokenChartCard = ({ data: initial }: Props) => {
       .then((r) => r.json())
       .then((j) => {
         if (cancelled) return;
-        if (j?.error) return; // keep old data, surface nothing — interval stays unchanged
+        if (j?.error) return;
         setData(j as TokenChartData);
-        setTa(null); // TA was for previous interval; invalidate
+        setTa(null);
         setTaError(null);
       })
       .catch(() => {})
@@ -105,17 +111,13 @@ export const TokenChartCard = ({ data: initial }: Props) => {
     );
   }
 
-  // Each candle becomes a bar from low → high (wick) plus a body from open → close.
-  // Recharts only paints positive bar heights, so we encode body + wick as ranges.
   const chartData = data.candles.map((c) => ({
     t: c.t,
     o: c.o,
     h: c.h,
     l: c.l,
     c: c.c,
-    // wick range [low, high]
     wick: [c.l, c.h] as [number, number],
-    // body range [min(o,c), max(o,c)] with color baked in
     body: [Math.min(c.o, c.c), Math.max(c.o, c.c)] as [number, number],
     up: c.c >= c.o,
   }));
@@ -123,7 +125,7 @@ export const TokenChartCard = ({ data: initial }: Props) => {
   const runTa = async () => {
     if (loadingTa) return;
     if (ta) {
-      setTa(null); // toggle off
+      setTa(null);
       return;
     }
     setLoadingTa(true);
@@ -157,7 +159,6 @@ export const TokenChartCard = ({ data: initial }: Props) => {
   return (
     <div className="ease-vision animate-fade-up flex flex-col gap-3">
       <div className="overflow-hidden rounded-2xl border border-border bg-card/60 backdrop-blur-sm">
-        {/* Header */}
         <div className="flex items-center gap-3 border-b border-border/60 bg-gradient-to-br from-primary/[0.04] to-transparent px-5 py-4">
           <TokenLogo logo={data.logo} symbol={data.symbol} size={40} />
           <div className="min-w-0 flex-1">
@@ -184,7 +185,6 @@ export const TokenChartCard = ({ data: initial }: Props) => {
           )}
         </div>
 
-        {/* Interval switcher */}
         <div className="flex items-center justify-between border-b border-border/40 px-5 py-2">
           <div className="flex items-center gap-1">
             {INTERVALS.map((iv) => (
@@ -206,16 +206,12 @@ export const TokenChartCard = ({ data: initial }: Props) => {
           {loadingInterval && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
         </div>
 
-        {/* Candlestick chart */}
         <div className="h-44 w-full px-2 py-3">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={chartData} margin={{ top: 6, right: 12, left: 12, bottom: 6 }}>
               <YAxis
                 hide
-                domain={[
-                  (dataMin: number) => dataMin * 0.995,
-                  (dataMax: number) => dataMax * 1.005,
-                ]}
+                domain={[(dataMin: number) => dataMin * 0.995, (dataMax: number) => dataMax * 1.005]}
               />
               <Tooltip
                 cursor={{ stroke: "hsl(var(--border))", strokeWidth: 1 }}
@@ -231,7 +227,7 @@ export const TokenChartCard = ({ data: initial }: Props) => {
                   return (
                     <div className="rounded-md border border-border bg-popover px-2 py-1.5 font-mono text-[10px] text-foreground shadow-soft">
                       <div className="text-muted-foreground">{fmtTime(p.t, interval)}</div>
-                      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 mt-1">
+                      <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5">
                         <span className="text-muted-foreground">O</span><span>{fmtPrice(p.o)}</span>
                         <span className="text-muted-foreground">H</span><span>{fmtPrice(p.h)}</span>
                         <span className="text-muted-foreground">L</span><span>{fmtPrice(p.l)}</span>
@@ -241,44 +237,34 @@ export const TokenChartCard = ({ data: initial }: Props) => {
                   );
                 }}
               />
-              <Bar
-                dataKey="wick"
-                shape={(props: any) => <CandleShape {...props} kind="wick" upColor={upColor} downColor={downColor} />}
-                isAnimationActive={false}
-              />
-              <Bar
-                dataKey="body"
-                shape={(props: any) => <CandleShape {...props} kind="body" upColor={upColor} downColor={downColor} />}
-                isAnimationActive={false}
-              />
+              <Bar dataKey="wick" shape={<CandleWickShape upColor={upColor} downColor={downColor} />} isAnimationActive={false} />
+              <Bar dataKey="body" shape={<CandleBodyShape upColor={upColor} downColor={downColor} />} isAnimationActive={false} />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
 
-        {/* Range row */}
         <div className="grid grid-cols-2 divide-x divide-border/40 border-t border-border/40 [&>*]:px-5 [&>*]:py-2.5">
           <div>
-            <p className="font-mono text-[10px] tracking-widest uppercase text-muted-foreground/70">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">
               Range high
             </p>
             <p className="mt-0.5 font-mono text-sm text-foreground">{fmtPrice(data.high)}</p>
           </div>
           <div>
-            <p className="font-mono text-[10px] tracking-widest uppercase text-muted-foreground/70">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">
               Range low
             </p>
             <p className="mt-0.5 font-mono text-sm text-foreground">{fmtPrice(data.low)}</p>
           </div>
         </div>
 
-        {/* Footer: TA + DexScreener */}
         <div className="flex items-center justify-between gap-2 border-t border-border/40 bg-secondary/30 px-5 py-2.5">
           <button
             type="button"
             onClick={runTa}
             disabled={loadingTa}
             className={cn(
-              "ease-vision flex items-center gap-1.5 rounded-full border border-border bg-background/60 px-2.5 py-1 font-mono text-[10px] tracking-wider uppercase text-muted-foreground",
+              "ease-vision flex items-center gap-1.5 rounded-full border border-border bg-background/60 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground",
               "hover:border-primary/30 hover:text-foreground",
               ta && "border-primary/30 text-foreground",
             )}
@@ -296,7 +282,7 @@ export const TokenChartCard = ({ data: initial }: Props) => {
               href={data.pairUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="ease-vision flex items-center gap-1 font-mono text-[10px] tracking-wider uppercase text-muted-foreground hover:text-foreground"
+              className="ease-vision flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground"
             >
               DexScreener
               <ArrowUpRight className="h-3 w-3" />
@@ -305,12 +291,11 @@ export const TokenChartCard = ({ data: initial }: Props) => {
         </div>
       </div>
 
-      {/* TA panel */}
       {(ta || taError) && (
         <div className="ease-vision animate-fade-up overflow-hidden rounded-2xl border border-border bg-card/60 backdrop-blur-sm">
           <div className="flex items-center gap-2 border-b border-border/60 bg-gradient-to-br from-primary/[0.04] to-transparent px-5 py-3">
             <Sparkles className="h-3.5 w-3.5 text-primary" />
-            <span className="font-mono text-[10px] tracking-widest uppercase text-muted-foreground/80">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/80">
               AI Technical Read · {data.interval}
             </span>
           </div>
@@ -322,10 +307,7 @@ export const TokenChartCard = ({ data: initial }: Props) => {
               <div className="grid grid-cols-3 divide-x divide-border/40 border-t border-border/40 [&>*]:px-5 [&>*]:py-2.5">
                 <Stat label="RSI(14)" value={ta.indicators.rsi.toFixed(1)} />
                 <Stat label="Volatility" value={`${ta.indicators.atrPct.toFixed(2)}%`} />
-                <Stat
-                  label="Vol vs avg"
-                  value={`${ta.indicators.volRatio.toFixed(2)}x`}
-                />
+                <Stat label="Vol vs avg" value={`${ta.indicators.volRatio.toFixed(2)}x`} />
               </div>
             </>
           ) : null}
@@ -337,7 +319,7 @@ export const TokenChartCard = ({ data: initial }: Props) => {
 
 const Stat = ({ label, value }: { label: string; value: string }) => (
   <div>
-    <p className="font-mono text-[10px] tracking-widest uppercase text-muted-foreground/70">
+    <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">
       {label}
     </p>
     <p className="mt-0.5 font-mono text-sm text-foreground">{value}</p>
@@ -350,24 +332,36 @@ interface CandleShapeProps {
   width?: number;
   height?: number;
   payload?: { up: boolean };
-  kind: "wick" | "body";
   upColor: string;
   downColor: string;
 }
 
-// Custom shape for both the wick (thin vertical line) and body (filled rect)
-// of a candle. Recharts gives us the bar's bounding box for the [low, high]
-// or [openMin, closeMax] range, which we then style accordingly.
-const CandleShape = ({ x, y, width, height, payload, kind, upColor, downColor }: CandleShapeProps) => {
+const CandleWickShape = forwardRef<SVGGElement, CandleShapeProps>(function CandleWickShape(
+  { x, y, width, height, payload, upColor, downColor },
+  ref,
+) {
   if (x == null || y == null || width == null || height == null) return null;
   const color = payload?.up ? upColor : downColor;
-  if (kind === "wick") {
-    const cx = x + width / 2;
-    return <line x1={cx} x2={cx} y1={y} y2={y + height} stroke={color} strokeWidth={1} />;
-  }
-  // body — clamp width and ensure at least 1px tall so doji candles still render
+  const cx = x + width / 2;
+  return (
+    <g ref={ref}>
+      <line x1={cx} x2={cx} y1={y} y2={y + height} stroke={color} strokeWidth={1} />
+    </g>
+  );
+});
+
+const CandleBodyShape = forwardRef<SVGGElement, CandleShapeProps>(function CandleBodyShape(
+  { x, y, width, height, payload, upColor, downColor },
+  ref,
+) {
+  if (x == null || y == null || width == null || height == null) return null;
+  const color = payload?.up ? upColor : downColor;
   const bodyW = Math.max(2, Math.min(width * 0.7, 14));
   const bodyX = x + (width - bodyW) / 2;
   const bodyH = Math.max(1, height);
-  return <rect x={bodyX} y={y} width={bodyW} height={bodyH} fill={color} rx={1} />;
-};
+  return (
+    <g ref={ref}>
+      <rect x={bodyX} y={y} width={bodyW} height={bodyH} fill={color} rx={1} />
+    </g>
+  );
+});

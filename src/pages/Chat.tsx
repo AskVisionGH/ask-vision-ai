@@ -271,7 +271,18 @@ const Chat = () => {
       content: accumulated,
       toolEvents: collectedEvents,
     };
-    if (user) void saveMessage(convoId, user.id, finalMsg);
+
+    localConvoIds.current.delete(convoId);
+
+    if (user) {
+      await saveMessage(convoId, user.id, finalMsg);
+
+      const currentConversationId = new URLSearchParams(window.location.search).get("c");
+      if (currentConversationId === convoId) {
+        const synced = await fetchMessages(convoId);
+        if (synced.length) setMessages(synced);
+      }
+    }
   };
 
   const send = async (text: string) => {
