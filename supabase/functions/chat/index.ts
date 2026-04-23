@@ -76,14 +76,14 @@ const TOOLS = [
     function: {
       name: "get_token_info",
       description:
-        "Fetch live market data for a single Solana token: price (USD), 1h and 24h price change, market cap, FDV, 24h volume, and liquidity. Use when the user mentions any token by ticker or mint address.",
+        "Fetch live market data for a token: price (USD), 1h and 24h price change, market cap, FDV, 24h volume, and (where applicable) liquidity. Works for Solana SPL tokens by ticker or mint address, AND for major-cap coins across all chains (BTC, ETH, XRP, BNB, SOL, ADA, DOGE, etc — anything in the CoinGecko top-250). Use whenever the user mentions any token by ticker, name, or mint.",
       parameters: {
         type: "object",
         properties: {
           query: {
             type: "string",
             description:
-              "Token ticker (e.g. 'SOL', 'JUP', 'BONK') or full Solana mint address.",
+              "Token ticker (e.g. 'BTC', 'ETH', 'SOL', 'BONK'), full coin name (e.g. 'Bitcoin'), or Solana mint address.",
           },
         },
         required: ["query"],
