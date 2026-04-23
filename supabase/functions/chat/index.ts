@@ -899,6 +899,7 @@ function json(body: unknown, status = 200) {
 }
 
 function inferForcedToolCall(message: string):
+  | { name: "get_wallet_balance"; args: { address?: string } }
   | { name: "get_token_chart"; args: { query: string; interval?: string } }
   | { name: "get_social_sentiment"; args: { query: string } }
   | null {
@@ -906,8 +907,15 @@ function inferForcedToolCall(message: string):
   if (!raw) return null;
   const lower = raw.toLowerCase();
 
+  const addressMatch = raw.match(/[1-9A-HJ-NP-Za-km-z]{32,44}/);
+  const address = addressMatch?.[0];
+  const holdingsIntent = /\b(holdings|holding|balance|portfolio|wallet holdings|what(?:'| i)?s in (?:this |that |my )?wallet|what does .* hold|show me .* holdings|show .* portfolio)\b/.test(lower);
   const chartIntent = /\b(chart|candles|candle|price action|how's it looking|trend|graph)\b/.test(lower);
   const sentimentIntent = /\b(sentiment|social|twitter|x\b|reddit|vibe check|lore)\b/.test(lower);
+
+  if (holdingsIntent) {
+    return { name: "get_wallet_balance", args: address ? { address } : {} };
+  }
 
   if (!chartIntent && !sentimentIntent) return null;
 
@@ -918,8 +926,7 @@ function inferForcedToolCall(message: string):
       : lower.includes("1d") || lower.includes("daily") ? "1d"
       : "1h";
 
-  const mintMatch = raw.match(/[1-9A-HJ-NP-Za-km-z]{32,44}/);
-  let query = mintMatch?.[0] ?? "";
+  let query = address ?? "";
 
   if (!query) {
     const cleaned = raw
