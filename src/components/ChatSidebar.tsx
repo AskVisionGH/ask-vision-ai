@@ -399,14 +399,6 @@ export const ChatSidebar = ({
           </div>
         ) : (
           <>
-            {showActiveSection && (
-              <>
-                <SectionHeader label="Current" />
-                <ul className="mb-3 space-y-0.5">
-                  <ConversationRowItem {...rowProps(active!, true)} />
-                </ul>
-              </>
-            )}
             {pinned.length > 0 && (
               <>
                 <SectionHeader label={isSearching ? "Pinned · matches" : "Pinned"} />
@@ -432,18 +424,15 @@ export const ChatSidebar = ({
                 </DndContext>
               </>
             )}
-            {previous.length > 0 && (
+            {(showActiveSection || previous.length > 0) && (
               <>
                 <SectionHeader
-                  label={
-                    isSearching
-                      ? "Matches"
-                      : showActiveSection || pinned.length > 0
-                        ? "Previous"
-                        : "Conversations"
-                  }
+                  label={isSearching ? "Matches" : "Conversations"}
                 />
                 <ul className="space-y-0.5">
+                  {showActiveSection && (
+                    <ConversationRowItem {...rowProps(active!, true)} />
+                  )}
                   {previous.map((c) => (
                     <ConversationRowItem key={c.id} {...rowProps(c, false)} />
                   ))}
