@@ -577,6 +577,7 @@ serve(async (req) => {
             const hasError = result && typeof result === "object" && "error" in result && result.error;
             if (hasError) {
               console.error(`[chat] tool ${name} returned error:`, result.error);
+              toolErrored = true;
             }
 
             // Emit the tool card immediately so the user sees it before the
