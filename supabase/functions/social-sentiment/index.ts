@@ -85,6 +85,12 @@ serve(async (req) => {
       if (metricsResp.status === 401 || metricsResp.status === 403) {
         return json({ error: "LunarCrush API key invalid" }, 502);
       }
+      if (metricsResp.status === 429) {
+        return json({
+          error: "Social data rate limit reached — LunarCrush free tier resets daily. Try again later or upgrade the plan.",
+          rateLimited: true,
+        }, 429);
+      }
       return json({ error: "Couldn't reach social data" }, 502);
     }
 

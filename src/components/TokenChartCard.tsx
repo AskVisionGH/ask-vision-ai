@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2, Sparkles, TrendingUp, TrendingDown, ArrowUpRight } from "lucide-react";
-import { AreaChart, Area, ResponsiveContainer, YAxis, Tooltip } from "recharts";
+import { Bar, ComposedChart, ResponsiveContainer, YAxis, Tooltip } from "recharts";
 import { cn } from "@/lib/utils";
 import { TokenLogo } from "@/components/TokenLogo";
 import type { ChartInterval, TaResponse, TokenChartData } from "@/lib/chat-stream";
@@ -94,8 +94,8 @@ export const TokenChartCard = ({ data: initial }: Props) => {
   }, [interval, data.address, data.symbol, data.interval]);
 
   const isUp = (data.priceChangePct ?? 0) >= 0;
-  const stroke = isUp ? "hsl(var(--up))" : "hsl(var(--down))";
-  const gradientId = useMemo(() => `chart-grad-${data.symbol}-${interval}`, [data.symbol, interval]);
+  const upColor = "hsl(var(--up))";
+  const downColor = "hsl(var(--down))";
 
   if (initial.error) {
     return (
@@ -105,7 +105,20 @@ export const TokenChartCard = ({ data: initial }: Props) => {
     );
   }
 
-  const chartData = data.candles.map((c) => ({ t: c.t, price: c.c }));
+  // Each candle becomes a bar from low → high (wick) plus a body from open → close.
+  // Recharts only paints positive bar heights, so we encode body + wick as ranges.
+  const chartData = data.candles.map((c) => ({
+    t: c.t,
+    o: c.o,
+    h: c.h,
+    l: c.l,
+    c: c.c,
+    // wick range [low, high]
+    wick: [c.l, c.h] as [number, number],
+    // body range [min(o,c), max(o,c)] with color baked in
+    body: [Math.min(c.o, c.c), Math.max(c.o, c.c)] as [number, number],
+    up: c.c >= c.o,
+  }));
 
   const runTa = async () => {
     if (loadingTa) return;
@@ -193,16 +206,10 @@ export const TokenChartCard = ({ data: initial }: Props) => {
           {loadingInterval && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
         </div>
 
-        {/* Chart */}
+        {/* Candlestick chart */}
         <div className="h-44 w-full px-2 py-3">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData} margin={{ top: 6, right: 12, left: 12, bottom: 6 }}>
-              <defs>
-                <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={stroke} stopOpacity={0.35} />
-                  <stop offset="100%" stopColor={stroke} stopOpacity={0} />
-                </linearGradient>
-              </defs>
+            <ComposedChart data={chartData} margin={{ top: 6, right: 12, left: 12, bottom: 6 }}>
               <YAxis
                 hide
                 domain={[
@@ -214,24 +221,37 @@ export const TokenChartCard = ({ data: initial }: Props) => {
                 cursor={{ stroke: "hsl(var(--border))", strokeWidth: 1 }}
                 content={({ active, payload }) => {
                   if (!active || !payload?.length) return null;
-                  const p = payload[0].payload as { t: number; price: number };
+                  const p = payload[0].payload as {
+                    t: number;
+                    o: number;
+                    h: number;
+                    l: number;
+                    c: number;
+                  };
                   return (
                     <div className="rounded-md border border-border bg-popover px-2 py-1.5 font-mono text-[10px] text-foreground shadow-soft">
                       <div className="text-muted-foreground">{fmtTime(p.t, interval)}</div>
-                      <div>{fmtPrice(p.price)}</div>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 mt-1">
+                        <span className="text-muted-foreground">O</span><span>{fmtPrice(p.o)}</span>
+                        <span className="text-muted-foreground">H</span><span>{fmtPrice(p.h)}</span>
+                        <span className="text-muted-foreground">L</span><span>{fmtPrice(p.l)}</span>
+                        <span className="text-muted-foreground">C</span><span>{fmtPrice(p.c)}</span>
+                      </div>
                     </div>
                   );
                 }}
               />
-              <Area
-                type="monotone"
-                dataKey="price"
-                stroke={stroke}
-                strokeWidth={1.5}
-                fill={`url(#${gradientId})`}
+              <Bar
+                dataKey="wick"
+                shape={(props: any) => <CandleShape {...props} kind="wick" upColor={upColor} downColor={downColor} />}
                 isAnimationActive={false}
               />
-            </AreaChart>
+              <Bar
+                dataKey="body"
+                shape={(props: any) => <CandleShape {...props} kind="body" upColor={upColor} downColor={downColor} />}
+                isAnimationActive={false}
+              />
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
 
@@ -268,7 +288,7 @@ export const TokenChartCard = ({ data: initial }: Props) => {
             ) : (
               <Sparkles className={cn("h-3 w-3", ta ? "text-primary" : "text-muted-foreground")} />
             )}
-            {ta ? "Hide TA" : "AI Read"}
+            {ta ? "Hide Analysis" : "Analyze"}
           </button>
 
           {data.pairUrl && (
@@ -323,3 +343,31 @@ const Stat = ({ label, value }: { label: string; value: string }) => (
     <p className="mt-0.5 font-mono text-sm text-foreground">{value}</p>
   </div>
 );
+
+interface CandleShapeProps {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  payload?: { up: boolean };
+  kind: "wick" | "body";
+  upColor: string;
+  downColor: string;
+}
+
+// Custom shape for both the wick (thin vertical line) and body (filled rect)
+// of a candle. Recharts gives us the bar's bounding box for the [low, high]
+// or [openMin, closeMax] range, which we then style accordingly.
+const CandleShape = ({ x, y, width, height, payload, kind, upColor, downColor }: CandleShapeProps) => {
+  if (x == null || y == null || width == null || height == null) return null;
+  const color = payload?.up ? upColor : downColor;
+  if (kind === "wick") {
+    const cx = x + width / 2;
+    return <line x1={cx} x2={cx} y1={y} y2={y + height} stroke={color} strokeWidth={1} />;
+  }
+  // body — clamp width and ensure at least 1px tall so doji candles still render
+  const bodyW = Math.max(2, Math.min(width * 0.7, 14));
+  const bodyX = x + (width - bodyW) / 2;
+  const bodyH = Math.max(1, height);
+  return <rect x={bodyX} y={y} width={bodyW} height={bodyH} fill={color} rx={1} />;
+};
