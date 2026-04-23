@@ -22,8 +22,9 @@ import { cn } from "@/lib/utils";
 
 const Settings = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const { profile, loading, updateProfile, uploadAvatar } = useProfile();
+  const [deleteDialog, setDeleteDialog] = useState<null | "wipe" | "full">(null);
 
   const [name, setName] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
