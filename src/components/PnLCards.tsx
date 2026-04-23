@@ -1,4 +1,5 @@
-import { ArrowDownLeft, ArrowUpRight, ExternalLink, Repeat, TrendingDown, TrendingUp } from "lucide-react";
+import { useState } from "react";
+import { ArrowDownLeft, ArrowUpRight, ChevronDown, ChevronUp, ExternalLink, Repeat, TrendingDown, TrendingUp } from "lucide-react";
 import { TokenLogo } from "@/components/TokenLogo";
 import { cn } from "@/lib/utils";
 import type {
@@ -8,6 +9,8 @@ import type {
   TokenPnLData,
   WalletPnLData,
 } from "@/lib/chat-stream";
+
+const PAGE = 5;
 
 // ---------------- formatting helpers ----------------
 
@@ -53,6 +56,59 @@ const pnlTone = (n: number) =>
 
 const solscan = (sig: string) => `https://solscan.io/tx/${sig}`;
 
+// ---------------- Expandable list wrapper ----------------
+
+function ExpandableList<T>({
+  items,
+  renderItem,
+  page = PAGE,
+  empty,
+}: {
+  items: T[];
+  renderItem: (item: T, idx: number) => React.ReactNode;
+  page?: number;
+  empty?: React.ReactNode;
+}) {
+  const [shown, setShown] = useState(page);
+  const visible = items.slice(0, shown);
+  const hasMore = items.length > shown;
+  const canCollapse = shown > page;
+
+  if (items.length === 0 && empty) return <>{empty}</>;
+
+  return (
+    <>
+      <ul className="divide-y divide-border/40">
+        {visible.map((item, idx) => (
+          <li key={idx}>{renderItem(item, idx)}</li>
+        ))}
+      </ul>
+      {(hasMore || canCollapse) && (
+        <div className="flex items-center justify-center gap-2 border-t border-border/40 px-5 py-2.5">
+          {hasMore && (
+            <button
+              onClick={() => setShown((s) => s + page)}
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+            >
+              <ChevronDown className="h-3 w-3" />
+              Show {Math.min(page, items.length - shown)} more
+            </button>
+          )}
+          {canCollapse && (
+            <button
+              onClick={() => setShown(page)}
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:underline"
+            >
+              <ChevronUp className="h-3 w-3" />
+              Show less
+            </button>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
 // ---------------- Recent Txs Card ----------------
 
 export const RecentTxsCard = ({ data }: { data: RecentTxsData }) => {
@@ -79,11 +135,10 @@ export const RecentTxsCard = ({ data }: { data: RecentTxsData }) => {
         title={`${data.totalCount} ${data.totalCount === 1 ? "transaction" : "transactions"}`}
         subtitle={`Last ${data.windowDays} days · ${truncate(data.address)}`}
       />
-      <ul className="divide-y divide-border/40">
-        {data.txs.map((tx) => (
-          <TxRow key={tx.signature} tx={tx} />
-        ))}
-      </ul>
+      <ExpandableList
+        items={data.txs}
+        renderItem={(tx) => <TxRow tx={tx} />}
+      />
     </CardShell>
   );
 };
@@ -137,7 +192,7 @@ const TxRow = ({ tx }: { tx: ParsedTx }) => {
   }
 
   return (
-    <li className="flex items-center gap-3 px-5 py-3">
+    <div className="flex items-center gap-3 px-5 py-3">
       <div
         className={cn(
           "flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary",
@@ -168,7 +223,7 @@ const TxRow = ({ tx }: { tx: ParsedTx }) => {
           <ExternalLink className="h-3.5 w-3.5" />
         </a>
       </div>
-    </li>
+    </div>
   );
 };
 
@@ -256,11 +311,10 @@ export const TokenPnLCard = ({ data }: { data: TokenPnLData }) => {
           <p className="px-5 pt-3 font-mono text-[10px] tracking-wider uppercase text-muted-foreground/70">
             Recent ${t.symbol} trades
           </p>
-          <ul className="divide-y divide-border/40">
-            {data.recentTxs.slice(0, 5).map((tx) => (
-              <TxRow key={tx.signature} tx={tx} />
-            ))}
-          </ul>
+          <ExpandableList
+            items={data.recentTxs}
+            renderItem={(tx) => <TxRow tx={tx} />}
+          />
         </div>
       )}
     </CardShell>
@@ -317,11 +371,10 @@ export const WalletPnLCard = ({ data }: { data: WalletPnLData }) => {
           <p className="px-5 pt-3 font-mono text-[10px] tracking-wider uppercase text-muted-foreground/70">
             By token
           </p>
-          <ul className="divide-y divide-border/40">
-            {tokens.map((t) => (
-              <TokenRow key={t.mint} token={t} />
-            ))}
-          </ul>
+          <ExpandableList
+            items={tokens}
+            renderItem={(t) => <TokenRow token={t} />}
+          />
         </div>
       )}
 
@@ -330,11 +383,10 @@ export const WalletPnLCard = ({ data }: { data: WalletPnLData }) => {
           <p className="px-5 pt-3 font-mono text-[10px] tracking-wider uppercase text-muted-foreground/70">
             Recent activity
           </p>
-          <ul className="divide-y divide-border/40">
-            {recentTxs.slice(0, 5).map((tx) => (
-              <TxRow key={tx.signature} tx={tx} />
-            ))}
-          </ul>
+          <ExpandableList
+            items={recentTxs}
+            renderItem={(tx) => <TxRow tx={tx} />}
+          />
         </div>
       )}
 
@@ -348,7 +400,7 @@ export const WalletPnLCard = ({ data }: { data: WalletPnLData }) => {
 const TokenRow = ({ token }: { token: TokenPnL }) => {
   const totalPnl = token.realizedUsd + token.unrealizedUsd;
   return (
-    <li className="flex items-center gap-3 px-5 py-3">
+    <div className="flex items-center gap-3 px-5 py-3">
       <TokenLogo logo={token.logo} symbol={token.symbol} />
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
@@ -382,7 +434,7 @@ const TokenRow = ({ token }: { token: TokenPnL }) => {
           <ExternalLink className="h-3.5 w-3.5" />
         </a>
       )}
-    </li>
+    </div>
   );
 };
 
