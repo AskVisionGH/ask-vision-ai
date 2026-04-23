@@ -214,24 +214,27 @@ export const TokenCard = ({ data }: Props) => {
           <Stat label="1h Change" value={fmtPct(data.priceChange1h)} dim />
         </div>
 
-        {/* Footer row: safety pill + dexscreener */}
-        {(showSafetyPill || data.pairUrl) && (
-          <div className="flex items-center justify-between gap-2 border-t border-border/40 bg-secondary/30 px-5 py-2.5">
-            {showSafetyPill ? (
-              <button
-                type="button"
+        {/* Footer row: pills + dexscreener */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/40 bg-secondary/30 px-5 py-2.5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Pill
+              active={pane === "chart"}
+              loading={loadingChart}
+              onClick={loadChart}
+              icon={
+                <LineChart
+                  className={cn("h-3 w-3", chart ? "text-primary" : "text-muted-foreground")}
+                />
+              }
+              label={pane === "chart" ? "Hide chart" : "Chart"}
+            />
+
+            {showSafetyPill && (
+              <Pill
+                active={pane === "safety"}
+                loading={loadingReport}
                 onClick={loadReport}
-                disabled={loadingReport}
-                className={cn(
-                  "ease-vision flex items-center gap-1.5 rounded-full border border-border bg-background/60 px-2.5 py-1 font-mono text-[10px] tracking-wider uppercase text-muted-foreground",
-                  "hover:border-primary/30 hover:text-foreground",
-                  expanded && "border-primary/30 text-foreground",
-                )}
-                aria-expanded={expanded}
-              >
-                {loadingReport ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
+                icon={
                   <Shield
                     className={cn(
                       "h-3 w-3",
@@ -246,45 +249,122 @@ export const TokenCard = ({ data }: Props) => {
                         : "text-muted-foreground",
                     )}
                   />
-                )}
-                {expanded ? "Hide safety" : "Safety check"}
-              </button>
-            ) : (
-              <span />
+                }
+                label={pane === "safety" ? "Hide safety" : "Safety check"}
+              />
             )}
 
-            {data.pairUrl && (
-              <a
-                href={data.pairUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="ease-vision flex items-center gap-1 font-mono text-[10px] tracking-wider uppercase text-muted-foreground hover:text-foreground"
-              >
-                DexScreener
-                <ArrowUpRight className="h-3 w-3" />
-              </a>
-            )}
+            <Pill
+              active={pane === "vibe"}
+              loading={loadingVibe}
+              onClick={loadVibe}
+              icon={
+                <MessageCircle
+                  className={cn(
+                    "h-3 w-3",
+                    vibe ? VIBE_DOT_COLOR[vibe.sentimentVerdict] : "text-muted-foreground",
+                  )}
+                />
+              }
+              label={pane === "vibe" ? "Hide vibe" : "Vibe check"}
+            />
           </div>
-        )}
+
+          {data.pairUrl && (
+            <a
+              href={data.pairUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ease-vision flex items-center gap-1 font-mono text-[10px] tracking-wider uppercase text-muted-foreground hover:text-foreground"
+            >
+              DexScreener
+              <ArrowUpRight className="h-3 w-3" />
+            </a>
+          )}
+        </div>
       </div>
 
-      {/* Expanded risk report */}
-      {expanded && (
+      {/* Expanded panes */}
+      {pane === "safety" && (
         <>
           {reportError ? (
-            <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-              {reportError}
-            </div>
+            <ErrorBox text={reportError} />
           ) : report ? (
             <RiskReportCard data={report} />
           ) : loadingReport ? (
-            <div className="flex items-center gap-2 rounded-2xl border border-border bg-card/40 px-4 py-3 text-xs text-muted-foreground">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              Running safety checks…
-            </div>
+            <LoadingBox text="Running safety checks…" />
           ) : null}
         </>
       )}
+
+      {pane === "chart" && (
+        <>
+          {chartError ? (
+            <ErrorBox text={chartError} />
+          ) : chart ? (
+            <TokenChartCard data={chart} />
+          ) : loadingChart ? (
+            <LoadingBox text="Loading chart…" />
+          ) : null}
+        </>
+      )}
+
+      {pane === "vibe" && (
+        <>
+          {vibeError ? (
+            <ErrorBox text={vibeError} />
+          ) : vibe ? (
+            <SocialSentimentCard data={vibe} />
+          ) : loadingVibe ? (
+            <LoadingBox text="Reading the room…" />
+          ) : null}
+        </>
+      )}
+    </div>
+  );
+};
+
+const Pill = ({
+  active,
+  loading,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean;
+  loading: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    disabled={loading}
+    aria-pressed={active}
+    className={cn(
+      "ease-vision flex items-center gap-1.5 rounded-full border border-border bg-background/60 px-2.5 py-1 font-mono text-[10px] tracking-wider uppercase text-muted-foreground",
+      "hover:border-primary/30 hover:text-foreground",
+      active && "border-primary/30 text-foreground",
+    )}
+  >
+    {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : icon}
+    {label}
+  </button>
+);
+
+const ErrorBox = ({ text }: { text: string }) => (
+  <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+    {text}
+  </div>
+);
+
+const LoadingBox = ({ text }: { text: string }) => (
+  <div className="flex items-center gap-2 rounded-2xl border border-border bg-card/40 px-4 py-3 text-xs text-muted-foreground">
+    <Loader2 className="h-3 w-3 animate-spin" />
+    {text}
+  </div>
+);
     </div>
   );
 };
