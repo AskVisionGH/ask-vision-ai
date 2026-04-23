@@ -144,7 +144,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { messages, walletAddress } = await req.json();
+    const { messages, walletAddress, profile } = await req.json();
 
     if (!Array.isArray(messages)) {
       return json({ error: "messages must be an array" }, 400);
@@ -153,9 +153,16 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY missing");
 
+    // Build a personalisation block from the user's profile so the AI can
+    // tailor depth, interests, and risk framing without re-asking.
+    const profileBlock = buildProfileBlock(profile);
+    const systemContent = profileBlock
+      ? `${SYSTEM_PROMPT}\n\n${profileBlock}`
+      : SYSTEM_PROMPT;
+
     // Multi-turn tool loop. Max 3 iterations to bound cost.
     const conversation: any[] = [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: systemContent },
       ...messages,
     ];
 
