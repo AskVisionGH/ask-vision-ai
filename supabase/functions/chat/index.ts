@@ -298,9 +298,10 @@ serve(async (req) => {
     return json({ error: "Invalid JSON body" }, 400);
   }
 
-  const { messages, walletAddress, profile, contacts } = payload;
+  const { messages, walletAddress, profile, contacts, userId } = payload;
   const contactList: { name: string; address: string; resolved_address: string | null }[] =
     Array.isArray(contacts) ? contacts : [];
+  const userIdValue: string | null = typeof userId === "string" ? userId : null;
 
   if (!Array.isArray(messages)) {
     return json({ error: "messages must be an array" }, 400);
