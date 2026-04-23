@@ -192,9 +192,10 @@ serve(async (req) => {
     // Build a personalisation block from the user's profile so the AI can
     // tailor depth, interests, and risk framing without re-asking.
     const profileBlock = buildProfileBlock(profile);
-    const systemContent = profileBlock
-      ? `${SYSTEM_PROMPT}\n\n${profileBlock}`
-      : SYSTEM_PROMPT;
+    const contactsBlock = buildContactsBlock(contactList);
+    const systemContent = [SYSTEM_PROMPT, profileBlock, contactsBlock]
+      .filter(Boolean)
+      .join("\n\n");
 
     // Multi-turn tool loop. Max 3 iterations to bound cost.
     const conversation: any[] = [
