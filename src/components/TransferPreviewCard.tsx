@@ -97,6 +97,9 @@ export const TransferPreviewCard = ({ data: initial }: Props) => {
           token: data.token?.isNative ? "SOL" : data.token?.mint,
           amount: data.amountUi,
           recipient: data.to?.displayName ?? data.to?.address,
+          resolvedAddress: data.to?.address,
+          displayName: data.to?.displayName ?? null,
+          isOnCurve: data.to?.isOnCurve,
         });
         if (mounted.current && !fresh.error) setData(fresh);
       } catch {
@@ -196,6 +199,9 @@ export const TransferPreviewCard = ({ data: initial }: Props) => {
         token: data.token.isNative ? "SOL" : data.token.mint,
         amount: data.amountUi,
         recipient: data.to.displayName ?? data.to.address,
+        resolvedAddress: data.to.address,
+        displayName: data.to.displayName ?? null,
+        isOnCurve: data.to.isOnCurve,
       });
       if (mounted.current && !fresh.error) setData(fresh);
     } catch {

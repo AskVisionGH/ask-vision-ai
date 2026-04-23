@@ -252,12 +252,23 @@ serve(async (req) => {
           if (!walletAddress) {
             result = { error: "No wallet connected. Connect your wallet first." };
           } else {
-            result = await invokeFn("transfer-quote", {
-              fromAddress: walletAddress,
-              token: args.token ?? "",
-              amount: args.amount,
+            const recipientResolved = await invokeFn("resolve-recipient", {
               recipient: args.recipient ?? "",
             }, req);
+
+            if (recipientResolved?.error) {
+              result = recipientResolved;
+            } else {
+              result = await invokeFn("transfer-quote", {
+                fromAddress: walletAddress,
+                token: args.token ?? "",
+                amount: args.amount,
+                recipient: args.recipient ?? "",
+                resolvedAddress: recipientResolved.address,
+                displayName: recipientResolved.displayName ?? null,
+                isOnCurve: recipientResolved.isOnCurve,
+              }, req);
+            }
           }
           toolEvents.push({ type: "transfer_quote", data: result });
         } else {
