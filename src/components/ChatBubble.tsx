@@ -180,6 +180,12 @@ export const ChatBubble = ({ message, onEdit, readOnly = false }: Props) => {
         if (event.type === "solana_news") {
           return <NewsCard key={i} data={event.data} />;
         }
+        if (event.type === "early_buyers") {
+          return <EarlyBuyersCard key={i} data={event.data} />;
+        }
+        if (event.type === "smart_money_activity") {
+          return <SmartMoneyActivityCard key={i} data={event.data} />;
+        }
         return null;
       })}
     </div>
