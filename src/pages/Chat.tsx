@@ -52,15 +52,8 @@ const Chat = () => {
   const [draftingNew, setDraftingNew] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
 
-  // Auto-select most recent conversation on first load (or none if list is empty).
-  useEffect(() => {
-    if (convosLoading) return;
-    if (activeId) return;
-    if (draftingNew) return;
-    if (conversations.length > 0) {
-      setSearchParams({ c: conversations[0].id }, { replace: true });
-    }
-  }, [convosLoading, conversations, activeId, draftingNew, setSearchParams]);
+  // Land users on a blank "new chat" by default — past threads remain in the
+  // sidebar for selection. Only honour an explicit `?c=...` from the URL.
 
   // Load messages when active conversation changes.
   useEffect(() => {
