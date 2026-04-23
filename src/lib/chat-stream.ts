@@ -259,7 +259,11 @@ export interface SmartWalletInfo {
 
 export interface EarlyBuyer extends SmartWalletInfo {
   firstBuyAt: number;
+  signature: string | null;
   firstBuyUsd: number | null;
+  firstBuyAmount: number | null;
+  currentValueUsd: number | null;
+  multiplier: number | null;
   minutesAfterLaunch: number | null;
 }
 
@@ -295,6 +299,7 @@ export interface SmartMoneyTrade {
     name: string;
     address: string;
     logo: string | null;
+    pairUrl: string | null;
   } | null;
   valueUsd: number | null;
   amountUi: number | null;
