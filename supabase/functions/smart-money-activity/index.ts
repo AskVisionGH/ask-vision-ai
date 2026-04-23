@@ -289,7 +289,10 @@ function sumValueUsd(
   return any ? usd : null;
 }
 
-const tokenCache = new Map<string, { symbol: string; name: string; address: string; logo: string | null } | null>();
+const tokenCache = new Map<
+  string,
+  { symbol: string; name: string; address: string; logo: string | null; pairUrl: string | null } | null
+>();
 
 async function lookupToken(mint: string) {
   if (tokenCache.has(mint)) return tokenCache.get(mint) ?? null;
@@ -314,6 +317,7 @@ async function lookupToken(mint: string) {
       name: base?.name ?? base?.symbol ?? "Unknown",
       address: base?.address ?? mint,
       logo: top?.info?.imageUrl ?? null,
+      pairUrl: top?.url ?? null,
     };
     tokenCache.set(mint, result);
     return result;
