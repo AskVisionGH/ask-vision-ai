@@ -272,3 +272,10 @@ export const ChatSidebar = ({
     </aside>
   );
 };
+
+const SectionHeader = ({ label }: { label: string }) => (
+  <div className="px-3 pb-1 pt-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/60">
+    {label}
+  </div>
+);
+
