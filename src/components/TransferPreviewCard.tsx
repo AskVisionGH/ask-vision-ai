@@ -94,9 +94,21 @@ export const TransferPreviewCard = ({ data: initial }: Props) => {
   const [phase, setPhase] = useState<Phase>({ name: "preview" });
   const [refreshing, setRefreshing] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+  const [savingContact, setSavingContact] = useState(false);
+  const [contactSaved, setContactSaved] = useState(false);
+  const [contactNameDraft, setContactNameDraft] = useState("");
+  const [showSaveInput, setShowSaveInput] = useState(false);
   const mounted = useRef(true);
   const { connection } = useConnection();
   const { publicKey, signTransaction, connected } = useWallet();
+  const { contacts, addContact } = useContacts();
+
+  const recipientAddress = data.to?.address ?? "";
+  const existingContact = useMemo(
+    () => (recipientAddress ? findContactByAddress(contacts, recipientAddress) : null),
+    [contacts, recipientAddress],
+  );
+  const alreadySaved = !!existingContact || contactSaved;
 
   useEffect(() => {
     mounted.current = true;
