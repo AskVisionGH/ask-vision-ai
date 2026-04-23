@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { toast } from "sonner";
@@ -15,9 +15,12 @@ import { useProfile } from "@/hooks/useProfile";
 import { useContacts } from "@/hooks/useContacts";
 import {
   autoTitleConversation,
+  deleteMessagesFrom,
   fetchMessages,
   saveMessage,
+  searchConversationsByContent,
   useConversations,
+  type ConversationRow,
 } from "@/hooks/useConversations";
 import { sendChat, type ChatMessage } from "@/lib/chat-stream";
 import { cn } from "@/lib/utils";
@@ -45,6 +48,7 @@ const Chat = () => {
     deleteConversation,
     togglePin,
     reorderPinned,
+    toggleShare,
   } = useConversations();
 
   const activeId = searchParams.get("c");
@@ -53,10 +57,9 @@ const Chat = () => {
   const [input, setInput] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchHits, setSearchHits] = useState<Set<string> | null>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
-
-  // Land users on a blank "new chat" by default — past threads remain in the
-  // sidebar for selection. Only honour an explicit `?c=...` from the URL.
 
   // Load messages when active conversation changes.
   useEffect(() => {
@@ -83,6 +86,26 @@ const Chat = () => {
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [messages, isThinking]);
 
+  // Debounced server-side search across all of the user's messages.
+  // Title matches happen client-side inside the sidebar; we only need the
+  // server when matching message bodies.
+  useEffect(() => {
+    if (!user) {
+      setSearchHits(null);
+      return;
+    }
+    const q = searchQuery.trim();
+    if (!q) {
+      setSearchHits(null);
+      return;
+    }
+    const handle = window.setTimeout(async () => {
+      const ids = await searchConversationsByContent(user.id, q);
+      setSearchHits(ids);
+    }, 200);
+    return () => window.clearTimeout(handle);
+  }, [searchQuery, user]);
+
   const selectConversation = (id: string) => {
     setSearchParams({ c: id });
     setMobileOpen(false);
@@ -103,40 +126,45 @@ const Chat = () => {
     }
   };
 
-  const send = async (text: string) => {
-    const trimmed = text.trim();
-    if (!trimmed || isThinking || !user) return;
-
-    const wallet = publicKey?.toBase58() ?? null;
-
-    // Ensure we have a conversation to write into.
-    let convoId = activeId;
-    let isFirstMessage = false;
-    if (!convoId) {
-      const created = await createConversation(wallet);
-      if (!created) {
-        toast.error("Couldn't start a new conversation");
+  const handleShare = async (c: ConversationRow) => {
+    let shareId = c.share_id;
+    // First-time share — generate a fresh id.
+    if (!shareId) {
+      shareId = await toggleShare(c.id, true);
+      if (!shareId) {
+        toast.error("Couldn't create share link");
         return;
       }
-      convoId = created.id;
-      isFirstMessage = true;
-      setSearchParams({ c: convoId }, { replace: true });
-    } else if (messages.length === 0) {
-      isFirstMessage = true;
     }
+    const url = `${window.location.origin}/shared/${shareId}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("Share link copied", { description: url });
+    } catch {
+      // Clipboard can fail in some browser/permission combos — still surface the link.
+      toast.success("Share link ready", { description: url });
+    }
+  };
 
-    const userMsg: ChatMessage = { role: "user", content: trimmed };
-    const next = [...messages, userMsg];
-    setMessages(next);
-    setInput("");
+  const handleUnshare = async (c: ConversationRow) => {
+    const ok = await toggleShare(c.id, false);
+    if (ok === null && c.share_id) {
+      // toggleShare returns null when share=false succeeds OR fails. We only
+      // know it failed if share_id is still set after refresh.
+    }
+    toast.success("Sharing disabled");
+  };
+
+  /**
+   * Runs the AI for the current message list and appends the assistant reply.
+   * Used by both the normal send flow and the edit-and-regenerate flow.
+   */
+  const runAssistant = async (history: ChatMessage[], convoId: string) => {
+    const wallet = publicKey?.toBase58() ?? null;
     setIsThinking(true);
 
-    // Persist the user message immediately (don't block the AI call on it).
-    void saveMessage(convoId, user.id, userMsg);
-    if (isFirstMessage) void autoTitleConversation(convoId, trimmed);
-
     const result = await sendChat({
-      messages: next,
+      messages: history,
       walletAddress: wallet ?? undefined,
       profile: profile
         ? {
@@ -181,7 +209,82 @@ const Chat = () => {
       toolEvents: result.toolEvents,
     };
     setMessages((prev) => [...prev, assistantMsg]);
-    void saveMessage(convoId, user.id, assistantMsg);
+    if (user) void saveMessage(convoId, user.id, assistantMsg);
+  };
+
+  const send = async (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed || isThinking || !user) return;
+
+    const wallet = publicKey?.toBase58() ?? null;
+
+    // Ensure we have a conversation to write into.
+    let convoId = activeId;
+    let isFirstMessage = false;
+    if (!convoId) {
+      const created = await createConversation(wallet);
+      if (!created) {
+        toast.error("Couldn't start a new conversation");
+        return;
+      }
+      convoId = created.id;
+      isFirstMessage = true;
+      setSearchParams({ c: convoId }, { replace: true });
+    } else if (messages.length === 0) {
+      isFirstMessage = true;
+    }
+
+    const userMsg: ChatMessage = { role: "user", content: trimmed };
+    const next = [...messages, userMsg];
+    setMessages(next);
+    setInput("");
+
+    // Persist the user message immediately (don't block the AI call on it).
+    void saveMessage(convoId, user.id, userMsg);
+    if (isFirstMessage) void autoTitleConversation(convoId, trimmed);
+
+    await runAssistant(next, convoId);
+  };
+
+  /**
+   * Replaces a user message with new content, drops everything that came after,
+   * and re-runs the assistant. Requires the message to have a known createdAt
+   * (which is true once it's been persisted).
+   */
+  const editAndRegenerate = async (target: ChatMessage, newContent: string) => {
+    if (!user || !activeId || isThinking) return;
+
+    const idx = messages.findIndex((m) => m === target || (m.id && m.id === target.id));
+    if (idx < 0) return;
+
+    const original = messages[idx];
+
+    // 1. Update local state: keep everything up to idx, replace the message.
+    const truncated = messages.slice(0, idx);
+    const editedMsg: ChatMessage = {
+      ...original,
+      id: undefined, // will be re-issued on insert
+      createdAt: undefined,
+      content: newContent,
+    };
+    const nextMessages = [...truncated, editedMsg];
+    setMessages(nextMessages);
+
+    // 2. Server-side: drop the original + everything after it (uses the original's createdAt).
+    if (original.createdAt) {
+      await deleteMessagesFrom(activeId, original.createdAt);
+    }
+
+    // 3. Insert the edited user message.
+    const newId = await saveMessage(activeId, user.id, editedMsg);
+    if (newId) {
+      setMessages((prev) =>
+        prev.map((m, i) => (i === idx ? { ...m, id: newId } : m)),
+      );
+    }
+
+    // 4. Regenerate the assistant reply from the new message list.
+    await runAssistant(nextMessages, activeId);
   };
 
   const isEmpty = messages.length === 0 && !loadingThread;
@@ -191,13 +294,27 @@ const Chat = () => {
       conversations={conversations}
       activeId={activeId}
       loading={convosLoading}
+      searchQuery={searchQuery}
+      searchHits={searchHits}
+      onSearchQueryChange={setSearchQuery}
       onSelect={selectConversation}
       onNew={startNewConversation}
       onRename={renameConversation}
       onDelete={handleDelete}
       onTogglePin={togglePin}
       onReorderPinned={reorderPinned}
+      onShare={handleShare}
+      onUnshare={handleUnshare}
     />
+  );
+
+  // Memoize the edit handler so each ChatBubble doesn't churn every render.
+  const handleEdit = useMemo(
+    () => (msg: ChatMessage, newContent: string) => {
+      void editAndRegenerate(msg, newContent);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [messages, activeId, isThinking, user, profile, contacts],
   );
 
   return (
@@ -291,7 +408,9 @@ const Chat = () => {
                 </div>
               </div>
             ) : (
-              messages.map((m, i) => <ChatBubble key={i} message={m} />)
+              messages.map((m, i) => (
+                <ChatBubble key={m.id ?? i} message={m} onEdit={handleEdit} />
+              ))
             )}
 
             {isThinking && (
