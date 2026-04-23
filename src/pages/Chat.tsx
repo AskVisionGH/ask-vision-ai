@@ -374,7 +374,16 @@ const Chat = () => {
 
   const isEmpty = messages.length === 0 && !loadingThread;
 
-  const sidebar = (
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("vision:sidebar-collapsed") === "1";
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("vision:sidebar-collapsed", sidebarCollapsed ? "1" : "0");
+  }, [sidebarCollapsed]);
+
+  const sidebar = (collapsed: boolean) => (
     <ChatSidebar
       conversations={conversations}
       activeId={activeId}
@@ -390,6 +399,8 @@ const Chat = () => {
       onReorderPinned={reorderPinned}
       onShare={handleShare}
       onUnshare={handleUnshare}
+      collapsed={collapsed}
+      onToggleCollapsed={() => setSidebarCollapsed((v) => !v)}
     />
   );
 
@@ -407,7 +418,14 @@ const Chat = () => {
       <div className="pointer-events-none absolute inset-0 bg-aurora" aria-hidden />
 
       {/* Desktop sidebar */}
-      <div className="relative z-10 hidden h-full w-64 shrink-0 md:flex">{sidebar}</div>
+      <div
+        className={cn(
+          "relative z-10 hidden h-full shrink-0 transition-[width] duration-200 ease-vision md:flex",
+          sidebarCollapsed ? "w-14" : "w-64",
+        )}
+      >
+        {sidebar(sidebarCollapsed)}
+      </div>
 
       {/* Main column */}
       <div className="relative z-10 flex h-full min-w-0 flex-1 flex-col">
@@ -426,7 +444,7 @@ const Chat = () => {
                 </Button>
               </SheetTrigger>
               <SheetContent side="left" className="w-72 p-0 [&>button.absolute]:hidden">
-                {sidebar}
+                {sidebar(false)}
               </SheetContent>
             </Sheet>
             <div className="flex items-center gap-2 md:hidden">
