@@ -1,4 +1,4 @@
-import { ShieldAlert, ShieldCheck, ShieldQuestion, Shield, Check, X, AlertTriangle, HelpCircle } from "lucide-react";
+import { ShieldAlert, ShieldCheck, ShieldQuestion, Shield, Check, X, AlertTriangle, HelpCircle, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TokenLogo } from "@/components/TokenLogo";
 import type { RiskReportData } from "@/lib/chat-stream";
@@ -9,7 +9,7 @@ interface Props {
 
 const VERDICT_STYLE: Record<
   RiskReportData["verdict"],
-  { ring: string; bg: string; text: string; Icon: typeof Shield; label: string }
+  { ring: string; bg: string; text: string; Icon: LucideIcon; label: string }
 > = {
   safe: {
     ring: "border-up/30",
@@ -50,7 +50,7 @@ const VERDICT_STYLE: Record<
 
 const STATUS_STYLE: Record<
   RiskReportData["checks"][number]["status"],
-  { Icon: typeof Check; color: string }
+  { Icon: LucideIcon; color: string }
 > = {
   good: { Icon: Check, color: "text-up" },
   warn: { Icon: AlertTriangle, color: "text-amber-400" },

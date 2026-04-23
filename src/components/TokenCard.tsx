@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowUpRight, TrendingUp, TrendingDown, Shield, ShieldCheck, ShieldAlert, Loader2 } from "lucide-react";
+import { ArrowUpRight, TrendingUp, TrendingDown, Shield, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TokenLogo } from "@/components/TokenLogo";
 import { RiskReportCard } from "@/components/RiskReportCard";
