@@ -543,6 +543,7 @@ serve(async (req) => {
                 type: "save_contact_request",
                 data: { name: cname, address: caddr, error: result.error ?? null },
               });
+              cardEmitted = true;
               conversation.push({
                 role: "tool",
                 tool_call_id: tc.id,
