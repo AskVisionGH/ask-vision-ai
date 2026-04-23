@@ -176,9 +176,6 @@ export const ChatSidebar = ({
               <p className="truncate text-xs text-foreground">
                 {profile?.display_name?.trim() || user?.email || "Account"}
               </p>
-              <p className="truncate font-mono text-[10px] uppercase tracking-wider text-muted-foreground/60">
-                View settings
-              </p>
             </div>
           </Link>
           <Button
