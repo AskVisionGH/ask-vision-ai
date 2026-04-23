@@ -44,6 +44,7 @@ const Chat = () => {
     renameConversation,
     deleteConversation,
     togglePin,
+    reorderPinned,
   } = useConversations();
 
   const activeId = searchParams.get("c");
