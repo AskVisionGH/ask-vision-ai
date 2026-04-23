@@ -1,121 +1,79 @@
 export type ChatRole = "user" | "assistant";
 
+export interface TokenHolding {
+  mint: string;
+  symbol: string;
+  name: string;
+  logo: string | null;
+  amount: number;
+  decimals: number;
+  priceUsd: number | null;
+  valueUsd: number | null;
+}
+
+export interface WalletBalanceData {
+  address: string;
+  totalUsd: number;
+  holdings: TokenHolding[];
+  tokenCount: number;
+  error?: string;
+}
+
+export type ToolEvent =
+  | { type: "wallet_balance"; data: WalletBalanceData }
+  | { type: string; data: any };
+
 export interface ChatMessage {
   role: ChatRole;
   content: string;
+  toolEvents?: ToolEvent[];
 }
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
 const AUTH_TOKEN = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-interface StreamArgs {
-  messages: ChatMessage[];
-  onDelta: (chunk: string) => void;
-  onDone: () => void;
-  onError: (status: number, message: string) => void;
-  signal?: AbortSignal;
+// Strip toolEvents before sending to model (it only needs role + content history)
+function toModelMessages(msgs: ChatMessage[]) {
+  return msgs.map(({ role, content }) => ({ role, content }));
 }
 
-/**
- * Streams a chat response from the Vision edge function.
- * Parses SSE line-by-line and emits each token chunk via onDelta.
- */
-export async function streamChat({
-  messages,
-  onDelta,
-  onDone,
-  onError,
-  signal,
-}: StreamArgs): Promise<void> {
-  let resp: Response;
+export async function sendChat(args: {
+  messages: ChatMessage[];
+  walletAddress?: string;
+  signal?: AbortSignal;
+}): Promise<{ content: string; toolEvents: ToolEvent[] } | { error: string; status: number }> {
   try {
-    resp = await fetch(CHAT_URL, {
+    const resp = await fetch(CHAT_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${AUTH_TOKEN}`,
       },
-      body: JSON.stringify({ messages }),
-      signal,
+      body: JSON.stringify({
+        messages: toModelMessages(args.messages),
+        walletAddress: args.walletAddress ?? null,
+      }),
+      signal: args.signal,
     });
-  } catch (e) {
-    if ((e as Error).name === "AbortError") return;
-    onError(0, "Network error. Check your connection.");
-    return;
-  }
 
-  if (!resp.ok || !resp.body) {
-    let msg = "Something went wrong.";
-    try {
-      const data = await resp.json();
-      if (data?.error) msg = data.error;
-    } catch {
-      /* ignore */
-    }
-    onError(resp.status, msg);
-    return;
-  }
-
-  const reader = resp.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let done = false;
-
-  while (!done) {
-    let chunk: ReadableStreamReadResult<Uint8Array>;
-    try {
-      chunk = await reader.read();
-    } catch (e) {
-      if ((e as Error).name === "AbortError") return;
-      onError(0, "Stream interrupted.");
-      return;
-    }
-    if (chunk.done) break;
-    buffer += decoder.decode(chunk.value, { stream: true });
-
-    let nl: number;
-    while ((nl = buffer.indexOf("\n")) !== -1) {
-      let line = buffer.slice(0, nl);
-      buffer = buffer.slice(nl + 1);
-      if (line.endsWith("\r")) line = line.slice(0, -1);
-      if (line.startsWith(":") || line.trim() === "") continue;
-      if (!line.startsWith("data: ")) continue;
-
-      const json = line.slice(6).trim();
-      if (json === "[DONE]") {
-        done = true;
-        break;
-      }
+    if (!resp.ok) {
+      let msg = "Something went wrong.";
       try {
-        const parsed = JSON.parse(json);
-        const delta = parsed.choices?.[0]?.delta?.content as string | undefined;
-        if (delta) onDelta(delta);
-      } catch {
-        // partial JSON across chunks — re-buffer
-        buffer = line + "\n" + buffer;
-        break;
-      }
-    }
-  }
-
-  // Flush remaining buffer
-  if (buffer.trim()) {
-    for (let raw of buffer.split("\n")) {
-      if (!raw) continue;
-      if (raw.endsWith("\r")) raw = raw.slice(0, -1);
-      if (raw.startsWith(":") || raw.trim() === "") continue;
-      if (!raw.startsWith("data: ")) continue;
-      const json = raw.slice(6).trim();
-      if (json === "[DONE]") continue;
-      try {
-        const parsed = JSON.parse(json);
-        const delta = parsed.choices?.[0]?.delta?.content as string | undefined;
-        if (delta) onDelta(delta);
+        const data = await resp.json();
+        if (data?.error) msg = data.error;
       } catch {
         /* ignore */
       }
+      return { error: msg, status: resp.status };
     }
-  }
 
-  onDone();
+    const data = await resp.json();
+    return {
+      content: data.content ?? "",
+      toolEvents: Array.isArray(data.toolEvents) ? data.toolEvents : [],
+    };
+  } catch (e) {
+    if ((e as Error).name === "AbortError") return { error: "Cancelled", status: 0 };
+    return { error: "Network error. Check your connection.", status: 0 };
+  }
 }
