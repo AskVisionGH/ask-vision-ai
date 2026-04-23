@@ -48,6 +48,7 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          pin_order: number
           pinned: boolean
           title: string
           updated_at: string
@@ -57,6 +58,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          pin_order?: number
           pinned?: boolean
           title?: string
           updated_at?: string
@@ -66,6 +68,7 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          pin_order?: number
           pinned?: boolean
           title?: string
           updated_at?: string

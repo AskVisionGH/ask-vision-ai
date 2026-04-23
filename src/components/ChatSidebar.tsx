@@ -1,6 +1,21 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { LogOut, MessageSquarePlus, MoreHorizontal, Pencil, Pin, PinOff, Settings as SettingsIcon, Trash2, Users } from "lucide-react";
+import { GripVertical, LogOut, MessageSquarePlus, MoreHorizontal, Pencil, Pin, PinOff, Settings as SettingsIcon, Trash2, Users } from "lucide-react";
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -35,7 +50,147 @@ interface Props {
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
   onTogglePin: (id: string, pinned: boolean) => void;
+  onReorderPinned: (orderedIds: string[]) => void;
 }
+
+interface RowProps {
+  conversation: ConversationRow;
+  isActive: boolean;
+  isRenaming: boolean;
+  renameValue: string;
+  onSelect: (id: string) => void;
+  onStartRename: (c: ConversationRow) => void;
+  onCommitRename: () => void;
+  onCancelRename: () => void;
+  onChangeRename: (v: string) => void;
+  onTogglePin: (id: string, pinned: boolean) => void;
+  onRequestDelete: (c: ConversationRow) => void;
+  draggable?: boolean;
+}
+
+const ConversationRowItem = ({
+  conversation: c,
+  isActive,
+  isRenaming,
+  renameValue,
+  onSelect,
+  onStartRename,
+  onCommitRename,
+  onCancelRename,
+  onChangeRename,
+  onTogglePin,
+  onRequestDelete,
+  draggable = false,
+}: RowProps) => {
+  const sortable = useSortable({ id: c.id, disabled: !draggable });
+  const style = draggable
+    ? {
+        transform: CSS.Transform.toString(sortable.transform),
+        transition: sortable.transition,
+        opacity: sortable.isDragging ? 0.5 : 1,
+      }
+    : undefined;
+
+  return (
+    <li
+      ref={draggable ? sortable.setNodeRef : undefined}
+      style={style}
+      className="group relative"
+    >
+      {isRenaming ? (
+        <Input
+          autoFocus
+          value={renameValue}
+          onChange={(e) => onChangeRename(e.target.value)}
+          onBlur={onCommitRename}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") onCommitRename();
+            if (e.key === "Escape") onCancelRename();
+          }}
+          className="h-8 text-xs"
+        />
+      ) : (
+        <button
+          onClick={() => onSelect(c.id)}
+          className={cn(
+            "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs ease-vision",
+            isActive
+              ? "bg-secondary text-foreground"
+              : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
+          )}
+        >
+          {draggable ? (
+            <button
+              type="button"
+              {...sortable.attributes}
+              {...sortable.listeners}
+              onClick={(e) => e.stopPropagation()}
+              className="flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center text-muted-foreground/40 opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 cursor-grab active:cursor-grabbing"
+              aria-label="Drag to reorder"
+              tabIndex={-1}
+            >
+              <GripVertical className="h-3 w-3" />
+            </button>
+          ) : (
+            <span
+              className={cn(
+                "h-1.5 w-1.5 flex-shrink-0 rounded-full",
+                isActive
+                  ? "bg-up shadow-[0_0_6px_hsl(var(--up))]"
+                  : "bg-muted-foreground/30",
+              )}
+              aria-hidden
+            />
+          )}
+          <span className="truncate flex-1">{c.title}</span>
+        </button>
+      )}
+
+      {!isRenaming && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              className={cn(
+                "absolute right-1.5 top-1.5 rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100",
+                isActive && "opacity-100",
+              )}
+              aria-label="Conversation options"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MoreHorizontal className="h-3.5 w-3.5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-36">
+            <DropdownMenuItem onClick={() => onTogglePin(c.id, !c.pinned)}>
+              {c.pinned ? (
+                <>
+                  <PinOff className="mr-2 h-3.5 w-3.5" />
+                  Unpin
+                </>
+              ) : (
+                <>
+                  <Pin className="mr-2 h-3.5 w-3.5" />
+                  Pin
+                </>
+              )}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onStartRename(c)}>
+              <Pencil className="mr-2 h-3.5 w-3.5" />
+              Rename
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => onRequestDelete(c)}
+              className="text-destructive focus:text-destructive"
+            >
+              <Trash2 className="mr-2 h-3.5 w-3.5" />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+    </li>
+  );
+};
 
 export const ChatSidebar = ({
   conversations,
@@ -46,12 +201,17 @@ export const ChatSidebar = ({
   onRename,
   onDelete,
   onTogglePin,
+  onReorderPinned,
 }: Props) => {
   const { user, signOut } = useAuth();
   const { profile } = useProfile();
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [pendingDelete, setPendingDelete] = useState<ConversationRow | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+  );
 
   const startRename = (c: ConversationRow) => {
     setRenamingId(c.id);
@@ -62,6 +222,34 @@ export const ChatSidebar = ({
     if (renamingId) onRename(renamingId, renameValue);
     setRenamingId(null);
   };
+
+  const active = activeId ? conversations.find((c) => c.id === activeId) : null;
+  const pinned = conversations.filter((c) => c.pinned && c.id !== activeId);
+  const previous = conversations.filter((c) => !c.pinned && c.id !== activeId);
+
+  const handleDragEnd = (e: DragEndEvent) => {
+    const { active: dragged, over } = e;
+    if (!over || dragged.id === over.id) return;
+    const oldIndex = pinned.findIndex((c) => c.id === dragged.id);
+    const newIndex = pinned.findIndex((c) => c.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+    const reordered = arrayMove(pinned, oldIndex, newIndex);
+    onReorderPinned(reordered.map((c) => c.id));
+  };
+
+  const rowProps = (c: ConversationRow, isActive: boolean) => ({
+    conversation: c,
+    isActive,
+    isRenaming: c.id === renamingId,
+    renameValue,
+    onSelect,
+    onStartRename: startRename,
+    onCommitRename: commitRename,
+    onCancelRename: () => setRenamingId(null),
+    onChangeRename: setRenameValue,
+    onTogglePin,
+    onRequestDelete: setPendingDelete,
+  });
 
   return (
     <aside className="flex h-full w-full flex-col border-r border-border/60 bg-background/80 backdrop-blur-md">
@@ -107,126 +295,53 @@ export const ChatSidebar = ({
             </div>
           </>
         ) : (
-          (() => {
-            const active = activeId ? conversations.find((c) => c.id === activeId) : null;
-            const pinned = conversations.filter((c) => c.pinned && c.id !== activeId);
-            const previous = conversations.filter((c) => !c.pinned && c.id !== activeId);
-            return (
+          <>
+            {active && (
               <>
-                {active && (
-                  <>
-                    <SectionHeader label="Current" />
-                    <ul className="mb-3 space-y-0.5">
-                      {renderItem(active, true)}
-                    </ul>
-                  </>
-                )}
-                {pinned.length > 0 && (
-                  <>
-                    <SectionHeader label="Pinned" />
-                    <ul className="mb-3 space-y-0.5">
-                      {pinned.map((c) => renderItem(c, false))}
-                    </ul>
-                  </>
-                )}
-                {previous.length > 0 && (
-                  <>
-                    <SectionHeader label={active || pinned.length > 0 ? "Previous" : "Conversations"} />
-                    <ul className="space-y-0.5">
-                      {previous.map((c) => renderItem(c, false))}
-                    </ul>
-                  </>
-                )}
+                <SectionHeader label="Current" />
+                <ul className="mb-3 space-y-0.5">
+                  <ConversationRowItem {...rowProps(active, true)} />
+                </ul>
               </>
-            );
-
-            function renderItem(c: ConversationRow, isActive: boolean) {
-              const isRenaming = c.id === renamingId;
-              return (
-                <li key={c.id} className="group relative">
-                  {isRenaming ? (
-                    <Input
-                      autoFocus
-                      value={renameValue}
-                      onChange={(e) => setRenameValue(e.target.value)}
-                      onBlur={commitRename}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") commitRename();
-                        if (e.key === "Escape") setRenamingId(null);
-                      }}
-                      className="h-8 text-xs"
-                    />
-                  ) : (
-                    <button
-                      onClick={() => onSelect(c.id)}
-                      className={cn(
-                        "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs ease-vision",
-                        isActive
-                          ? "bg-secondary text-foreground"
-                          : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "h-1.5 w-1.5 flex-shrink-0 rounded-full",
-                          isActive
-                            ? "bg-up shadow-[0_0_6px_hsl(var(--up))]"
-                            : c.pinned
-                              ? "bg-foreground shadow-[0_0_6px_hsl(var(--foreground)/0.5)]"
-                              : "bg-muted-foreground/30",
-                        )}
-                        aria-hidden
-                      />
-                      <span className="truncate flex-1">{c.title}</span>
-                    </button>
-                  )}
-
-                  {!isRenaming && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button
-                          className={cn(
-                            "absolute right-1.5 top-1.5 rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100",
-                            isActive && "opacity-100",
-                          )}
-                          aria-label="Conversation options"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <MoreHorizontal className="h-3.5 w-3.5" />
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-36">
-                        <DropdownMenuItem onClick={() => onTogglePin(c.id, !c.pinned)}>
-                          {c.pinned ? (
-                            <>
-                              <PinOff className="mr-2 h-3.5 w-3.5" />
-                              Unpin
-                            </>
-                          ) : (
-                            <>
-                              <Pin className="mr-2 h-3.5 w-3.5" />
-                              Pin
-                            </>
-                          )}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => startRename(c)}>
-                          <Pencil className="mr-2 h-3.5 w-3.5" />
-                          Rename
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => setPendingDelete(c)}
-                          className="text-destructive focus:text-destructive"
-                        >
-                          <Trash2 className="mr-2 h-3.5 w-3.5" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-                </li>
-              );
-            }
-          })()
+            )}
+            {pinned.length > 0 && (
+              <>
+                <SectionHeader label="Pinned" />
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
+                >
+                  <SortableContext
+                    items={pinned.map((c) => c.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    <ul className="mb-3 space-y-0.5">
+                      {pinned.map((c) => (
+                        <ConversationRowItem
+                          key={c.id}
+                          {...rowProps(c, false)}
+                          draggable
+                        />
+                      ))}
+                    </ul>
+                  </SortableContext>
+                </DndContext>
+              </>
+            )}
+            {previous.length > 0 && (
+              <>
+                <SectionHeader
+                  label={active || pinned.length > 0 ? "Previous" : "Conversations"}
+                />
+                <ul className="space-y-0.5">
+                  {previous.map((c) => (
+                    <ConversationRowItem key={c.id} {...rowProps(c, false)} />
+                  ))}
+                </ul>
+              </>
+            )}
+          </>
         )}
       </div>
 
@@ -306,4 +421,3 @@ const SectionHeader = ({ label }: { label: string }) => (
     {label}
   </div>
 );
-

@@ -44,6 +44,7 @@ const Chat = () => {
     renameConversation,
     deleteConversation,
     togglePin,
+    reorderPinned,
   } = useConversations();
 
   const activeId = searchParams.get("c");
@@ -195,6 +196,7 @@ const Chat = () => {
       onRename={renameConversation}
       onDelete={handleDelete}
       onTogglePin={togglePin}
+      onReorderPinned={reorderPinned}
     />
   );
 
