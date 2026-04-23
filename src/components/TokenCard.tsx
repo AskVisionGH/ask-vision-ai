@@ -159,7 +159,20 @@ export const TokenCard = ({ data }: Props) => {
                 {loadingReport ? (
                   <Loader2 className="h-3 w-3 animate-spin" />
                 ) : (
-                  <Shield className="h-3 w-3" />
+                  <Shield
+                    className={cn(
+                      "h-3 w-3",
+                      report && !report.error
+                        ? {
+                            safe: "text-up",
+                            caution: "text-warn",
+                            risky: "text-risk",
+                            danger: "text-down",
+                            unknown: "text-muted-foreground",
+                          }[report.verdict]
+                        : null,
+                    )}
+                  />
                 )}
                 {expanded ? "Hide safety" : "Safety check"}
               </button>
