@@ -120,33 +120,59 @@ serve(async (req) => {
 
     // 5. Map signers/fee payers in the first 24h that match curated wallets.
     const found = new Map<string, EarlyBuyer>();
+    const STABLE_MINTS = new Set([
+      "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+    ]);
+    const SOL_MINT = "So11111111111111111111111111111111111111112";
+
     for (const tx of earlyTxs) {
       const ts = tx.timestamp ?? 0;
       if (cutoff && ts > cutoff) continue;
       const minsAfter = launchTs ? Math.max(0, Math.round((ts - launchTs) / 60)) : null;
-      // Heuristic: any account in the tx that holds our curated set counts as "interacted"
       const accounts: string[] = Array.isArray(tx.accountData)
         ? tx.accountData.map((a: any) => a?.account).filter(Boolean)
         : [];
       const candidates = [tx.feePayer, ...accounts].filter(
         (a): a is string => typeof a === "string",
       );
+
+      // Sum SOL/stables spent in this tx (rough USD)
+      let spentUsd: number | null = null;
+      if (Array.isArray(tx.events?.swap?.tokenInputs)) {
+        let usd = 0;
+        let any = false;
+        for (const inp of tx.events.swap.tokenInputs as any[]) {
+          const amt = Number(inp?.tokenAmount?.uiAmount ?? 0);
+          if (!amt) continue;
+          if (inp.mint === SOL_MINT) { usd += amt * 150; any = true; }
+          else if (STABLE_MINTS.has(inp.mint)) { usd += amt; any = true; }
+        }
+        if (any) spentUsd = usd;
+      }
+      // Tokens of the target mint received in this tx
+      let receivedAmount: number | null = null;
+      if (Array.isArray(tx.events?.swap?.tokenOutputs)) {
+        for (const out of tx.events.swap.tokenOutputs as any[]) {
+          if (out?.mint === tokenInfo.address) {
+            const amt = Number(out?.tokenAmount?.uiAmount ?? 0);
+            if (amt) receivedAmount = (receivedAmount ?? 0) + amt;
+          }
+        }
+      }
+
       for (const addr of candidates) {
         if (!allAddresses.has(addr)) continue;
         if (found.has(addr)) continue; // first buy only
-        // Try to extract USD value if it's a swap event
-        let usd: number | null = null;
-        if (Array.isArray(tx.events?.swap?.tokenInputs)) {
-          // very rough: count SOL / USDC inputs in atoms, ignore precise pricing
-          const inputs = tx.events.swap.tokenInputs as any[];
-          for (const inp of inputs) {
-            if (inp?.mint === "So11111111111111111111111111111111111111112") {
-              const sol = Number(inp?.tokenAmount?.uiAmount ?? 0);
-              if (sol) usd = sol * 150; // rough SOL price stub; we'll refine via DexScreener if needed
-            }
-          }
-        }
         const meta = curatedMap.get(addr);
+        const currentValueUsd =
+          receivedAmount != null && tokenInfo.priceUsd != null
+            ? receivedAmount * tokenInfo.priceUsd
+            : null;
+        const multiplier =
+          currentValueUsd != null && spentUsd != null && spentUsd > 0
+            ? currentValueUsd / spentUsd
+            : null;
         found.set(addr, {
           address: addr,
           label: meta?.label ?? null,
@@ -155,7 +181,11 @@ serve(async (req) => {
           isCurated: !!meta,
           isUserTracked: userTracked.has(addr),
           firstBuyAt: ts * 1000,
-          firstBuyUsd: usd,
+          signature: typeof tx?.signature === "string" ? tx.signature : null,
+          firstBuyUsd: spentUsd,
+          firstBuyAmount: receivedAmount,
+          currentValueUsd,
+          multiplier,
           minutesAfterLaunch: minsAfter,
         });
       }
