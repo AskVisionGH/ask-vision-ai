@@ -46,6 +46,7 @@ export const ChatSidebar = ({
   onDelete,
 }: Props) => {
   const { user, signOut } = useAuth();
+  const { profile } = useProfile();
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [pendingDelete, setPendingDelete] = useState<ConversationRow | null>(null);
