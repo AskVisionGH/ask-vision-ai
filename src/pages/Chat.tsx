@@ -30,6 +30,7 @@ const SUGGESTIONS = [
 
 const Chat = () => {
   const { user } = useAuth();
+  const { profile } = useProfile();
   const { connected, publicKey } = useWallet();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
