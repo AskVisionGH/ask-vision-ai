@@ -268,7 +268,7 @@ export const TokenChartCard = ({ data: initial }: Props) => {
             ) : (
               <Sparkles className={cn("h-3 w-3", ta ? "text-primary" : "text-muted-foreground")} />
             )}
-            {ta ? "Hide TA" : "AI Read"}
+            {ta ? "Hide Analysis" : "Analyze"}
           </button>
 
           {data.pairUrl && (
