@@ -8,6 +8,8 @@ import {
   LogOut,
   MessageSquarePlus,
   MoreHorizontal,
+  PanelLeftClose,
+  PanelLeftOpen,
   Pencil,
   Pin,
   PinOff,
@@ -77,6 +79,10 @@ interface Props {
   onReorderPinned: (orderedIds: string[]) => void;
   onShare: (c: ConversationRow) => void;
   onUnshare: (c: ConversationRow) => void;
+  /** When true, renders a narrow icon-only rail. */
+  collapsed?: boolean;
+  /** Toggle collapse state (desktop only). */
+  onToggleCollapsed?: () => void;
 }
 
 interface RowProps {
@@ -264,6 +270,8 @@ export const ChatSidebar = ({
   onReorderPinned,
   onShare,
   onUnshare,
+  collapsed = false,
+  onToggleCollapsed,
 }: Props) => {
   const { user, signOut } = useAuth();
   const { profile } = useProfile();
@@ -333,6 +341,92 @@ export const ChatSidebar = ({
 
   const noResults = isSearching && filtered.length === 0;
 
+  if (collapsed) {
+    return (
+      <aside className="flex h-full w-full flex-col items-center border-r border-border/60 bg-background/80 py-3 backdrop-blur-md">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onToggleCollapsed}
+          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          aria-label="Expand sidebar"
+          title="Expand sidebar"
+        >
+          <PanelLeftOpen className="h-4 w-4" />
+        </Button>
+        <div className="mt-3 flex flex-col items-center gap-1.5">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onNew}
+            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            aria-label="New chat"
+            title="New chat"
+          >
+            <MessageSquarePlus className="h-4 w-4" />
+          </Button>
+          <Link
+            to="/contacts"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+            aria-label="Contacts"
+            title="Contacts"
+          >
+            <Users className="h-4 w-4" />
+          </Link>
+          <Link
+            to="/tracked-wallets"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+            aria-label="Tracked wallets"
+            title="Tracked wallets"
+          >
+            <Radar className="h-4 w-4" />
+          </Link>
+          {isAdmin && (
+            <Link
+              to="/admin"
+              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+              aria-label="Admin"
+              title="Admin"
+            >
+              <Shield className="h-4 w-4" />
+            </Link>
+          )}
+        </div>
+        <div className="mt-auto flex flex-col items-center gap-1.5">
+          <Link
+            to="/settings"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+            aria-label="Settings"
+            title="Settings"
+          >
+            <SettingsIcon className="h-4 w-4" />
+          </Link>
+          <button
+            onClick={() => signOut()}
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+            aria-label="Sign out"
+            title="Sign out"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
+          <Link
+            to="/settings"
+            className="mt-1"
+            aria-label="Account"
+            title={profile?.display_name?.trim() || user?.email || "Account"}
+          >
+            <UserAvatar
+              name={profile?.display_name}
+              email={user?.email}
+              src={profile?.avatar_url}
+              size={28}
+            />
+          </Link>
+        </div>
+      </aside>
+    );
+  }
+
   return (
     <aside className="flex h-full w-full flex-col border-r border-border/60 bg-background/80 backdrop-blur-md">
       {/* Brand + new chat */}
@@ -343,15 +437,30 @@ export const ChatSidebar = ({
             Vision
           </span>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onNew}
-          className="h-8 w-8 text-muted-foreground hover:text-foreground"
-          aria-label="New chat"
-        >
-          <MessageSquarePlus className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-0.5">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onNew}
+            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            aria-label="New chat"
+            title="New chat"
+          >
+            <MessageSquarePlus className="h-4 w-4" />
+          </Button>
+          {onToggleCollapsed && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onToggleCollapsed}
+              className="hidden h-8 w-8 text-muted-foreground hover:text-foreground md:inline-flex"
+              aria-label="Collapse sidebar"
+              title="Collapse sidebar"
+            >
+              <PanelLeftClose className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Search */}
