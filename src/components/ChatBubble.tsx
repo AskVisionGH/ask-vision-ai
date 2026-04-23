@@ -5,6 +5,7 @@ import type { ChatMessage } from "@/lib/chat-stream";
 import { PortfolioCard } from "@/components/PortfolioCard";
 import { TokenCard } from "@/components/TokenCard";
 import { TrendingCard } from "@/components/TrendingCard";
+import { SwapPreviewCard } from "@/components/SwapPreviewCard";
 
 interface Props {
   message: ChatMessage;
@@ -53,6 +54,9 @@ export const ChatBubble = ({ message }: Props) => {
         }
         if (event.type === "trending") {
           return <TrendingCard key={i} data={event.data} />;
+        }
+        if (event.type === "swap_quote") {
+          return <SwapPreviewCard key={i} data={event.data} />;
         }
         return null;
       })}
