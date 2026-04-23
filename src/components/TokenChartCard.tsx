@@ -206,16 +206,10 @@ export const TokenChartCard = ({ data: initial }: Props) => {
           {loadingInterval && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
         </div>
 
-        {/* Chart */}
+        {/* Candlestick chart */}
         <div className="h-44 w-full px-2 py-3">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData} margin={{ top: 6, right: 12, left: 12, bottom: 6 }}>
-              <defs>
-                <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={stroke} stopOpacity={0.35} />
-                  <stop offset="100%" stopColor={stroke} stopOpacity={0} />
-                </linearGradient>
-              </defs>
+            <ComposedChart data={chartData} margin={{ top: 6, right: 12, left: 12, bottom: 6 }}>
               <YAxis
                 hide
                 domain={[
@@ -227,24 +221,37 @@ export const TokenChartCard = ({ data: initial }: Props) => {
                 cursor={{ stroke: "hsl(var(--border))", strokeWidth: 1 }}
                 content={({ active, payload }) => {
                   if (!active || !payload?.length) return null;
-                  const p = payload[0].payload as { t: number; price: number };
+                  const p = payload[0].payload as {
+                    t: number;
+                    o: number;
+                    h: number;
+                    l: number;
+                    c: number;
+                  };
                   return (
                     <div className="rounded-md border border-border bg-popover px-2 py-1.5 font-mono text-[10px] text-foreground shadow-soft">
                       <div className="text-muted-foreground">{fmtTime(p.t, interval)}</div>
-                      <div>{fmtPrice(p.price)}</div>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 mt-1">
+                        <span className="text-muted-foreground">O</span><span>{fmtPrice(p.o)}</span>
+                        <span className="text-muted-foreground">H</span><span>{fmtPrice(p.h)}</span>
+                        <span className="text-muted-foreground">L</span><span>{fmtPrice(p.l)}</span>
+                        <span className="text-muted-foreground">C</span><span>{fmtPrice(p.c)}</span>
+                      </div>
                     </div>
                   );
                 }}
               />
-              <Area
-                type="monotone"
-                dataKey="price"
-                stroke={stroke}
-                strokeWidth={1.5}
-                fill={`url(#${gradientId})`}
+              <Bar
+                dataKey="wick"
+                shape={(props: any) => <CandleShape {...props} kind="wick" upColor={upColor} downColor={downColor} />}
                 isAnimationActive={false}
               />
-            </AreaChart>
+              <Bar
+                dataKey="body"
+                shape={(props: any) => <CandleShape {...props} kind="body" upColor={upColor} downColor={downColor} />}
+                isAnimationActive={false}
+              />
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
 
