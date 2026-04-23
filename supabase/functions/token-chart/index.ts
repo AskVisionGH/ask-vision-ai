@@ -100,7 +100,6 @@ serve(async (req) => {
     const looksLikeMint = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(cleaned);
     const knownMint = KNOWN_MINTS[upper];
 
-    // 1. Resolve to a Solana pair via DexScreener.
     let dexResp: Response;
     if (looksLikeMint || knownMint) {
       const mint = knownMint ?? cleaned;
@@ -116,7 +115,13 @@ serve(async (req) => {
     }
 
     const dexJson = await dexResp.json();
-    const pairs = (dexJson.pairs ?? []).filter((p: any) => p.chainId === "solana");
+    let pairs = (dexJson.pairs ?? []).filter((p: any) => p.chainId === "solana");
+
+    if (looksLikeMint || knownMint) {
+      const expected = (knownMint ?? cleaned).toLowerCase();
+      pairs = pairs.filter((p: any) => String(p.baseToken?.address ?? "").toLowerCase() === expected);
+    }
+
     if (pairs.length === 0) return json({ error: `No Solana token found for "${cleaned}"` }, 404);
 
     pairs.sort((a: any, b: any) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0));
