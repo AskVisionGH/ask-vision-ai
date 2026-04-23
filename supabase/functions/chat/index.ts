@@ -620,6 +620,22 @@ serve(async (req) => {
             } else if (name === "get_solana_news") {
               result = await invokeFn("solana-news", {}, req);
               eventType = "solana_news";
+            } else if (name === "get_early_buyers") {
+              const args = safeJson(tc.function?.arguments);
+              result = await invokeFn(
+                "smart-money-early-buyers",
+                { query: args.query ?? "", userId: userIdValue },
+                req,
+              );
+              eventType = "early_buyers";
+            } else if (name === "get_smart_money_activity") {
+              const args = safeJson(tc.function?.arguments);
+              result = await invokeFn(
+                "smart-money-activity",
+                { userId: userIdValue, windowHours: args.windowHours },
+                req,
+              );
+              eventType = "smart_money_activity";
             } else {
               result = { error: `Unknown tool: ${name}` };
             }
