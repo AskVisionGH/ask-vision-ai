@@ -134,6 +134,14 @@ const Chat = () => {
     const result = await sendChat({
       messages: next,
       walletAddress: wallet ?? undefined,
+      profile: profile
+        ? {
+            displayName: profile.display_name,
+            experience: profile.experience,
+            interests: profile.interests,
+            riskTolerance: profile.risk_tolerance,
+          }
+        : undefined,
     });
 
     setIsThinking(false);
