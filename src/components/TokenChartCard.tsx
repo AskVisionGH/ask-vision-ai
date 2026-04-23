@@ -284,7 +284,7 @@ export const TokenChartCard = ({ data: initial }: Props) => {
               rel="noopener noreferrer"
               className="ease-vision flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground"
             >
-              DexScreener
+              {data.source === "coingecko" ? "CoinGecko" : "DexScreener"}
               <ArrowUpRight className="h-3 w-3" />
             </a>
           )}
