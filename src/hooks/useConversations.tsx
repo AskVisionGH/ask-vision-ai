@@ -160,6 +160,16 @@ export const useConversations = () => {
     [refresh],
   );
 
+  /**
+   * Updates a conversation's title in local state without hitting the DB.
+   * Used after autoTitleConversation persists an AI-generated title.
+   */
+  const applyTitleLocal = useCallback((id: string, title: string) => {
+    setConversations((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, title } : c)),
+    );
+  }, []);
+
   return {
     conversations,
     loading,
@@ -170,6 +180,7 @@ export const useConversations = () => {
     togglePin,
     reorderPinned,
     toggleShare,
+    applyTitleLocal,
   };
 };
 
