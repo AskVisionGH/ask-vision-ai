@@ -109,13 +109,15 @@ export const saveMessage = async (
   userId: string,
   msg: ChatMessage,
 ): Promise<boolean> => {
-  const { error } = await supabase.from("messages").insert({
-    conversation_id: conversationId,
-    user_id: userId,
-    role: msg.role,
-    content: msg.content,
-    tool_events: msg.toolEvents ?? null,
-  });
+  const { error } = await supabase.from("messages").insert([
+    {
+      conversation_id: conversationId,
+      user_id: userId,
+      role: msg.role,
+      content: msg.content,
+      tool_events: (msg.toolEvents ?? null) as never,
+    },
+  ]);
   return !error;
 };
 
