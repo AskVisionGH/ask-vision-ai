@@ -170,7 +170,7 @@ export const TokenCard = ({ data }: Props) => {
                             danger: "text-down",
                             unknown: "text-muted-foreground",
                           }[report.verdict]
-                        : null,
+                        : "text-muted-foreground",
                     )}
                   />
                 )}
