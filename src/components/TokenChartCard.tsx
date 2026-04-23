@@ -93,6 +93,10 @@ export const TokenChartCard = ({ data: initial }: Props) => {
     };
   }, [interval, data.address, data.symbol, data.interval]);
 
+  const isUp = (data.priceChangePct ?? 0) >= 0;
+  const stroke = isUp ? "hsl(var(--up))" : "hsl(var(--down))";
+  const gradientId = useMemo(() => `chart-grad-${data.symbol}-${interval}`, [data.symbol, interval]);
+
   if (initial.error) {
     return (
       <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
@@ -100,10 +104,6 @@ export const TokenChartCard = ({ data: initial }: Props) => {
       </div>
     );
   }
-
-  const isUp = (data.priceChangePct ?? 0) >= 0;
-  const stroke = isUp ? "hsl(var(--up))" : "hsl(var(--down))";
-  const gradientId = useMemo(() => `chart-grad-${data.symbol}-${interval}`, [data.symbol, interval]);
 
   const chartData = data.candles.map((c) => ({ t: c.t, price: c.c }));
 
