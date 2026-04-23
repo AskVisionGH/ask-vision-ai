@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { fetchCgCandles, resolveCgCoin } from "../_shared/coingecko.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -6,17 +7,10 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// DexScreener doesn't have a public OHLCV endpoint, but their pairs endpoint
-// returns transactions + price history aggregated into m5/h1/h6/h24 buckets.
-// For an actual line chart we synthesise minute candles from their /candles
-// endpoint (undocumented but stable across the website).
-//
-// Endpoint shape: https://io.dexscreener.com/dex/chart/amm/<dex>/bars/<pairAddr>?from=...&to=...&res=5
-// Where res ∈ {1,5,15,60,240,1440}.
-//
-// We resolve the most-liquid Solana pair for the input token first via the
-// public token endpoint, then pull bars.
-
+// Solana-native tickers we always want to chart from DexScreener/GeckoTerminal
+// (proper intraday candles from the most-liquid Solana pool). Anything outside
+// this list AND in CoinGecko's top-250 (or our priority list of blue chips)
+// goes through CoinGecko for proper aggregated cross-exchange pricing.
 const KNOWN_MINTS: Record<string, string> = {
   SOL: "So11111111111111111111111111111111111111112",
   WSOL: "So11111111111111111111111111111111111111112",
@@ -35,9 +29,6 @@ const KNOWN_MINTS: Record<string, string> = {
 
 type Interval = "5m" | "15m" | "1h" | "4h" | "1d";
 
-// GeckoTerminal OHLCV endpoint shape:
-// /networks/solana/pools/{pool}/ohlcv/{timeframe}?aggregate={n}&limit={l}
-// timeframe ∈ {minute, hour, day}, aggregate is the bucket multiplier.
 const INTERVAL_GT: Record<Interval, { timeframe: "minute" | "hour" | "day"; aggregate: number }> = {
   "5m": { timeframe: "minute", aggregate: 5 },
   "15m": { timeframe: "minute", aggregate: 15 },
@@ -46,22 +37,12 @@ const INTERVAL_GT: Record<Interval, { timeframe: "minute" | "hour" | "day"; aggr
   "1d": { timeframe: "day", aggregate: 1 },
 };
 
-// How many bars we want per interval. Tuned for a tidy chart.
 const INTERVAL_BARS: Record<Interval, number> = {
-  "5m": 144,   // 12 hours
-  "15m": 192,  // 2 days
-  "1h": 168,   // 7 days
-  "4h": 180,   // 30 days
-  "1d": 180,   // 6 months
+  "5m": 144, "15m": 192, "1h": 168, "4h": 180, "1d": 180,
 };
 
 interface Candle {
-  t: number;       // unix seconds
-  o: number;
-  h: number;
-  l: number;
-  c: number;
-  v: number;       // base volume in USD
+  t: number; o: number; h: number; l: number; c: number; v: number;
 }
 
 interface ChartResponse {
@@ -77,6 +58,8 @@ interface ChartResponse {
   priceChangePct: number | null;
   high: number | null;
   low: number | null;
+  /** "coingecko" for major caps, "solana-dex" for SPL tokens. */
+  source?: "coingecko" | "solana-dex";
   error?: string;
 }
 
@@ -98,11 +81,46 @@ serve(async (req) => {
     const cleaned = queryRaw.trim().replace(/^\$/, "");
     const upper = cleaned.toUpperCase();
     const looksLikeMint = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(cleaned);
-    const knownMint = KNOWN_MINTS[upper];
+    const knownSolanaMint = KNOWN_MINTS[upper];
 
+    // 1. Try CoinGecko first for major-cap coins. Skip when the query is
+    // clearly a Solana mint or an explicitly Solana-native ticker.
+    if (!looksLikeMint && !knownSolanaMint) {
+      const cg = await resolveCgCoin(cleaned);
+      if (cg) {
+        const candles = await fetchCgCandles(cg, interval);
+        if (candles.length > 0) {
+          const first = candles[0]?.c ?? null;
+          const last = candles[candles.length - 1]?.c ?? null;
+          const priceChangePct =
+            first && last && first !== 0 ? ((last - first) / first) * 100 : null;
+          const high = Math.max(...candles.map((c) => c.h));
+          const low = Math.min(...candles.map((c) => c.l));
+
+          const out: ChartResponse = {
+            symbol: cg.symbol.toUpperCase(),
+            name: cg.name,
+            address: cg.id,
+            logo: `https://assets.coingecko.com/coins/images/_/large/${cg.id}.png`,
+            pairAddress: "",
+            pairUrl: `https://www.coingecko.com/en/coins/${cg.id}`,
+            interval,
+            candles,
+            priceUsd: last,
+            priceChangePct,
+            high,
+            low,
+            source: "coingecko",
+          };
+          return json(out);
+        }
+      }
+    }
+
+    // 2. Solana DEX path (DexScreener + GeckoTerminal).
     let dexResp: Response;
-    if (looksLikeMint || knownMint) {
-      const mint = knownMint ?? cleaned;
+    if (looksLikeMint || knownSolanaMint) {
+      const mint = knownSolanaMint ?? cleaned;
       dexResp = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
     } else {
       dexResp = await fetch(
@@ -117,18 +135,16 @@ serve(async (req) => {
     const dexJson = await dexResp.json();
     let pairs = (dexJson.pairs ?? []).filter((p: any) => p.chainId === "solana");
 
-    if (looksLikeMint || knownMint) {
-      const expected = (knownMint ?? cleaned).toLowerCase();
+    if (looksLikeMint || knownSolanaMint) {
+      const expected = (knownSolanaMint ?? cleaned).toLowerCase();
       pairs = pairs.filter((p: any) => String(p.baseToken?.address ?? "").toLowerCase() === expected);
     }
 
-    if (pairs.length === 0) return json({ error: `No Solana token found for "${cleaned}"` }, 404);
+    if (pairs.length === 0) return json({ error: `No token found for "${cleaned}"` }, 404);
 
     pairs.sort((a: any, b: any) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0));
     const top = pairs[0];
 
-    // 2. Pull OHLCV bars from GeckoTerminal — proper open/high/low/close,
-    // not synthesised. Falls back to a smoothed line if the call fails.
     const { timeframe, aggregate } = INTERVAL_GT[interval];
     const wanted = INTERVAL_BARS[interval];
 
@@ -138,15 +154,11 @@ serve(async (req) => {
         `https://api.geckoterminal.com/api/v2/networks/solana/pools/${top.pairAddress}` +
         `/ohlcv/${timeframe}?aggregate=${aggregate}&limit=${wanted}&currency=usd`;
       const gtResp = await fetch(gtUrl, {
-        headers: {
-          Accept: "application/json;version=20230302",
-          "User-Agent": "VisionBot/1.0",
-        },
+        headers: { Accept: "application/json;version=20230302", "User-Agent": "VisionBot/1.0" },
       });
       if (gtResp.ok) {
         const gtJson = await gtResp.json();
         const arr = gtJson?.data?.attributes?.ohlcv_list ?? [];
-        // GeckoTerminal returns newest-first as [t, o, h, l, c, v]. Reverse for chart.
         candles = arr
           .map((row: number[]) => ({
             t: Number(row[0]),
@@ -166,9 +178,6 @@ serve(async (req) => {
     }
 
     const now = Math.floor(Date.now() / 1000);
-
-    // Last-resort fallback: synthesise a flat-ish trace from the priceChange
-    // buckets so the UI can still render something useful.
     if (candles.length === 0) {
       const price = top.priceUsd ? Number(top.priceUsd) : 0;
       const chgPct = top.priceChange?.h24 ?? 0;
@@ -201,6 +210,7 @@ serve(async (req) => {
       priceChangePct,
       high,
       low,
+      source: "solana-dex",
     };
 
     return json(out);

@@ -19,8 +19,8 @@ fiat on/off-ramps, portfolio tracking over time, tax reports, or copy-trading.
 
 Capabilities:
 - Show the connected wallet's balances and token holdings (SOL + SPL tokens).
-- Look up info on a token (price, market cap, volume, liquidity) by ticker, name, or mint address.
-- Show a token's price chart over an interval (1h, 24h, 7d, etc).
+- Look up info on a token (price, market cap, volume, liquidity) by ticker, name, or mint address. Works for Solana SPL tokens AND major-cap coins on any chain (BTC, ETH, XRP, BNB, ADA, DOGE, SUI, AVAX, etc — anything in the CoinGecko top-250).
+- Show a token's price chart over an interval (5m, 15m, 1h, 4h, 1d). Same coverage: SPL tokens + major caps across all chains.
 - Show what's currently trending on Solana.
 - Prepare a transfer of SOL or an SPL token to an address or saved contact (user signs in their wallet).
 - Prepare a swap between two tokens via Jupiter (user signs in their wallet).

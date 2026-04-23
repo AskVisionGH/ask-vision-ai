@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { fetchCgSnapshot, resolveCgCoin } from "../_shared/coingecko.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -6,8 +7,6 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Common Solana tickers → mint address shortcut
-// (DexScreener search works on tickers too, but this avoids ambiguity for the big ones)
 const KNOWN_MINTS: Record<string, string> = {
   SOL: "So11111111111111111111111111111111111111112",
   WSOL: "So11111111111111111111111111111111111111112",
@@ -37,6 +36,7 @@ interface TokenSnapshot {
   volume24hUsd: number | null;
   liquidityUsd: number | null;
   pairUrl: string | null;
+  source?: "coingecko" | "solana-dex";
 }
 
 serve(async (req) => {
@@ -50,19 +50,42 @@ serve(async (req) => {
 
     const cleaned = query.trim().replace(/^\$/, "");
     const upper = cleaned.toUpperCase();
-
-    let dexResp: Response;
-
-    // If it looks like a Solana mint (32-44 base58 chars), or matches a known ticker,
-    // use the tokens endpoint (returns all pairs for that mint).
     const looksLikeMint = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(cleaned);
-    const knownMint = KNOWN_MINTS[upper];
+    const knownSolanaMint = KNOWN_MINTS[upper];
 
-    if (looksLikeMint || knownMint) {
-      const mint = knownMint ?? cleaned;
+    // 1. Major-cap coins → CoinGecko (BTC, ETH, XRP, etc).
+    if (!looksLikeMint && !knownSolanaMint) {
+      const cg = await resolveCgCoin(cleaned);
+      if (cg) {
+        const snap = await fetchCgSnapshot(cg);
+        if (snap) {
+          const out: TokenSnapshot = {
+            symbol: snap.symbol,
+            name: snap.name,
+            address: snap.id,
+            logo: snap.logo,
+            priceUsd: snap.priceUsd,
+            priceChange24h: snap.priceChange24h,
+            priceChange1h: snap.priceChange1h,
+            marketCapUsd: snap.marketCapUsd,
+            fdvUsd: snap.fdvUsd,
+            volume24hUsd: snap.volume24hUsd,
+            // CoinGecko doesn't expose pool liquidity for cross-exchange listings.
+            liquidityUsd: null,
+            pairUrl: `https://www.coingecko.com/en/coins/${snap.id}`,
+            source: "coingecko",
+          };
+          return json(out);
+        }
+      }
+    }
+
+    // 2. Solana DEX path.
+    let dexResp: Response;
+    if (looksLikeMint || knownSolanaMint) {
+      const mint = knownSolanaMint ?? cleaned;
       dexResp = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
     } else {
-      // Free-text search; we'll filter to Solana below.
       dexResp = await fetch(
         `https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(cleaned)}`,
       );
@@ -78,13 +101,10 @@ serve(async (req) => {
     const solanaPairs = allPairs.filter((p) => p.chainId === "solana");
 
     if (solanaPairs.length === 0) {
-      return json({ error: `No Solana token found for "${cleaned}"` }, 404);
+      return json({ error: `No token found for "${cleaned}"` }, 404);
     }
 
-    // Pick the most liquid pair (best price source)
-    solanaPairs.sort(
-      (a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0),
-    );
+    solanaPairs.sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0));
     const top = solanaPairs[0];
 
     const snapshot: TokenSnapshot = {
@@ -100,6 +120,7 @@ serve(async (req) => {
       volume24hUsd: top.volume?.h24 ?? null,
       liquidityUsd: top.liquidity?.usd ?? null,
       pairUrl: top.url ?? null,
+      source: "solana-dex",
     };
 
     return json(snapshot);
