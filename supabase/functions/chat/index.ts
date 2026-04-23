@@ -400,9 +400,9 @@ serve(async (req) => {
           // No tool calls -> the streamed text IS the final answer unless we
           // need to force a live-data tool for the latest user request.
           if (pendingToolCalls.length === 0) {
-            // If a card was already shown this turn, the assistant text is
-            // the wrap-up — we're done. Don't force another tool call.
-            if (cardEmitted) break;
+            // If a card was already shown OR a tool errored this turn, the
+            // assistant text is the wrap-up — we're done. Don't force again.
+            if (cardEmitted || toolErrored) break;
             const forced = inferForcedToolCall(lastUserMessage?.content ?? "");
             if (forced) {
               pendingToolCalls.push({
