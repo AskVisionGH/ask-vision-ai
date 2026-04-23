@@ -43,6 +43,7 @@ const Chat = () => {
     createConversation,
     renameConversation,
     deleteConversation,
+    togglePin,
   } = useConversations();
 
   const activeId = searchParams.get("c");
@@ -193,6 +194,7 @@ const Chat = () => {
       onNew={startNewConversation}
       onRename={renameConversation}
       onDelete={handleDelete}
+      onTogglePin={togglePin}
     />
   );
 

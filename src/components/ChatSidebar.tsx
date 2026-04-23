@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { LogOut, MessageSquarePlus, MoreHorizontal, Pencil, Settings as SettingsIcon, Trash2, Users } from "lucide-react";
+import { LogOut, MessageSquarePlus, MoreHorizontal, Pencil, Pin, PinOff, Settings as SettingsIcon, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -34,6 +34,7 @@ interface Props {
   onNew: () => void;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
+  onTogglePin: (id: string, pinned: boolean) => void;
 }
 
 export const ChatSidebar = ({
@@ -44,6 +45,7 @@ export const ChatSidebar = ({
   onNew,
   onRename,
   onDelete,
+  onTogglePin,
 }: Props) => {
   const { user, signOut } = useAuth();
   const { profile } = useProfile();
@@ -107,7 +109,8 @@ export const ChatSidebar = ({
         ) : (
           (() => {
             const active = activeId ? conversations.find((c) => c.id === activeId) : null;
-            const previous = conversations.filter((c) => c.id !== activeId);
+            const pinned = conversations.filter((c) => c.pinned && c.id !== activeId);
+            const previous = conversations.filter((c) => !c.pinned && c.id !== activeId);
             return (
               <>
                 {active && (
@@ -118,9 +121,17 @@ export const ChatSidebar = ({
                     </ul>
                   </>
                 )}
+                {pinned.length > 0 && (
+                  <>
+                    <SectionHeader label="Pinned" />
+                    <ul className="mb-3 space-y-0.5">
+                      {pinned.map((c) => renderItem(c, false))}
+                    </ul>
+                  </>
+                )}
                 {previous.length > 0 && (
                   <>
-                    <SectionHeader label={active ? "Previous" : "Conversations"} />
+                    <SectionHeader label={active || pinned.length > 0 ? "Previous" : "Conversations"} />
                     <ul className="space-y-0.5">
                       {previous.map((c) => renderItem(c, false))}
                     </ul>
@@ -158,7 +169,11 @@ export const ChatSidebar = ({
                       <span
                         className={cn(
                           "h-1.5 w-1.5 flex-shrink-0 rounded-full",
-                          isActive ? "bg-up shadow-[0_0_6px_hsl(var(--up))]" : "bg-muted-foreground/30",
+                          isActive
+                            ? "bg-up shadow-[0_0_6px_hsl(var(--up))]"
+                            : c.pinned
+                              ? "bg-foreground shadow-[0_0_6px_hsl(var(--foreground)/0.5)]"
+                              : "bg-muted-foreground/30",
                         )}
                         aria-hidden
                       />
@@ -181,6 +196,19 @@ export const ChatSidebar = ({
                         </button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-36">
+                        <DropdownMenuItem onClick={() => onTogglePin(c.id, !c.pinned)}>
+                          {c.pinned ? (
+                            <>
+                              <PinOff className="mr-2 h-3.5 w-3.5" />
+                              Unpin
+                            </>
+                          ) : (
+                            <>
+                              <Pin className="mr-2 h-3.5 w-3.5" />
+                              Pin
+                            </>
+                          )}
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => startRename(c)}>
                           <Pencil className="mr-2 h-3.5 w-3.5" />
                           Rename
