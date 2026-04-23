@@ -79,6 +79,45 @@ export type Database = {
           },
         ]
       }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string | null
+          experience: Database["public"]["Enums"]["crypto_experience"] | null
+          id: string
+          interests: string[]
+          onboarding_completed: boolean
+          risk_tolerance: Database["public"]["Enums"]["risk_tolerance"] | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          experience?: Database["public"]["Enums"]["crypto_experience"] | null
+          id?: string
+          interests?: string[]
+          onboarding_completed?: boolean
+          risk_tolerance?: Database["public"]["Enums"]["risk_tolerance"] | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          experience?: Database["public"]["Enums"]["crypto_experience"] | null
+          id?: string
+          interests?: string[]
+          onboarding_completed?: boolean
+          risk_tolerance?: Database["public"]["Enums"]["risk_tolerance"] | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -87,7 +126,8 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      crypto_experience: "new" | "intermediate" | "advanced"
+      risk_tolerance: "cautious" | "balanced" | "aggressive"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -214,6 +254,9 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      crypto_experience: ["new", "intermediate", "advanced"],
+      risk_tolerance: ["cautious", "balanced", "aggressive"],
+    },
   },
 } as const

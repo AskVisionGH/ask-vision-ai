@@ -5,23 +5,39 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { WalletContextProvider } from "@/providers/WalletContextProvider";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
+import { useProfile } from "@/hooks/useProfile";
 import Index from "./pages/Index.tsx";
 import Auth from "./pages/Auth.tsx";
 import Chat from "./pages/Chat.tsx";
+import Onboarding from "./pages/Onboarding.tsx";
+import Settings from "./pages/Settings.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
 
-const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
+const FullScreenLoader = () => (
+  <div className="flex min-h-screen items-center justify-center bg-background">
+    <div className="h-2 w-2 animate-pulse rounded-full bg-primary" />
+  </div>
+);
+
+const ProtectedRoute = ({
+  children,
+  requireOnboarding = true,
+}: {
+  children: JSX.Element;
+  requireOnboarding?: boolean;
+}) => {
   const { session, loading } = useAuth();
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="h-2 w-2 animate-pulse rounded-full bg-primary" />
-      </div>
-    );
-  }
+  const { profile, loading: profileLoading } = useProfile();
+  if (loading) return <FullScreenLoader />;
   if (!session) return <Navigate to="/auth" replace />;
+  if (requireOnboarding) {
+    if (profileLoading) return <FullScreenLoader />;
+    if (profile && !profile.onboarding_completed) {
+      return <Navigate to="/onboarding" replace />;
+    }
+  }
   return children;
 };
 
@@ -37,10 +53,26 @@ const App = () => (
               <Route path="/" element={<Index />} />
               <Route path="/auth" element={<Auth />} />
               <Route
+                path="/onboarding"
+                element={
+                  <ProtectedRoute requireOnboarding={false}>
+                    <Onboarding />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/chat"
                 element={
                   <ProtectedRoute>
                     <Chat />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/settings"
+                element={
+                  <ProtectedRoute requireOnboarding={false}>
+                    <Settings />
                   </ProtectedRoute>
                 }
               />

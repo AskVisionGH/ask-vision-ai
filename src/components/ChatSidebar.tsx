@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { LogOut, MessageSquarePlus, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Link } from "react-router-dom";
+import { LogOut, MessageSquarePlus, MoreHorizontal, Pencil, Settings as SettingsIcon, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -19,6 +20,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
+import { useProfile } from "@/hooks/useProfile";
+import { UserAvatar } from "@/components/UserAvatar";
 import { VisionLogo } from "@/components/VisionLogo";
 import { cn } from "@/lib/utils";
 import type { ConversationRow } from "@/hooks/useConversations";
@@ -43,6 +46,7 @@ export const ChatSidebar = ({
   onDelete,
 }: Props) => {
   const { user, signOut } = useAuth();
+  const { profile } = useProfile();
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [pendingDelete, setPendingDelete] = useState<ConversationRow | null>(null);
@@ -157,13 +161,37 @@ export const ChatSidebar = ({
 
       {/* User footer */}
       <div className="shrink-0 border-t border-border/60 px-3 py-3">
-        <div className="flex items-center justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-xs text-foreground">{user?.email ?? "Account"}</p>
-            <p className="truncate font-mono text-[10px] uppercase tracking-wider text-muted-foreground/60">
-              Signed in
-            </p>
-          </div>
+        <div className="flex items-center gap-2">
+          <Link
+            to="/settings"
+            className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg p-1.5 -m-1.5 text-left ease-vision hover:bg-secondary/60"
+          >
+            <UserAvatar
+              name={profile?.display_name}
+              email={user?.email}
+              src={profile?.avatar_url}
+              size={32}
+            />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs text-foreground">
+                {profile?.display_name?.trim() || user?.email || "Account"}
+              </p>
+              <p className="truncate font-mono text-[10px] uppercase tracking-wider text-muted-foreground/60">
+                View settings
+              </p>
+            </div>
+          </Link>
+          <Button
+            variant="ghost"
+            size="icon"
+            asChild
+            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            aria-label="Settings"
+          >
+            <Link to="/settings">
+              <SettingsIcon className="h-4 w-4" />
+            </Link>
+          </Button>
           <Button
             variant="ghost"
             size="icon"

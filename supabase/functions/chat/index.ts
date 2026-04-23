@@ -144,7 +144,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { messages, walletAddress } = await req.json();
+    const { messages, walletAddress, profile } = await req.json();
 
     if (!Array.isArray(messages)) {
       return json({ error: "messages must be an array" }, 400);
@@ -153,9 +153,16 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY missing");
 
+    // Build a personalisation block from the user's profile so the AI can
+    // tailor depth, interests, and risk framing without re-asking.
+    const profileBlock = buildProfileBlock(profile);
+    const systemContent = profileBlock
+      ? `${SYSTEM_PROMPT}\n\n${profileBlock}`
+      : SYSTEM_PROMPT;
+
     // Multi-turn tool loop. Max 3 iterations to bound cost.
     const conversation: any[] = [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: systemContent },
       ...messages,
     ];
 
@@ -360,4 +367,38 @@ function json(body: unknown, status = 200) {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
+}
+
+// Builds a short personalisation block appended to the system prompt.
+// Only includes fields that are actually set so absent profiles add no noise.
+function buildProfileBlock(profile: any): string | null {
+  if (!profile || typeof profile !== "object") return null;
+  const lines: string[] = [];
+  const name = typeof profile.displayName === "string" ? profile.displayName.trim() : "";
+  if (name) lines.push(`- The user's name is **${name}**. Greet them by name on the first message of a conversation, and weave it in naturally during casual chat (don't overdo it).`);
+
+  const exp = profile.experience;
+  if (exp === "new") {
+    lines.push("- They are NEW to crypto. Define jargon the first time you use it (gas, slippage, AMM, mint, etc.). Bias toward simple analogies. Don't condescend.");
+  } else if (exp === "intermediate") {
+    lines.push("- They are COMFORTABLE with crypto. Skip 101 explanations unless asked. Use standard terminology freely.");
+  } else if (exp === "advanced") {
+    lines.push("- They are ADVANCED (degen-tier). Skip explainers entirely. Be terse, dense, and assume deep knowledge of Solana primitives, MEV, LSTs, perps, etc.");
+  }
+
+  if (Array.isArray(profile.interests) && profile.interests.length > 0) {
+    lines.push(`- They're into: ${profile.interests.join(", ")}. Lean into these topics when relevant; surface news, tools, or angles they'd care about.`);
+  }
+
+  const risk = profile.riskTolerance;
+  if (risk === "cautious") {
+    lines.push("- Risk tone: CAUTIOUS. Flag downside risks early and clearly. Prefer mentioning blue-chips and audited protocols. Don't pitch degen plays.");
+  } else if (risk === "balanced") {
+    lines.push("- Risk tone: BALANCED. Note risks honestly but don't moralise. Pragmatic framing.");
+  } else if (risk === "aggressive") {
+    lines.push("- Risk tone: AGGRESSIVE. They want signal not safety rails. State risks once, plainly, then move on. No hand-wringing.");
+  }
+
+  if (lines.length === 0) return null;
+  return `User context:\n${lines.join("\n")}\n\nNever fabricate facts about the user beyond what's listed above.`;
 }

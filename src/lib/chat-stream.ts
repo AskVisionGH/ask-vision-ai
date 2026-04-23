@@ -128,9 +128,17 @@ function toModelMessages(msgs: ChatMessage[]) {
   return msgs.map(({ role, content }) => ({ role, content }));
 }
 
+export interface UserProfileContext {
+  displayName?: string | null;
+  experience?: "new" | "intermediate" | "advanced" | null;
+  interests?: string[];
+  riskTolerance?: "cautious" | "balanced" | "aggressive" | null;
+}
+
 export async function sendChat(args: {
   messages: ChatMessage[];
   walletAddress?: string;
+  profile?: UserProfileContext;
   signal?: AbortSignal;
 }): Promise<{ content: string; toolEvents: ToolEvent[] } | { error: string; status: number }> {
   try {
@@ -143,6 +151,7 @@ export async function sendChat(args: {
       body: JSON.stringify({
         messages: toModelMessages(args.messages),
         walletAddress: args.walletAddress ?? null,
+        profile: args.profile ?? null,
       }),
       signal: args.signal,
     });
