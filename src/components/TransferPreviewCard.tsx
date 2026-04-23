@@ -214,6 +214,7 @@ export const TransferPreviewCard = ({ data: initial }: Props) => {
 
       // 2. Sign
       setPhase({ name: "awaiting_signature" });
+      let signed: VersionedTransaction;
       try {
         signed = await signTransaction(tx);
       } catch {
