@@ -48,6 +48,7 @@ serve(async (req) => {
 
     const fromPk = new PublicKey(fromAddress);
     const toPk = new PublicKey(toAddress);
+    const recipientIsOnCurve = PublicKey.isOnCurve(toPk.toBytes());
 
     const instructions = [
       // Modest priority fee — keeps the tx landing without hand-tuning
@@ -66,6 +67,16 @@ serve(async (req) => {
         }),
       );
     } else {
+      if (!recipientIsOnCurve) {
+        return json(
+          {
+            error:
+              "That recipient address isn't a regular wallet (off-curve). SPL transfers there could be lost. Double-check the address.",
+          },
+          400,
+        );
+      }
+
       if (!Number.isFinite(decimals) || decimals < 0) {
         return json({ error: "decimals required for SPL transfer" }, 400);
       }
@@ -102,7 +113,7 @@ serve(async (req) => {
       if (!toAtaAcct) {
         instructions.push(
           createAssociatedTokenAccountInstruction(
-            fromPk, // payer
+            fromPk,
             toAta,
             toPk,
             mintPk,
