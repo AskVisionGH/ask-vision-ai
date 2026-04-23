@@ -84,11 +84,35 @@ export interface SwapQuoteData {
   error?: string;
 }
 
+export interface TransferQuoteData {
+  from: { address: string };
+  to: { address: string; displayName: string | null; isOnCurve: boolean };
+  token: {
+    symbol: string;
+    name: string;
+    mint: string;
+    decimals: number;
+    logo: string | null;
+    priceUsd: number | null;
+    isNative: boolean;
+    tokenProgram: string;
+  };
+  amountUi: number;
+  amountAtomic: number;
+  valueUsd: number | null;
+  needsAtaCreation: boolean;
+  ataCreationFeeSol: number;
+  estNetworkFeeSol: number;
+  quotedAt: number;
+  error?: string;
+}
+
 export type ToolEvent =
   | { type: "wallet_balance"; data: WalletBalanceData }
   | { type: "token_info"; data: TokenInfoData }
   | { type: "trending"; data: TrendingData }
   | { type: "swap_quote"; data: SwapQuoteData }
+  | { type: "transfer_quote"; data: TransferQuoteData }
   | { type: string; data: any };
 
 export interface ChatMessage {
