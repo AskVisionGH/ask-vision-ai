@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, Sparkles, TrendingUp, TrendingDown, ArrowUpRight } from "lucide-react";
-import { AreaChart, Area, ResponsiveContainer, YAxis, Tooltip } from "recharts";
+import { Bar, ComposedChart, ResponsiveContainer, YAxis, Tooltip } from "recharts";
 import { cn } from "@/lib/utils";
 import { TokenLogo } from "@/components/TokenLogo";
 import type { ChartInterval, TaResponse, TokenChartData } from "@/lib/chat-stream";
@@ -94,8 +94,8 @@ export const TokenChartCard = ({ data: initial }: Props) => {
   }, [interval, data.address, data.symbol, data.interval]);
 
   const isUp = (data.priceChangePct ?? 0) >= 0;
-  const stroke = isUp ? "hsl(var(--up))" : "hsl(var(--down))";
-  const gradientId = useMemo(() => `chart-grad-${data.symbol}-${interval}`, [data.symbol, interval]);
+  const upColor = "hsl(var(--up))";
+  const downColor = "hsl(var(--down))";
 
   if (initial.error) {
     return (
@@ -105,7 +105,20 @@ export const TokenChartCard = ({ data: initial }: Props) => {
     );
   }
 
-  const chartData = data.candles.map((c) => ({ t: c.t, price: c.c }));
+  // Each candle becomes a bar from low → high (wick) plus a body from open → close.
+  // Recharts only paints positive bar heights, so we encode body + wick as ranges.
+  const chartData = data.candles.map((c) => ({
+    t: c.t,
+    o: c.o,
+    h: c.h,
+    l: c.l,
+    c: c.c,
+    // wick range [low, high]
+    wick: [c.l, c.h] as [number, number],
+    // body range [min(o,c), max(o,c)] with color baked in
+    body: [Math.min(c.o, c.c), Math.max(c.o, c.c)] as [number, number],
+    up: c.c >= c.o,
+  }));
 
   const runTa = async () => {
     if (loadingTa) return;
