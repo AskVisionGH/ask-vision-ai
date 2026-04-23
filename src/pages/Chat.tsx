@@ -516,6 +516,8 @@ const Chat = () => {
               onChange={setInput}
               onSubmit={() => send(input)}
               disabled={isThinking}
+              recentMessages={messages}
+              walletConnected={connected}
             />
             <p className="mt-2 text-center font-mono text-[10px] tracking-wider uppercase text-muted-foreground/50">
               Vision can make mistakes · not financial advice
