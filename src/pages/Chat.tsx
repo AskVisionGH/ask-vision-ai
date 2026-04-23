@@ -26,10 +26,10 @@ import { streamChat, type ChatMessage, type ToolEvent } from "@/lib/chat-stream"
 import { cn } from "@/lib/utils";
 
 const SUGGESTIONS = [
-  "What's in my wallet?",
-  "Show me $SOL price",
-  "What's trending on Solana?",
-  "Explain Jupiter routing in plain English",
+  "Find smart money buying memecoins right now",
+  "Scan this contract for honeypot risk",
+  "What are whales accumulating today?",
+  "Show me the hottest tokens trending on Solana",
 ];
 
 const Chat = () => {
