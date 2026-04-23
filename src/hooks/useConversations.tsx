@@ -9,6 +9,7 @@ export interface ConversationRow {
   wallet_address: string | null;
   pinned: boolean;
   pin_order: number;
+  share_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -21,6 +22,9 @@ export interface MessageRow {
   tool_events: ToolEvent[] | null;
   created_at: string;
 }
+
+const CONVO_COLS =
+  "id, title, wallet_address, pinned, pin_order, share_id, created_at, updated_at";
 
 /** Subscribes to the user's conversations, sorted newest first. */
 export const useConversations = () => {
@@ -36,7 +40,7 @@ export const useConversations = () => {
     }
     const { data, error } = await supabase
       .from("conversations")
-      .select("id, title, wallet_address, pinned, pin_order, created_at, updated_at")
+      .select(CONVO_COLS)
       .order("pinned", { ascending: false })
       .order("pin_order", { ascending: true })
       .order("updated_at", { ascending: false });
@@ -59,7 +63,7 @@ export const useConversations = () => {
           wallet_address: walletAddress,
           title: "New chat",
         })
-        .select("id, title, wallet_address, pinned, pin_order, created_at, updated_at")
+        .select(CONVO_COLS)
         .single();
       if (error || !data) return null;
       const row = data as ConversationRow;
@@ -122,7 +126,6 @@ export const useConversations = () => {
         return b.updated_at.localeCompare(a.updated_at);
       });
     });
-    // Persist each pin_order in parallel.
     await Promise.all(
       orderedIds.map((id, i) =>
         supabase
@@ -133,6 +136,30 @@ export const useConversations = () => {
     );
   }, []);
 
+  /**
+   * Toggles a public read-only share link for the conversation.
+   * Sharing assigns a fresh uuid; unsharing clears it (existing links stop working).
+   */
+  const toggleShare = useCallback(
+    async (id: string, share: boolean): Promise<string | null> => {
+      const newShareId = share ? crypto.randomUUID() : null;
+      setConversations((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, share_id: newShareId } : c)),
+      );
+      const { error } = await supabase
+        .from("conversations")
+        .update({ share_id: newShareId } as never)
+        .eq("id", id);
+      if (error) {
+        // Roll back optimistic update on failure.
+        await refresh();
+        return null;
+      }
+      return newShareId;
+    },
+    [refresh],
+  );
+
   return {
     conversations,
     loading,
@@ -142,6 +169,7 @@ export const useConversations = () => {
     deleteConversation,
     togglePin,
     reorderPinned,
+    toggleShare,
   };
 };
 
@@ -149,32 +177,56 @@ export const useConversations = () => {
 export const fetchMessages = async (conversationId: string): Promise<ChatMessage[]> => {
   const { data, error } = await supabase
     .from("messages")
-    .select("role, content, tool_events, created_at")
+    .select("id, role, content, tool_events, created_at")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: true });
   if (error || !data) return [];
   return data.map((row) => ({
+    id: row.id,
     role: row.role as ChatMessage["role"],
     content: row.content ?? "",
     toolEvents: (row.tool_events as ToolEvent[] | null) ?? undefined,
+    createdAt: row.created_at,
   }));
 };
 
-/** Persists one chat message for the current user. Returns true on success. */
+/** Persists one chat message for the current user. Returns the new row id (or null on failure). */
 export const saveMessage = async (
   conversationId: string,
   userId: string,
   msg: ChatMessage,
+): Promise<string | null> => {
+  const { data, error } = await supabase
+    .from("messages")
+    .insert([
+      {
+        conversation_id: conversationId,
+        user_id: userId,
+        role: msg.role,
+        content: msg.content,
+        tool_events: (msg.toolEvents ?? null) as never,
+      },
+    ])
+    .select("id")
+    .single();
+  if (error || !data) return null;
+  return data.id as string;
+};
+
+/**
+ * Deletes every message in the conversation that was created at or after the
+ * given timestamp. Used when a user edits a message — we throw away the
+ * original + everything that followed before regenerating from that point.
+ */
+export const deleteMessagesFrom = async (
+  conversationId: string,
+  fromCreatedAt: string,
 ): Promise<boolean> => {
-  const { error } = await supabase.from("messages").insert([
-    {
-      conversation_id: conversationId,
-      user_id: userId,
-      role: msg.role,
-      content: msg.content,
-      tool_events: (msg.toolEvents ?? null) as never,
-    },
-  ]);
+  const { error } = await supabase
+    .from("messages")
+    .delete()
+    .eq("conversation_id", conversationId)
+    .gte("created_at", fromCreatedAt);
   return !error;
 };
 
@@ -187,4 +239,24 @@ export const autoTitleConversation = async (id: string, firstMessage: string) =>
     .update({ title: cleaned })
     .eq("id", id)
     .eq("title", "New chat"); // only overwrite the default
+};
+
+/**
+ * Searches the user's conversations by message content.
+ * Returns the conversation ids that contain at least one matching message.
+ */
+export const searchConversationsByContent = async (
+  userId: string,
+  needle: string,
+): Promise<Set<string>> => {
+  const cleaned = needle.trim();
+  if (!cleaned) return new Set();
+  const { data, error } = await supabase
+    .from("messages")
+    .select("conversation_id")
+    .eq("user_id", userId)
+    .ilike("content", `%${cleaned}%`)
+    .limit(500);
+  if (error || !data) return new Set();
+  return new Set(data.map((row) => row.conversation_id as string));
 };
