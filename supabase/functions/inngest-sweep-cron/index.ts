@@ -6,8 +6,8 @@
 // browser, or trigger a sync from the Inngest dashboard. INNGEST_SIGNING_KEY
 // is read automatically by the SDK to verify webhook payloads.
 
-import { Inngest } from "https://esm.sh/inngest@3.27.5";
-import { serve } from "https://esm.sh/inngest@3.27.5/deno";
+import { Inngest } from "https://esm.sh/inngest@3.27.5?target=deno";
+import { serve } from "https://esm.sh/inngest@3.27.5/edge?target=deno";
 
 const inngest = new Inngest({ id: "vision-fee-sweeper" });
 
@@ -41,13 +41,12 @@ const sweepFn = inngest.createFunction(
   },
 );
 
-const handler = serve({
-  client: inngest,
-  functions: [sweepFn],
-  // Inngest webhooks come from inngest.com — they don't carry our Supabase JWT.
-  // verify_jwt=false in config.toml lets them through; INNGEST_SIGNING_KEY
-  // (read by the SDK) authenticates the payloads instead.
-  servePath: "/inngest-sweep-cron",
-});
-
-Deno.serve(handler);
+// Supabase Edge Functions rewrite the request path — `servePath` must match
+// the deployed function URL exactly so Inngest's introspection works.
+Deno.serve(
+  serve({
+    client: inngest,
+    functions: [sweepFn],
+    servePath: "/functions/v1/inngest-sweep-cron",
+  }),
+);
