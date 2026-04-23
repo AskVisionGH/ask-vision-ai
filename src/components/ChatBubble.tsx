@@ -14,6 +14,7 @@ import { TokenChartCard } from "@/components/TokenChartCard";
 import { SocialSentimentCard } from "@/components/SocialSentimentCard";
 import { NewsCard } from "@/components/NewsCard";
 import { EarlyBuyersCard, SmartMoneyActivityCard } from "@/components/SmartMoneyCard";
+import { RecentTxsCard, TokenPnLCard, WalletPnLCard } from "@/components/PnLCards";
 
 interface Props {
   message: ChatMessage;
@@ -185,6 +186,15 @@ export const ChatBubble = ({ message, onEdit, readOnly = false }: Props) => {
         }
         if (event.type === "smart_money_activity") {
           return <SmartMoneyActivityCard key={i} data={event.data} />;
+        }
+        if (event.type === "wallet_pnl") {
+          return <WalletPnLCard key={i} data={event.data} />;
+        }
+        if (event.type === "recent_txs") {
+          return <RecentTxsCard key={i} data={event.data} />;
+        }
+        if (event.type === "token_pnl") {
+          return <TokenPnLCard key={i} data={event.data} />;
         }
         return null;
       })}

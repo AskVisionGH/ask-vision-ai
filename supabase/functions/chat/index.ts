@@ -30,10 +30,13 @@ Tools (call them whenever relevant — don't ask permission, don't pretend you c
 - \`get_solana_news\` — fetches the latest Solana ecosystem news headlines aggregated from Solana Foundation, CoinDesk, Decrypt, Reddit r/solana and CoinGecko. Call this for any "what's new on Solana", "latest news", "any updates", "what's happening", "ecosystem news", "headlines" question. No arguments — ecosystem-wide only.
 - \`get_early_buyers\` — finds which curated/tracked smart-money wallets bought a specific token in its first 24h after launch. Use for "who bought $X early", "smart money on $X", "did anyone good ape $X", "early buyers", "who got in early". Argument: \`query\` (ticker or mint).
 - \`get_smart_money_activity\` — shows what curated/tracked smart-money wallets have been buying or selling recently. Use for "what is smart money buying", "what are the pros doing", "what's smart money trading right now", "any alpha from tracked wallets". Optional argument: \`windowHours\` (default 24, max 168).
+- \`get_wallet_pnl\` — full 30-day PnL dashboard for a wallet: per-token realized/unrealized profit, total cost basis, total proceeds, current portfolio value, and recent activity. Use for "how am I doing", "my pnl", "what's my profit", "show my performance", "wallet pnl", "am I up or down". If no \`address\` argument, defaults to the connected wallet.
+- \`get_recent_txs\` — last 30 days of parsed transactions for a wallet (swaps, transfers in/out) with USD values + Solscan links. Use for "recent transactions", "what did I trade", "show my activity", "tx history", "what have I done lately". If no \`address\` argument, defaults to the connected wallet.
+- \`get_token_pnl\` — single-token PnL deep-dive for the wallet: how much was bought/sold, average entry, realized + unrealized P/L, current holdings. Use for "how am I doing on $BONK", "my pnl on JUP", "am I up on WIF", "show my position in X". Required: \`token\` (ticker or mint). Optional: \`address\` (defaults to connected wallet).
 
 CRITICAL: If a user asks for live data (prices, balances, what's trending, swap quotes, charts, social sentiment), you MUST call the matching tool — every single time, even if you called it earlier in this conversation for a different token, even if the user just asks again. Never make up numbers. Never say "here's the chart" or "here are the top tokens" without first calling the matching tool. The UI cannot render a chart, portfolio, or any data card unless you actually invoke the tool. Past assistant turns showing cards do NOT count — you must re-invoke the tool for each new request.
 
-After any tool returns, the UI renders a rich card automatically. Reply with EXACTLY ONE short sentence framing the result — note the headline number or what stands out. Do NOT re-list data, do NOT repeat the token name and price, do NOT write a second sentence rephrasing the first. The card already shows everything. Never call the same tool twice in one turn. For \`prepare_swap\`, frame as a preview ("Here's the preview — review and confirm below"), never as a confirmed trade. For \`get_early_buyers\`, your sentence must report (a) how many of the tracked wallets bought it early ("3 of 25 tracked wallets"), (b) the earliest entry ("first one aped 4 minutes after launch") OR say plainly that no tracked wallet caught this one. For \`get_smart_money_activity\`, mention how many distinct wallets are active and the most-traded token if there's a clear leader.
+After any tool returns, the UI renders a rich card automatically. Reply with EXACTLY ONE short sentence framing the result — note the headline number or what stands out. Do NOT re-list data, do NOT repeat the token name and price, do NOT write a second sentence rephrasing the first. The card already shows everything. Never call the same tool twice in one turn. For \`prepare_swap\`, frame as a preview ("Here's the preview — review and confirm below"), never as a confirmed trade. For \`get_early_buyers\`, your sentence must report (a) how many of the tracked wallets bought it early ("3 of 25 tracked wallets"), (b) the earliest entry ("first one aped 4 minutes after launch") OR say plainly that no tracked wallet caught this one. For \`get_smart_money_activity\`, mention how many distinct wallets are active and the most-traded token if there's a clear leader. For \`get_wallet_pnl\`, lead with the headline P/L (e.g. "Up $1,240 realized + $380 unrealized over the last 30 days"). For \`get_recent_txs\`, summarize the count and the dominant activity ("12 swaps and 3 transfers in the last 30 days"). For \`get_token_pnl\`, state the position status in one line ("Up 2.3x on $BONK — held 80% of the bag" or "Down $40 realized, no position left").
 
 If a tool returns an error, explain it plainly and suggest a next step.
 
@@ -282,6 +285,69 @@ const TOOLS = [
             description: "Lookback window in hours. Default 24, max 168 (7 days).",
           },
         },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_wallet_pnl",
+      description:
+        "Full 30-day PnL dashboard for a Solana wallet: per-token realized + unrealized profit, totals, and current holdings. Use for 'how am I doing', 'my pnl', 'show performance', 'am I up or down'. Defaults to the connected wallet if no address is given.",
+      parameters: {
+        type: "object",
+        properties: {
+          address: {
+            type: "string",
+            description: "Optional wallet address to analyze. Omit to use the connected wallet.",
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_recent_txs",
+      description:
+        "Last 30 days of parsed transactions (swaps, transfers in/out) for a Solana wallet with USD values. Use for 'recent transactions', 'what did I trade', 'tx history', 'show my activity'. Defaults to the connected wallet.",
+      parameters: {
+        type: "object",
+        properties: {
+          address: {
+            type: "string",
+            description: "Optional wallet address. Omit to use the connected wallet.",
+          },
+          limit: {
+            type: "number",
+            description: "Max number of recent txs to return (5-50). Default 25.",
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_token_pnl",
+      description:
+        "Single-token PnL deep-dive for a Solana wallet: bought/sold amounts, average entry, realized + unrealized P/L, current position. Use for 'how am I doing on $X', 'my pnl on X', 'am I up on X'.",
+      parameters: {
+        type: "object",
+        properties: {
+          token: {
+            type: "string",
+            description: "Token ticker (e.g. 'BONK', 'JUP') or full mint address.",
+          },
+          address: {
+            type: "string",
+            description: "Optional wallet address. Omit to use the connected wallet.",
+          },
+        },
+        required: ["token"],
         additionalProperties: false,
       },
     },
@@ -636,6 +702,47 @@ serve(async (req) => {
                 req,
               );
               eventType = "smart_money_activity";
+            } else if (name === "get_wallet_pnl") {
+              const args = safeJson(tc.function?.arguments);
+              const target = (args.address ?? "").trim() || walletAddress;
+              if (!target) {
+                result = { error: "No wallet connected and no address provided." };
+              } else {
+                result = await invokeFn(
+                  "wallet-pnl",
+                  { address: target, slice: "wallet_pnl" },
+                  req,
+                );
+              }
+              eventType = "wallet_pnl";
+            } else if (name === "get_recent_txs") {
+              const args = safeJson(tc.function?.arguments);
+              const target = (args.address ?? "").trim() || walletAddress;
+              if (!target) {
+                result = { error: "No wallet connected and no address provided." };
+              } else {
+                result = await invokeFn(
+                  "wallet-pnl",
+                  { address: target, slice: "recent_txs", limit: args.limit ?? 25 },
+                  req,
+                );
+              }
+              eventType = "recent_txs";
+            } else if (name === "get_token_pnl") {
+              const args = safeJson(tc.function?.arguments);
+              const target = (args.address ?? "").trim() || walletAddress;
+              if (!target) {
+                result = { error: "No wallet connected and no address provided." };
+              } else if (!args.token) {
+                result = { error: "Token ticker or mint required." };
+              } else {
+                result = await invokeFn(
+                  "wallet-pnl",
+                  { address: target, slice: "token_pnl", tokenFilter: args.token },
+                  req,
+                );
+              }
+              eventType = "token_pnl";
             } else {
               result = { error: `Unknown tool: ${name}` };
             }
