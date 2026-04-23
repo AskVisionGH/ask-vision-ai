@@ -1,5 +1,5 @@
 import { ChangeEvent, useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { ArrowLeft, Camera } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -238,12 +238,18 @@ const Settings = () => {
             </section>
 
             <div className="flex items-center justify-between gap-3 pt-2">
-              <Link
-                to="/onboarding"
+              <button
+                type="button"
+                onClick={async () => {
+                  // Onboarding redirects to /chat if already completed, so we
+                  // have to flip the flag back off before navigating.
+                  await updateProfile({ onboarding_completed: false });
+                  navigate("/onboarding");
+                }}
                 className="text-xs text-muted-foreground/70 hover:text-foreground ease-vision"
               >
                 Re-run onboarding
-              </Link>
+              </button>
               <Button
                 onClick={save}
                 disabled={saving}
