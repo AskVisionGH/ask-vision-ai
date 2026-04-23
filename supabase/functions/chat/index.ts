@@ -30,7 +30,7 @@ Tools (call them whenever relevant — don't ask permission, don't pretend you c
 
 CRITICAL: If a user asks for live data (prices, balances, what's trending, swap quotes, charts, social sentiment), you MUST call the matching tool — every single time, even if you called it earlier in this conversation for a different token, even if the user just asks again. Never make up numbers. Never say "here's the chart" or "here are the top tokens" without first calling the matching tool. The UI cannot render a chart, portfolio, or any data card unless you actually invoke the tool. Past assistant turns showing cards do NOT count — you must re-invoke the tool for each new request.
 
-After any tool returns, the UI renders a rich card automatically. Your job is a SHORT one or two-sentence framing — note the headline number, what stands out, or any caveats. Do NOT re-list everything; the card already does that. For \`prepare_swap\`, frame as a preview ("Here's the preview — review and confirm below"), never as a confirmed trade.
+After any tool returns, the UI renders a rich card automatically. Reply with EXACTLY ONE short sentence framing the result — note the headline number or what stands out. Do NOT re-list data, do NOT repeat the token name and price, do NOT write a second sentence rephrasing the first. The card already shows everything. Never call the same tool twice in one turn. For \`prepare_swap\`, frame as a preview ("Here's the preview — review and confirm below"), never as a confirmed trade.
 
 If a tool returns an error, explain it plainly and suggest a next step.
 
@@ -292,6 +292,11 @@ serve(async (req) => {
         );
       };
 
+      // Track tools already invoked this turn so we never emit duplicate
+      // cards if the model decides to call the same tool again.
+      const emittedToolKeys = new Set<string>();
+      let cardEmitted = false;
+
       try {
         for (let iter = 0; iter < 3; iter++) {
           const isLastIter = iter === 2;
@@ -394,6 +399,9 @@ serve(async (req) => {
           // No tool calls -> the streamed text IS the final answer unless we
           // need to force a live-data tool for the latest user request.
           if (pendingToolCalls.length === 0) {
+            // If a card was already shown this turn, the assistant text is
+            // the wrap-up — we're done. Don't force another tool call.
+            if (cardEmitted) break;
             const forced = inferForcedToolCall(lastUserMessage?.content ?? "");
             if (forced) {
               pendingToolCalls.push({
@@ -407,9 +415,13 @@ serve(async (req) => {
           }
 
           if (isLastIter) {
-            send("delta", {
-              text: "I tried but couldn't complete that — let's try a different angle.",
-            });
+            // Only show the canned fallback if we haven't already shown a
+            // card or written any text this turn.
+            if (!cardEmitted && !assistantText.trim()) {
+              send("delta", {
+                text: "I tried but couldn't complete that — let's try a different angle.",
+              });
+            }
             break;
           }
 
@@ -431,6 +443,21 @@ serve(async (req) => {
 
           for (const tc of toolCalls) {
             const name = tc.function?.name;
+            const dedupeKey = `${name}:${(tc.function?.arguments ?? "").trim()}`;
+            // If this exact tool was already invoked in this turn, skip it
+            // entirely — feed the model a hint and don't emit a duplicate card.
+            if (emittedToolKeys.has(dedupeKey)) {
+              conversation.push({
+                role: "tool",
+                tool_call_id: tc.id,
+                content: JSON.stringify({
+                  note: "Already shown to the user above. Do not call this tool again. Reply with nothing more.",
+                }),
+              });
+              continue;
+            }
+            emittedToolKeys.add(dedupeKey);
+
             let result: any;
             let eventType: string | null = null;
 
@@ -516,6 +543,7 @@ serve(async (req) => {
                 type: "save_contact_request",
                 data: { name: cname, address: caddr, error: result.error ?? null },
               });
+              cardEmitted = true;
               conversation.push({
                 role: "tool",
                 tool_call_id: tc.id,
@@ -554,6 +582,7 @@ serve(async (req) => {
             // model finishes writing its framing text — but only on success.
             if (eventType && !hasError) {
               send("tool", { type: eventType, data: result });
+              cardEmitted = true;
             }
 
             conversation.push({
