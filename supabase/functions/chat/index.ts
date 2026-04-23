@@ -138,6 +138,38 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "list_contacts",
+      description:
+        "List the user's saved wallet contacts (address book). Use when the user asks who their contacts are, who they've saved, or wants to pick a recipient.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "save_contact",
+      description:
+        "Save a new wallet contact to the user's address book under a friendly name. Use when the user says things like 'save this address as Mom', 'add toly.sol to my contacts as Toly', etc.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: {
+            type: "string",
+            description: "Friendly nickname (e.g. 'Mom', 'Cold wallet', 'Toly').",
+          },
+          address: {
+            type: "string",
+            description: "Wallet address (base58) or .sol name to save.",
+          },
+        },
+        required: ["name", "address"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 serve(async (req) => {
