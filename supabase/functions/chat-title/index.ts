@@ -1,0 +1,102 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+const SYSTEM = `You generate ultra-short titles for chat conversations about Solana, crypto, and finance.
+
+Rules:
+- 2-5 words. Hard maximum 40 characters.
+- Title Case. No quotes, no trailing punctuation, no emoji.
+- Capture the user's intent or topic, not their greeting.
+- For greetings or chit-chat ("hi", "hello", "what's up"), return: New Chat
+- Tickers stay uppercase without the dollar sign (SOL, JUP, BONK).
+- Examples:
+  - "what's in my wallet" -> Wallet Check
+  - "swap 0.1 SOL for USDC" -> Swap SOL to USDC
+  - "show me bonk price" -> BONK Price
+  - "what's trending on solana" -> Trending Tokens
+  - "explain jupiter routing" -> Jupiter Routing
+  - "send 5 usdc to mom" -> Send USDC to Mom
+  - "hi" -> New Chat
+
+Return ONLY the title text. No prefix, no explanation.`;
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  let body: any;
+  try {
+    body = await req.json();
+  } catch {
+    return json({ error: "Invalid JSON body" }, 400);
+  }
+
+  const message = typeof body?.message === "string" ? body.message.trim() : "";
+  if (!message) return json({ title: "New chat" });
+
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) return json({ error: "LOVABLE_API_KEY missing" }, 500);
+
+  try {
+    const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash-lite",
+        messages: [
+          { role: "system", content: SYSTEM },
+          { role: "user", content: message.slice(0, 500) },
+        ],
+        max_tokens: 24,
+      }),
+    });
+
+    if (!resp.ok) {
+      const t = await resp.text().catch(() => "");
+      console.error("title gateway error:", resp.status, t);
+      return json({ title: fallback(message) });
+    }
+
+    const data = await resp.json();
+    const raw = data?.choices?.[0]?.message?.content;
+    const cleaned = sanitize(raw);
+    return json({ title: cleaned || fallback(message) });
+  } catch (e) {
+    console.error("chat-title error:", e);
+    return json({ title: fallback(message) });
+  }
+});
+
+function sanitize(raw: unknown): string {
+  if (typeof raw !== "string") return "";
+  let s = raw.trim();
+  // Strip surrounding quotes/backticks.
+  s = s.replace(/^["'`]+|["'`]+$/g, "").trim();
+  // Drop trailing punctuation.
+  s = s.replace(/[.!?,;:\-]+$/g, "").trim();
+  // Collapse whitespace.
+  s = s.replace(/\s+/g, " ");
+  if (s.length > 40) s = s.slice(0, 40).trim();
+  return s;
+}
+
+function fallback(message: string): string {
+  const cleaned = message.replace(/\s+/g, " ").trim();
+  if (!cleaned) return "New chat";
+  const sliced = cleaned.slice(0, 40).trim();
+  return sliced.charAt(0).toUpperCase() + sliced.slice(1);
+}
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}

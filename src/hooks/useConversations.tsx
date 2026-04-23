@@ -160,6 +160,16 @@ export const useConversations = () => {
     [refresh],
   );
 
+  /**
+   * Updates a conversation's title in local state without hitting the DB.
+   * Used after autoTitleConversation persists an AI-generated title.
+   */
+  const applyTitleLocal = useCallback((id: string, title: string) => {
+    setConversations((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, title } : c)),
+    );
+  }, []);
+
   return {
     conversations,
     loading,
@@ -170,6 +180,7 @@ export const useConversations = () => {
     togglePin,
     reorderPinned,
     toggleShare,
+    applyTitleLocal,
   };
 };
 
@@ -230,15 +241,37 @@ export const deleteMessagesFrom = async (
   return !error;
 };
 
-/** Auto-titles a conversation from its first user prompt. */
-export const autoTitleConversation = async (id: string, firstMessage: string) => {
-  const cleaned = firstMessage.trim().replace(/\s+/g, " ").slice(0, 60);
-  if (!cleaned) return;
-  await supabase
+/**
+ * Asks the AI to generate a concise title for a brand-new conversation,
+ * persists it, and returns the title (or null on failure).
+ * Only updates the row if it still has the default "New chat" title.
+ */
+export const autoTitleConversation = async (
+  id: string,
+  firstMessage: string,
+): Promise<string | null> => {
+  const cleaned = firstMessage.trim();
+  if (!cleaned) return null;
+
+  let title = cleaned.replace(/\s+/g, " ").slice(0, 40);
+  try {
+    const { data, error } = await supabase.functions.invoke("chat-title", {
+      body: { message: cleaned },
+    });
+    if (!error && data?.title && typeof data.title === "string") {
+      title = data.title;
+    }
+  } catch (e) {
+    console.error("chat-title invoke failed:", e);
+  }
+
+  const { error } = await supabase
     .from("conversations")
-    .update({ title: cleaned })
+    .update({ title })
     .eq("id", id)
     .eq("title", "New chat"); // only overwrite the default
+  if (error) return null;
+  return title;
 };
 
 /**

@@ -49,6 +49,7 @@ const Chat = () => {
     togglePin,
     reorderPinned,
     toggleShare,
+    applyTitleLocal,
   } = useConversations();
 
   const activeId = searchParams.get("c");
@@ -269,6 +270,10 @@ const Chat = () => {
     const trimmed = text.trim();
     if (!trimmed || isThinking || !user) return;
 
+    // Show the typing indicator immediately so users get instant feedback,
+    // even before the conversation row is created and the AI request is fired.
+    setIsThinking(true);
+
     const wallet = publicKey?.toBase58() ?? null;
 
     // Ensure we have a conversation to write into.
@@ -294,7 +299,12 @@ const Chat = () => {
 
     // Persist the user message immediately (don't block the AI call on it).
     void saveMessage(convoId, user.id, userMsg);
-    if (isFirstMessage) void autoTitleConversation(convoId, trimmed);
+    if (isFirstMessage) {
+      void (async () => {
+        const title = await autoTitleConversation(convoId!, trimmed);
+        if (title) applyTitleLocal(convoId!, title);
+      })();
+    }
 
     await runAssistant(next, convoId);
   };
