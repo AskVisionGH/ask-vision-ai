@@ -104,6 +104,7 @@ export interface TransferQuoteData {
   ataCreationFeeSol?: number;
   estNetworkFeeSol?: number;
   quotedAt?: number;
+  savedContact?: boolean;
   error?: string;
 }
 
