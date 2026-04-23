@@ -235,8 +235,12 @@ function buildReport(args: {
   );
   const holderCount = numOrNull(rug?.totalHolders, rug?.holders?.length);
 
+  // LP locked %: full report has it per-market under markets[].lp.lpLockedPct;
+  // summary endpoint has it at root as `lpLockedPct`. Prefer per-market average,
+  // fall back to root-level value if that's all we have.
   const markets = Array.isArray(rug?.markets) ? rug.markets : [];
-  const lpLockedPct = computeLpLockedPct(markets);
+  const lpLockedPct =
+    computeLpLockedPct(markets) ?? numOrNull(rug?.lpLockedPct, rug?.totalLPProviders);
 
   const checks: RiskCheck[] = [];
 
