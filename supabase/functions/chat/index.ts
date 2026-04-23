@@ -399,6 +399,9 @@ serve(async (req) => {
           // No tool calls -> the streamed text IS the final answer unless we
           // need to force a live-data tool for the latest user request.
           if (pendingToolCalls.length === 0) {
+            // If a card was already shown this turn, the assistant text is
+            // the wrap-up — we're done. Don't force another tool call.
+            if (cardEmitted) break;
             const forced = inferForcedToolCall(lastUserMessage?.content ?? "");
             if (forced) {
               pendingToolCalls.push({
@@ -412,9 +415,13 @@ serve(async (req) => {
           }
 
           if (isLastIter) {
-            send("delta", {
-              text: "I tried but couldn't complete that — let's try a different angle.",
-            });
+            // Only show the canned fallback if we haven't already shown a
+            // card or written any text this turn.
+            if (!cardEmitted && !assistantText.trim()) {
+              send("delta", {
+                text: "I tried but couldn't complete that — let's try a different angle.",
+              });
+            }
             break;
           }
 
