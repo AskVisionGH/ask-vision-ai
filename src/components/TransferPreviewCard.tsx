@@ -317,6 +317,24 @@ export const TransferPreviewCard = ({ data: initial }: Props) => {
 
   // Success — compact card
   if (phase.name === "success") {
+    const handleSaveContact = async () => {
+      const name = contactNameDraft.trim();
+      if (!name) {
+        toast.error("Give them a name");
+        return;
+      }
+      setSavingContact(true);
+      const r = await addContact({ name, address: data.to.address });
+      setSavingContact(false);
+      if ("error" in r) {
+        toast.error("Couldn't save contact", { description: r.error });
+        return;
+      }
+      setContactSaved(true);
+      setShowSaveInput(false);
+      toast.success(`Saved ${r.name} to contacts`);
+    };
+
     return (
       <div className="ease-vision animate-fade-up overflow-hidden rounded-2xl border border-up/30 bg-up/5 p-4">
         <div className="flex items-start gap-3">
@@ -344,6 +362,67 @@ export const TransferPreviewCard = ({ data: initial }: Props) => {
                 <ExternalLink className="h-2.5 w-2.5" />
               </a>
             </div>
+
+            {/* Save as contact */}
+            {alreadySaved ? (
+              <div className="mt-2.5 inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                <Check className="h-3 w-3 text-up" />
+                <span>
+                  Saved as {existingContact?.name ?? contactNameDraft.trim()}
+                </span>
+              </div>
+            ) : showSaveInput ? (
+              <div className="mt-2.5 flex items-center gap-2">
+                <Input
+                  autoFocus
+                  value={contactNameDraft}
+                  onChange={(e) => setContactNameDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleSaveContact();
+                    } else if (e.key === "Escape") {
+                      setShowSaveInput(false);
+                    }
+                  }}
+                  placeholder="Nickname (e.g. Mom)"
+                  disabled={savingContact}
+                  className="h-7 flex-1 font-mono text-[11px]"
+                />
+                <Button
+                  size="sm"
+                  onClick={handleSaveContact}
+                  disabled={savingContact || !contactNameDraft.trim()}
+                  className="ease-vision h-7 font-mono text-[10px] tracking-wider uppercase"
+                >
+                  {savingContact ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    "Save"
+                  )}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setShowSaveInput(false)}
+                  disabled={savingContact}
+                  className="ease-vision h-7 font-mono text-[10px] tracking-wider uppercase text-muted-foreground"
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  setContactNameDraft(data.to.displayName ?? "");
+                  setShowSaveInput(true);
+                }}
+                className="ease-vision mt-2.5 inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-primary transition-colors hover:text-primary/80"
+              >
+                <UserPlus className="h-3 w-3" />
+                Save as contact
+              </button>
+            )}
           </div>
         </div>
       </div>
