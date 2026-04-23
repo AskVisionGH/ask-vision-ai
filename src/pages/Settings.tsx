@@ -260,9 +260,84 @@ const Settings = () => {
                 {saving ? "Saving…" : "Save changes"}
               </Button>
             </div>
+
+            {/* Danger zone */}
+            <section className="rounded-2xl border border-destructive/30 bg-destructive/[0.04] p-6 backdrop-blur-md">
+              <h2 className="mb-1 text-sm font-medium text-destructive">Danger zone</h2>
+              <p className="mb-4 text-xs text-muted-foreground">
+                Irreversible actions. Take a breath before clicking.
+              </p>
+
+              <div className="space-y-3">
+                <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                      <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                      Clear my data
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Wipes all chats, contacts, profile, and connected wallets — but keeps your sign-in.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setDeleteDialog("wipe")}
+                    className="shrink-0"
+                  >
+                    Clear data
+                  </Button>
+                </div>
+
+                <div className="flex flex-col gap-3 rounded-xl border border-destructive/40 bg-destructive/[0.06] p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 text-sm font-medium text-destructive">
+                      <UserMinus className="h-3.5 w-3.5" />
+                      Delete account
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Permanently deletes your account and everything tied to it.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setDeleteDialog("full")}
+                    className="shrink-0"
+                  >
+                    Delete account
+                  </Button>
+                </div>
+              </div>
+            </section>
           </div>
         )}
       </div>
+
+      {user?.email && (
+        <DeleteAccountDialog
+          open={deleteDialog !== null}
+          onOpenChange={(open) => {
+            if (!open) setDeleteDialog(null);
+          }}
+          mode={deleteDialog ?? "wipe"}
+          userEmail={user.email}
+          onConfirmed={async (mode) => {
+            setDeleteDialog(null);
+            if (mode === "full") {
+              toast.success("Account deleted");
+              await signOut();
+              navigate("/auth", { replace: true });
+            } else {
+              toast.success("Your data has been cleared");
+              // Keep them signed in — push them through onboarding fresh.
+              navigate("/onboarding", { replace: true });
+            }
+          }}
+        />
+      )}
     </main>
   );
 };
