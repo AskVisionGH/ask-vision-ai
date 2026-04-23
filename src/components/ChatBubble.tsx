@@ -12,6 +12,7 @@ import { TransferPreviewCard } from "@/components/TransferPreviewCard";
 import { RiskReportCard } from "@/components/RiskReportCard";
 import { TokenChartCard } from "@/components/TokenChartCard";
 import { SocialSentimentCard } from "@/components/SocialSentimentCard";
+import { NewsCard } from "@/components/NewsCard";
 
 interface Props {
   message: ChatMessage;
@@ -174,6 +175,9 @@ export const ChatBubble = ({ message, onEdit, readOnly = false }: Props) => {
         }
         if (event.type === "social_sentiment") {
           return <SocialSentimentCard key={i} data={event.data} />;
+        }
+        if (event.type === "solana_news") {
+          return <NewsCard key={i} data={event.data} />;
         }
         return null;
       })}

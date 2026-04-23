@@ -229,6 +229,24 @@ export interface SocialSentimentData {
   error?: string;
 }
 
+export interface NewsItem {
+  id: string;
+  title: string;
+  url: string;
+  source: string;
+  publishedAt: number;
+  summary: string | null;
+  thumbnail: string | null;
+  kind: "article" | "reddit" | "blog";
+}
+
+export interface SolanaNewsData {
+  items: NewsItem[];
+  fetchedAt: number;
+  sources: string[];
+  error?: string;
+}
+
 export type ToolEvent =
   | { type: "wallet_balance"; data: WalletBalanceData }
   | { type: "token_info"; data: TokenInfoData }
@@ -238,6 +256,7 @@ export type ToolEvent =
   | { type: "risk_report"; data: RiskReportData }
   | { type: "token_chart"; data: TokenChartData }
   | { type: "social_sentiment"; data: SocialSentimentData }
+  | { type: "solana_news"; data: SolanaNewsData }
   | { type: string; data: any };
 
 export interface ChatMessage {
