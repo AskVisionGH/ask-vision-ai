@@ -512,6 +512,18 @@ serve(async (req) => {
               const args = safeJson(tc.function?.arguments);
               result = await invokeFn("contract-analyzer", { query: args.query ?? "" }, req);
               eventType = "risk_report";
+            } else if (name === "get_token_chart") {
+              const args = safeJson(tc.function?.arguments);
+              result = await invokeFn(
+                "token-chart",
+                { query: args.query ?? "", interval: args.interval ?? "15m" },
+                req,
+              );
+              eventType = "token_chart";
+            } else if (name === "get_social_sentiment") {
+              const args = safeJson(tc.function?.arguments);
+              result = await invokeFn("social-sentiment", { query: args.query ?? "" }, req);
+              eventType = "social_sentiment";
             } else {
               result = { error: `Unknown tool: ${name}` };
             }
