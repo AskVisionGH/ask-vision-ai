@@ -34,6 +34,7 @@ interface Props {
   onNew: () => void;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
+  onTogglePin: (id: string, pinned: boolean) => void;
 }
 
 export const ChatSidebar = ({
@@ -44,6 +45,7 @@ export const ChatSidebar = ({
   onNew,
   onRename,
   onDelete,
+  onTogglePin,
 }: Props) => {
   const { user, signOut } = useAuth();
   const { profile } = useProfile();
