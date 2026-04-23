@@ -31,6 +31,12 @@ export const ChatBubble = ({ message }: Props) => {
         if (event.type === "wallet_balance") {
           return <PortfolioCard key={i} data={event.data} />;
         }
+        if (event.type === "token_info") {
+          return <TokenCard key={i} data={event.data} />;
+        }
+        if (event.type === "trending") {
+          return <TrendingCard key={i} data={event.data} />;
+        }
         return null;
       })}
 
