@@ -21,6 +21,7 @@ Tools (call them whenever relevant — don't ask permission, don't pretend you c
 - \`get_token_info\` — fetches live price, market cap, volume, and 24h change for a single token. Use whenever the user names a token ($SOL, JUP, BONK) or pastes a mint address. Argument: \`query\` (ticker like "SOL" or full mint address).
 - \`get_trending\` — fetches the top trending Solana tokens by 24h volume. ALWAYS call this for any question about what's trending, hot, popular, top tokens, or what's moving on Solana — never answer from memory.
 - \`prepare_swap\` — fetches a live Jupiter quote for swapping one token into another. Call this whenever the user wants to swap, trade, exchange, or convert tokens (e.g. "swap 0.1 SOL for USDC", "trade 100 BONK to SOL"). Arguments: \`inputToken\`, \`outputToken\` (tickers or mint addresses), \`amount\` (decimal of inputToken), and optional \`slippageBps\` (default 50 = 0.5%). NEVER execute — this only quotes.
+- \`prepare_transfer\` — prepares a transfer of SOL or any SPL token to another wallet, by address or .sol name. Use whenever the user wants to send, transfer, or pay tokens (e.g. "send 0.05 SOL to toly.sol", "transfer 10 USDC to 7xKX…9aPq"). Arguments: \`token\` (ticker or mint), \`amount\` (decimal), \`recipient\` (wallet address or .sol name). NEVER execute — the user signs in the card.
 
 CRITICAL: If a user asks for live data (prices, balances, what's trending, swap quotes), you MUST call the matching tool. Never make up numbers. Never say "here are the top tokens" without first calling \`get_trending\`. Never quote a swap rate without calling \`prepare_swap\`.
 
@@ -28,13 +29,12 @@ After any tool returns, the UI renders a rich card automatically. Your job is a 
 
 If a tool returns an error, explain it plainly and suggest a next step.
 
-Capabilities (coming next — do NOT pretend you can do these yet):
-- Preparing and executing transfers (SOL or SPL tokens to another address)
-- SNS (.sol name) resolution
+When a user wants to swap or transfer, just call the matching tool — they confirm and sign in the card itself. After a swap or transfer confirms, the UI shows a success card automatically; don't restate the result, just acknowledge briefly if they ask follow-ups.
 
-When a user wants to swap, just call \`prepare_swap\` — they confirm and sign in the card itself. After a swap confirms, the UI shows a success card automatically; don't restate the result, just acknowledge briefly if they ask follow-ups.
+When a transfer involves a .sol name, ALWAYS show the resolved wallet address alongside the name in your reply (e.g. "Sending to toly.sol — \`4Nd1m…h2Cj\`") so the user can sanity-check the destination before signing.
 
-For transfers (sending SOL or SPL tokens to another address), say plainly: "Transfers ship in the next update — for now I can quote swaps and show portfolio data."
+Capabilities still ahead (don't pretend you can do these yet):
+- SNS subdomain records, address book, batch sends, NFT transfers
 
 Never:
 - Give financial advice, price predictions, or trade signals.
@@ -78,6 +78,33 @@ const TOOLS = [
       description:
         "Fetch the top 10 trending Solana tokens right now, ranked by 24h trading volume. Use for 'what's trending', 'top tokens', 'what's hot on Solana', etc.",
       parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "prepare_transfer",
+      description:
+        "Prepare a transfer of SOL or an SPL token to another wallet. Use whenever the user wants to send, transfer, or pay tokens to a wallet address or a .sol name. NEVER executes — only returns a preview.",
+      parameters: {
+        type: "object",
+        properties: {
+          token: {
+            type: "string",
+            description: "Ticker (e.g. 'SOL', 'USDC', 'JUP') or full mint address of the token to send.",
+          },
+          amount: {
+            type: "number",
+            description: "Decimal amount to send (e.g. 0.05 for 0.05 SOL).",
+          },
+          recipient: {
+            type: "string",
+            description: "Recipient wallet address (base58) or .sol name (e.g. 'toly.sol').",
+          },
+        },
+        required: ["token", "amount", "recipient"],
+        additionalProperties: false,
+      },
     },
   },
   {
@@ -217,6 +244,22 @@ serve(async (req) => {
             slippageBps: args.slippageBps,
           }, req);
           toolEvents.push({ type: "swap_quote", data: result });
+        } else if (name === "prepare_transfer") {
+          let args: any = {};
+          try {
+            args = JSON.parse(tc.function?.arguments ?? "{}");
+          } catch { /* ignore */ }
+          if (!walletAddress) {
+            result = { error: "No wallet connected. Connect your wallet first." };
+          } else {
+            result = await invokeFn("transfer-quote", {
+              fromAddress: walletAddress,
+              token: args.token ?? "",
+              amount: args.amount,
+              recipient: args.recipient ?? "",
+            }, req);
+          }
+          toolEvents.push({ type: "transfer_quote", data: result });
         } else {
           result = { error: `Unknown tool: ${name}` };
         }
