@@ -252,9 +252,7 @@ serve(async (req) => {
           if (!walletAddress) {
             result = { error: "No wallet connected. Connect your wallet first." };
           } else {
-            const recipientResolved = await invokeFn("resolve-recipient", {
-              recipient: args.recipient ?? "",
-            }, req);
+            const recipientResolved = await resolveRecipientInline(args.recipient ?? "");
 
             if (recipientResolved?.error) {
               result = recipientResolved;
@@ -266,7 +264,6 @@ serve(async (req) => {
                 recipient: args.recipient ?? "",
                 resolvedAddress: recipientResolved.address,
                 displayName: recipientResolved.displayName ?? null,
-                isOnCurve: recipientResolved.isOnCurve,
               }, req);
             }
           }
