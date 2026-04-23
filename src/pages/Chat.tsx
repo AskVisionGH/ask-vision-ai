@@ -196,6 +196,7 @@ const Chat = () => {
       onRename={renameConversation}
       onDelete={handleDelete}
       onTogglePin={togglePin}
+      onReorderPinned={reorderPinned}
     />
   );
 
