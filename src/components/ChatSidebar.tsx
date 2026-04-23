@@ -8,6 +8,8 @@ import {
   LogOut,
   MessageSquarePlus,
   MoreHorizontal,
+  PanelLeftClose,
+  PanelLeftOpen,
   Pencil,
   Pin,
   PinOff,
@@ -77,6 +79,10 @@ interface Props {
   onReorderPinned: (orderedIds: string[]) => void;
   onShare: (c: ConversationRow) => void;
   onUnshare: (c: ConversationRow) => void;
+  /** When true, renders a narrow icon-only rail. */
+  collapsed?: boolean;
+  /** Toggle collapse state (desktop only). */
+  onToggleCollapsed?: () => void;
 }
 
 interface RowProps {
