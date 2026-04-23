@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   RefreshCw,
@@ -7,7 +7,12 @@ import {
   ExternalLink,
   AlertCircle,
   AlertTriangle,
+  UserPlus,
+  Check,
 } from "lucide-react";
+import { toast } from "sonner";
+import { useContacts, findContactByAddress } from "@/hooks/useContacts";
+import { Input } from "@/components/ui/input";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import {
   ComputeBudgetProgram,
@@ -89,9 +94,21 @@ export const TransferPreviewCard = ({ data: initial }: Props) => {
   const [phase, setPhase] = useState<Phase>({ name: "preview" });
   const [refreshing, setRefreshing] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+  const [savingContact, setSavingContact] = useState(false);
+  const [contactSaved, setContactSaved] = useState(false);
+  const [contactNameDraft, setContactNameDraft] = useState("");
+  const [showSaveInput, setShowSaveInput] = useState(false);
   const mounted = useRef(true);
   const { connection } = useConnection();
   const { publicKey, signTransaction, connected } = useWallet();
+  const { contacts, addContact } = useContacts();
+
+  const recipientAddress = data.to?.address ?? "";
+  const existingContact = useMemo(
+    () => (recipientAddress ? findContactByAddress(contacts, recipientAddress) : null),
+    [contacts, recipientAddress],
+  );
+  const alreadySaved = !!existingContact || contactSaved;
 
   useEffect(() => {
     mounted.current = true;
@@ -300,6 +317,24 @@ export const TransferPreviewCard = ({ data: initial }: Props) => {
 
   // Success — compact card
   if (phase.name === "success") {
+    const handleSaveContact = async () => {
+      const name = contactNameDraft.trim();
+      if (!name) {
+        toast.error("Give them a name");
+        return;
+      }
+      setSavingContact(true);
+      const r = await addContact({ name, address: data.to.address });
+      setSavingContact(false);
+      if ("error" in r) {
+        toast.error("Couldn't save contact", { description: r.error });
+        return;
+      }
+      setContactSaved(true);
+      setShowSaveInput(false);
+      toast.success(`Saved ${r.name} to contacts`);
+    };
+
     return (
       <div className="ease-vision animate-fade-up overflow-hidden rounded-2xl border border-up/30 bg-up/5 p-4">
         <div className="flex items-start gap-3">
@@ -327,6 +362,67 @@ export const TransferPreviewCard = ({ data: initial }: Props) => {
                 <ExternalLink className="h-2.5 w-2.5" />
               </a>
             </div>
+
+            {/* Save as contact */}
+            {alreadySaved ? (
+              <div className="mt-2.5 inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                <Check className="h-3 w-3 text-up" />
+                <span>
+                  Saved as {existingContact?.name ?? contactNameDraft.trim()}
+                </span>
+              </div>
+            ) : showSaveInput ? (
+              <div className="mt-2.5 flex items-center gap-2">
+                <Input
+                  autoFocus
+                  value={contactNameDraft}
+                  onChange={(e) => setContactNameDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleSaveContact();
+                    } else if (e.key === "Escape") {
+                      setShowSaveInput(false);
+                    }
+                  }}
+                  placeholder="Nickname (e.g. Mom)"
+                  disabled={savingContact}
+                  className="h-7 flex-1 font-mono text-[11px]"
+                />
+                <Button
+                  size="sm"
+                  onClick={handleSaveContact}
+                  disabled={savingContact || !contactNameDraft.trim()}
+                  className="ease-vision h-7 font-mono text-[10px] tracking-wider uppercase"
+                >
+                  {savingContact ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    "Save"
+                  )}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setShowSaveInput(false)}
+                  disabled={savingContact}
+                  className="ease-vision h-7 font-mono text-[10px] tracking-wider uppercase text-muted-foreground"
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  setContactNameDraft(data.to.displayName ?? "");
+                  setShowSaveInput(true);
+                }}
+                className="ease-vision mt-2.5 inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-primary transition-colors hover:text-primary/80"
+              >
+                <UserPlus className="h-3 w-3" />
+                Save as contact
+              </button>
+            )}
           </div>
         </div>
       </div>
