@@ -22,7 +22,7 @@ import {
   useConversations,
   type ConversationRow,
 } from "@/hooks/useConversations";
-import { sendChat, type ChatMessage } from "@/lib/chat-stream";
+import { streamChat, type ChatMessage, type ToolEvent } from "@/lib/chat-stream";
 import { cn } from "@/lib/utils";
 
 const SUGGESTIONS = [
