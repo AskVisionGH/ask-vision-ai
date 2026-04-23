@@ -1,11 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Pencil, X } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/lib/chat-stream";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { PortfolioCard } from "@/components/PortfolioCard";
 import { TokenCard } from "@/components/TokenCard";
 import { TrendingCard } from "@/components/TrendingCard";
