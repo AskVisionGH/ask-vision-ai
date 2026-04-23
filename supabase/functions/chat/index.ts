@@ -178,7 +178,9 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { messages, walletAddress, profile } = await req.json();
+    const { messages, walletAddress, profile, contacts } = await req.json();
+    const contactList: { name: string; address: string; resolved_address: string | null }[] =
+      Array.isArray(contacts) ? contacts : [];
 
     if (!Array.isArray(messages)) {
       return json({ error: "messages must be an array" }, 400);
