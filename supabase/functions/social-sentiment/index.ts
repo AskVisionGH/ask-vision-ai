@@ -47,6 +47,7 @@ interface ResolvedToken {
   symbol: string;
   name: string;
   topic: string;
+  address: string | null;
 }
 
 const KNOWN_MINTS: Record<string, string> = {
@@ -247,6 +248,27 @@ async function tryLunarCrush(resolved: ResolvedToken, apiKey: string): Promise<S
 }
 
 async function buildGoogleNewsFallback(resolved: ResolvedToken): Promise<SocialSentimentData> {
+  if (resolved.address) {
+    return {
+      symbol: resolved.symbol,
+      name: resolved.name,
+      topic: resolved.topic,
+      bullishPct: null,
+      galaxyScore: null,
+      altRank: null,
+      socialVolume24h: null,
+      socialVolumeChangePct: null,
+      contributors24h: null,
+      sentimentVerdict: "unknown",
+      headline: `No reliable public news match for $${resolved.symbol} yet`,
+      series: [],
+      topPosts: [],
+      sources: ["Google News"],
+      reportUrl: null,
+      error: "No reliable public social source found for this token yet.",
+    };
+  }
+
   const searchTerms = [resolved.symbol, resolved.name]
     .filter(Boolean)
     .map((term) => `\"${term}\"`)
@@ -339,7 +361,11 @@ async function resolveToken(queryRaw: string): Promise<ResolvedToken> {
     }
     if (resp.ok) {
       const json = await resp.json();
-      const pairs = (json.pairs ?? []).filter((p: any) => p.chainId === "solana");
+      let pairs = (json.pairs ?? []).filter((p: any) => p.chainId === "solana");
+      if (looksLikeMint || knownMint) {
+        const expected = (knownMint ?? cleaned).toLowerCase();
+        pairs = pairs.filter((p: any) => String(p.baseToken?.address ?? "").toLowerCase() === expected);
+      }
       if (pairs.length) {
         pairs.sort((a: any, b: any) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0));
         const top = pairs[0];
@@ -347,6 +373,7 @@ async function resolveToken(queryRaw: string): Promise<ResolvedToken> {
           symbol: String(top.baseToken?.symbol ?? upper).toUpperCase(),
           name: String(top.baseToken?.name ?? cleaned),
           topic: String(top.baseToken?.symbol ?? upper).toLowerCase(),
+          address: String(top.baseToken?.address ?? "") || null,
         };
       }
     }
@@ -358,6 +385,7 @@ async function resolveToken(queryRaw: string): Promise<ResolvedToken> {
     symbol: upper,
     name: cleaned,
     topic: cleaned.toLowerCase(),
+    address: looksLikeMint ? cleaned : null,
   };
 }
 

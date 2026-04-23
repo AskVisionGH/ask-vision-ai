@@ -273,6 +273,10 @@ serve(async (req) => {
     ...messages,
   ];
 
+  const lastUserMessage = [...messages].reverse().find(
+    (m) => m && typeof m.content === "string" && m.role === "user",
+  );
+
   // Build an SSE response. We emit three event types:
   //   event: tool   -> tool result card payloads
   //   event: delta  -> assistant text token chunks
@@ -387,9 +391,19 @@ serve(async (req) => {
             }
           }
 
-          // No tool calls -> the streamed text IS the final answer. We're done.
+          // No tool calls -> the streamed text IS the final answer unless we
+          // need to force a live-data tool for the latest user request.
           if (pendingToolCalls.length === 0) {
-            break;
+            const forced = inferForcedToolCall(lastUserMessage?.content ?? "");
+            if (forced) {
+              pendingToolCalls.push({
+                id: `forced_${crypto.randomUUID()}`,
+                name: forced.name,
+                arguments: JSON.stringify(forced.args),
+              });
+            } else {
+              break;
+            }
           }
 
           if (isLastIter) {
@@ -640,6 +654,44 @@ function json(body: unknown, status = 200) {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
+}
+
+function inferForcedToolCall(message: string):
+  | { name: "get_token_chart"; args: { query: string; interval?: string } }
+  | { name: "get_social_sentiment"; args: { query: string } }
+  | null {
+  const raw = (message ?? "").trim();
+  if (!raw) return null;
+  const lower = raw.toLowerCase();
+
+  const chartIntent = /\b(chart|candles|candle|price action|how's it looking|trend|graph)\b/.test(lower);
+  const sentimentIntent = /\b(sentiment|social|twitter|x\b|reddit|vibe check|lore)\b/.test(lower);
+
+  if (!chartIntent && !sentimentIntent) return null;
+
+  const interval =
+    lower.includes("5m") ? "5m"
+      : lower.includes("15m") ? "15m"
+      : lower.includes("4h") ? "4h"
+      : lower.includes("1d") || lower.includes("daily") ? "1d"
+      : "1h";
+
+  const mintMatch = raw.match(/[1-9A-HJ-NP-Za-km-z]{32,44}/);
+  let query = mintMatch?.[0] ?? "";
+
+  if (!query) {
+    const cleaned = raw
+      .replace(/\$/g, "")
+      .replace(/\b(chart|candles|candle|price action|how's it looking|trend|graph|social|sentiment|twitter|reddit|vibe check|lore|for|about|on|show me|send me|the|hourly|daily)\b/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (cleaned) query = cleaned;
+  }
+
+  if (!query) return null;
+
+  if (chartIntent) return { name: "get_token_chart", args: { query, interval } };
+  return { name: "get_social_sentiment", args: { query } };
 }
 
 function buildProfileBlock(profile: any): string | null {
