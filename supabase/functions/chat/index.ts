@@ -292,6 +292,11 @@ serve(async (req) => {
         );
       };
 
+      // Track tools already invoked this turn so we never emit duplicate
+      // cards if the model decides to call the same tool again.
+      const emittedToolKeys = new Set<string>();
+      let cardEmitted = false;
+
       try {
         for (let iter = 0; iter < 3; iter++) {
           const isLastIter = iter === 2;
