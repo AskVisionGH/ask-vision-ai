@@ -11,6 +11,7 @@ import {
   Pencil,
   Pin,
   PinOff,
+  Radar,
   Search,
   Settings as SettingsIcon,
   Trash2,
@@ -380,6 +381,13 @@ export const ChatSidebar = ({
         >
           <Users className="h-3.5 w-3.5" />
           Contacts
+        </Link>
+        <Link
+          to="/tracked-wallets"
+          className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground ease-vision hover:bg-secondary/60 hover:text-foreground"
+        >
+          <Radar className="h-3.5 w-3.5" />
+          Tracked wallets
         </Link>
         <button
           type="button"

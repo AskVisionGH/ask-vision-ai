@@ -13,6 +13,7 @@ import SharedChat from "./pages/SharedChat.tsx";
 import Onboarding from "./pages/Onboarding.tsx";
 import Settings from "./pages/Settings.tsx";
 import Contacts from "./pages/Contacts.tsx";
+import TrackedWallets from "./pages/TrackedWallets.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -84,6 +85,14 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <Contacts />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/tracked-wallets"
+                element={
+                  <ProtectedRoute>
+                    <TrackedWallets />
                   </ProtectedRoute>
                 }
               />
