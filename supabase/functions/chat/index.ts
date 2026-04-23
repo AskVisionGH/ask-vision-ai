@@ -585,10 +585,20 @@ serve(async (req) => {
               cardEmitted = true;
             }
 
+            // When a tool errors, append a strict instruction so the model
+            // writes ONE brief explanation and stops — no second paraphrase.
+            const toolPayload = hasError
+              ? {
+                  error: result.error,
+                  instructions:
+                    "Write exactly ONE short, friendly sentence telling the user what couldn't be done and stop. Do not repeat yourself. Do not call any more tools.",
+                }
+              : result;
+
             conversation.push({
               role: "tool",
               tool_call_id: tc.id,
-              content: JSON.stringify(result),
+              content: JSON.stringify(toolPayload),
             });
           }
         }
