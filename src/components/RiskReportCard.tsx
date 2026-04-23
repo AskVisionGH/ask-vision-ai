@@ -19,16 +19,16 @@ const VERDICT_STYLE: Record<
     label: "Looks clean",
   },
   caution: {
-    ring: "border-amber-500/30",
-    bg: "bg-amber-500/10",
-    text: "text-amber-400",
+    ring: "border-warn/30",
+    bg: "bg-warn/10",
+    text: "text-warn",
     Icon: Shield,
     label: "Minor risks",
   },
   risky: {
-    ring: "border-orange-500/40",
-    bg: "bg-orange-500/10",
-    text: "text-orange-400",
+    ring: "border-risk/40",
+    bg: "bg-risk/10",
+    text: "text-risk",
     Icon: ShieldAlert,
     label: "Notable risks",
   },
@@ -53,7 +53,7 @@ const STATUS_STYLE: Record<
   { Icon: LucideIcon; color: string }
 > = {
   good: { Icon: Check, color: "text-up" },
-  warn: { Icon: AlertTriangle, color: "text-amber-400" },
+  warn: { Icon: AlertTriangle, color: "text-warn" },
   bad: { Icon: X, color: "text-down" },
   unknown: { Icon: HelpCircle, color: "text-muted-foreground" },
 };
@@ -116,8 +116,8 @@ export const RiskReportCard = ({ data }: Props) => {
             className={cn(
               "absolute inset-y-0 left-0 rounded-full transition-all",
               data.verdict === "safe" && "bg-up",
-              data.verdict === "caution" && "bg-amber-400",
-              data.verdict === "risky" && "bg-orange-400",
+              data.verdict === "caution" && "bg-warn",
+              data.verdict === "risky" && "bg-risk",
               data.verdict === "danger" && "bg-down",
               data.verdict === "unknown" && "bg-muted-foreground/40",
             )}
