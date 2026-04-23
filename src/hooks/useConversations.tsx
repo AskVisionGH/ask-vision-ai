@@ -35,9 +35,10 @@ export const useConversations = () => {
     }
     const { data, error } = await supabase
       .from("conversations")
-      .select("id, title, wallet_address, created_at, updated_at")
+      .select("id, title, wallet_address, pinned, created_at, updated_at")
+      .order("pinned", { ascending: false })
       .order("updated_at", { ascending: false });
-    if (!error && data) setConversations(data);
+    if (!error && data) setConversations(data as ConversationRow[]);
     setLoading(false);
   }, [user]);
 
@@ -56,11 +57,12 @@ export const useConversations = () => {
           wallet_address: walletAddress,
           title: "New chat",
         })
-        .select("id, title, wallet_address, created_at, updated_at")
+        .select("id, title, wallet_address, pinned, created_at, updated_at")
         .single();
       if (error || !data) return null;
-      setConversations((prev) => [data, ...prev]);
-      return data;
+      const row = data as ConversationRow;
+      setConversations((prev) => [row, ...prev]);
+      return row;
     },
     [user],
   );
@@ -79,6 +81,21 @@ export const useConversations = () => {
     await supabase.from("conversations").delete().eq("id", id);
   }, []);
 
+  const togglePin = useCallback(async (id: string, pinned: boolean) => {
+    setConversations((prev) => {
+      const next = prev.map((c) => (c.id === id ? { ...c, pinned } : c));
+      // Re-sort: pinned first, then by updated_at desc
+      return next.sort((a, b) => {
+        if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+        return b.updated_at.localeCompare(a.updated_at);
+      });
+    });
+    await supabase
+      .from("conversations")
+      .update({ pinned } as never)
+      .eq("id", id);
+  }, []);
+
   return {
     conversations,
     loading,
@@ -86,6 +103,7 @@ export const useConversations = () => {
     createConversation,
     renameConversation,
     deleteConversation,
+    togglePin,
   };
 };
 
