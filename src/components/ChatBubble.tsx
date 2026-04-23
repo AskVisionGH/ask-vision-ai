@@ -26,20 +26,6 @@ export const ChatBubble = ({ message }: Props) => {
   // Assistant
   return (
     <div className="flex w-full animate-fade-up flex-col gap-3">
-      {/* Tool event cards (rendered above text) */}
-      {message.toolEvents?.map((event, i) => {
-        if (event.type === "wallet_balance") {
-          return <PortfolioCard key={i} data={event.data} />;
-        }
-        if (event.type === "token_info") {
-          return <TokenCard key={i} data={event.data} />;
-        }
-        if (event.type === "trending") {
-          return <TrendingCard key={i} data={event.data} />;
-        }
-        return null;
-      })}
-
       {message.content && (
         <div
           className={cn(
@@ -57,6 +43,19 @@ export const ChatBubble = ({ message }: Props) => {
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
         </div>
       )}
+
+      {message.toolEvents?.map((event, i) => {
+        if (event.type === "wallet_balance") {
+          return <PortfolioCard key={i} data={event.data} />;
+        }
+        if (event.type === "token_info") {
+          return <TokenCard key={i} data={event.data} />;
+        }
+        if (event.type === "trending") {
+          return <TrendingCard key={i} data={event.data} />;
+        }
+        return null;
+      })}
     </div>
   );
 };
