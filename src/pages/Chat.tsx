@@ -47,16 +47,20 @@ const Chat = () => {
   const [input, setInput] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  // When true, suppress the auto-select-most-recent effect so a freshly
+  // started "new chat" doesn't snap back to the latest existing thread.
+  const [draftingNew, setDraftingNew] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
 
   // Auto-select most recent conversation on first load (or none if list is empty).
   useEffect(() => {
     if (convosLoading) return;
     if (activeId) return;
+    if (draftingNew) return;
     if (conversations.length > 0) {
       setSearchParams({ c: conversations[0].id }, { replace: true });
     }
-  }, [convosLoading, conversations, activeId, setSearchParams]);
+  }, [convosLoading, conversations, activeId, draftingNew, setSearchParams]);
 
   // Load messages when active conversation changes.
   useEffect(() => {
