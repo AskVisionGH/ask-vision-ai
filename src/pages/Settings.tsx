@@ -1,7 +1,7 @@
 import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeft, Camera, Trash2, UserMinus } from "lucide-react";
+import { ArrowLeft, Camera, RotateCcw, ShieldAlert, Trash2, UserMinus } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import {
   CryptoExperience,
@@ -18,6 +18,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { UserAvatar } from "@/components/UserAvatar";
 import { DeleteAccountDialog } from "@/components/DeleteAccountDialog";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
 
 const Settings = () => {
@@ -239,19 +245,7 @@ const Settings = () => {
               </div>
             </section>
 
-            <div className="flex items-center justify-between gap-3 pt-2">
-              <button
-                type="button"
-                onClick={async () => {
-                  // Onboarding redirects to /chat if already completed, so we
-                  // have to flip the flag back off before navigating.
-                  await updateProfile({ onboarding_completed: false });
-                  navigate("/onboarding");
-                }}
-                className="text-xs text-muted-foreground/70 hover:text-foreground ease-vision"
-              >
-                Re-run onboarding
-              </button>
+            <div className="flex justify-end pt-2">
               <Button
                 onClick={save}
                 disabled={saving}
@@ -261,57 +255,104 @@ const Settings = () => {
               </Button>
             </div>
 
-            {/* Danger zone */}
-            <section className="rounded-2xl border border-destructive/30 bg-destructive/[0.04] p-6 backdrop-blur-md">
-              <h2 className="mb-1 text-sm font-medium text-destructive">Danger zone</h2>
-              <p className="mb-4 text-xs text-muted-foreground">
-                Irreversible actions. Take a breath before clicking.
-              </p>
-
-              <div className="space-y-3">
-                <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                      <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-                      Clear my data
+            {/* Collapsible: account actions + danger zone */}
+            <Accordion type="multiple" className="space-y-3">
+              <AccordionItem
+                value="onboarding"
+                className="rounded-2xl border border-border bg-card/40 px-6 backdrop-blur-md"
+              >
+                <AccordionTrigger className="py-4 text-sm font-medium text-foreground hover:no-underline [&[data-state=open]]:pb-3">
+                  <span className="flex items-center gap-2">
+                    <RotateCcw className="h-3.5 w-3.5 text-muted-foreground" />
+                    Account actions
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className="pb-5">
+                  <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-foreground">Re-run onboarding</div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Walk through the intro flow again to reset your preferences.
+                      </p>
                     </div>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Wipes all chats, contacts, profile, and connected wallets — but keeps your sign-in.
-                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        // Onboarding redirects to /chat if already completed, so we
+                        // have to flip the flag back off before navigating.
+                        await updateProfile({ onboarding_completed: false });
+                        navigate("/onboarding");
+                      }}
+                      className="shrink-0"
+                    >
+                      Re-run
+                    </Button>
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setDeleteDialog("wipe")}
-                    className="shrink-0"
-                  >
-                    Clear data
-                  </Button>
-                </div>
+                </AccordionContent>
+              </AccordionItem>
 
-                <div className="flex flex-col gap-3 rounded-xl border border-destructive/40 bg-destructive/[0.06] p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 text-sm font-medium text-destructive">
-                      <UserMinus className="h-3.5 w-3.5" />
-                      Delete account
+              <AccordionItem
+                value="danger"
+                className="rounded-2xl border border-destructive/30 bg-destructive/[0.04] px-6 backdrop-blur-md"
+              >
+                <AccordionTrigger className="py-4 text-sm font-medium text-destructive hover:no-underline [&[data-state=open]]:pb-3">
+                  <span className="flex items-center gap-2">
+                    <ShieldAlert className="h-3.5 w-3.5" />
+                    Danger zone
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className="pb-5">
+                  <p className="mb-3 text-xs text-muted-foreground">
+                    Irreversible actions. Take a breath before clicking.
+                  </p>
+                  <div className="space-y-3">
+                    <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                          <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                          Clear my data
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Wipes all chats, contacts, profile, and connected wallets — but keeps your sign-in.
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setDeleteDialog("wipe")}
+                        className="shrink-0"
+                      >
+                        Clear data
+                      </Button>
                     </div>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Permanently deletes your account and everything tied to it.
-                    </p>
+
+                    <div className="flex flex-col gap-3 rounded-xl border border-destructive/40 bg-destructive/[0.06] p-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 text-sm font-medium text-destructive">
+                          <UserMinus className="h-3.5 w-3.5" />
+                          Delete account
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Permanently deletes your account and everything tied to it.
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => setDeleteDialog("full")}
+                        className="shrink-0"
+                      >
+                        Delete account
+                      </Button>
+                    </div>
                   </div>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => setDeleteDialog("full")}
-                    className="shrink-0"
-                  >
-                    Delete account
-                  </Button>
-                </div>
-              </div>
-            </section>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
           </div>
         )}
       </div>
