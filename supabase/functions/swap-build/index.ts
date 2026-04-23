@@ -27,6 +27,11 @@ serve(async (req) => {
       return json({ error: "amount (atomic) must be a positive number" }, 400);
     }
 
+    // Platform fee config — must match swap-quote so the route plan is
+    // priced consistently with the preview.
+    const PLATFORM_FEE_BPS = 100; // 1%
+    const referralAccount = Deno.env.get("JUPITER_REFERRAL_ACCOUNT") ?? "";
+
     // Re-fetch a fresh quote at submission time so the transaction is built
     // against the current on-chain state (not the 15s-old preview).
     const quoteUrl = new URL("https://lite-api.jup.ag/swap/v1/quote");
@@ -35,6 +40,9 @@ serve(async (req) => {
     quoteUrl.searchParams.set("amount", String(Math.floor(amount)));
     quoteUrl.searchParams.set("slippageBps", String(slippageBps));
     quoteUrl.searchParams.set("restrictIntermediateTokens", "true");
+    if (referralAccount) {
+      quoteUrl.searchParams.set("platformFeeBps", String(PLATFORM_FEE_BPS));
+    }
 
     const qResp = await fetch(quoteUrl.toString());
     if (!qResp.ok) {
@@ -44,6 +52,29 @@ serve(async (req) => {
     }
     const quoteResponse = await qResp.json();
 
+    // Derive the per-output-mint fee token account owned by the referral PDA.
+    // Jupiter expects `feeAccount` to be a referral-program token account for
+    // the OUTPUT mint, derived as PDA(["referral_ata", referralAccount, mint]).
+    let feeAccount: string | undefined;
+    if (referralAccount) {
+      try {
+        const { PublicKey } = await import("https://esm.sh/@solana/web3.js@1.95.3");
+        const REFERRAL_PROGRAM = new PublicKey("REFER4ZgmyYx9c6He5XfaTMiGfdLwRnkV4RPp9t9iF3");
+        const [pda] = PublicKey.findProgramAddressSync(
+          [
+            new TextEncoder().encode("referral_ata"),
+            new PublicKey(referralAccount).toBuffer(),
+            new PublicKey(outputMint).toBuffer(),
+          ],
+          REFERRAL_PROGRAM,
+        );
+        feeAccount = pda.toBase58();
+      } catch (e) {
+        console.error("Failed to derive feeAccount PDA:", e);
+        // Continue without fee rather than blocking the swap.
+      }
+    }
+
     const swapResp = await fetch("https://lite-api.jup.ag/swap/v1/swap", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -52,6 +83,7 @@ serve(async (req) => {
         userPublicKey,
         wrapAndUnwrapSol: true,
         dynamicComputeUnitLimit: true,
+        ...(feeAccount ? { feeAccount } : {}),
         prioritizationFeeLamports: {
           priorityLevelWithMaxLamports: {
             maxLamports: 1_000_000, // cap at 0.001 SOL
