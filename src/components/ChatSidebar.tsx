@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { LogOut, MessageSquarePlus, MoreHorizontal, Pencil, Settings as SettingsIcon, Trash2 } from "lucide-react";
+import { LogOut, MessageSquarePlus, MoreHorizontal, Pencil, Settings as SettingsIcon, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -80,6 +80,17 @@ export const ChatSidebar = ({
         >
           <MessageSquarePlus className="h-4 w-4" />
         </Button>
+      </div>
+
+      {/* Quick links */}
+      <div className="shrink-0 border-b border-border/60 px-2 py-2">
+        <Link
+          to="/contacts"
+          className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground ease-vision hover:bg-secondary/60 hover:text-foreground"
+        >
+          <Users className="h-3.5 w-3.5" />
+          Contacts
+        </Link>
       </div>
 
       {/* Thread list */}

@@ -104,6 +104,7 @@ export interface TransferQuoteData {
   ataCreationFeeSol?: number;
   estNetworkFeeSol?: number;
   quotedAt?: number;
+  savedContact?: boolean;
   error?: string;
 }
 
@@ -135,10 +136,17 @@ export interface UserProfileContext {
   riskTolerance?: "cautious" | "balanced" | "aggressive" | null;
 }
 
+export interface ContactContext {
+  name: string;
+  address: string;
+  resolved_address: string | null;
+}
+
 export async function sendChat(args: {
   messages: ChatMessage[];
   walletAddress?: string;
   profile?: UserProfileContext;
+  contacts?: ContactContext[];
   signal?: AbortSignal;
 }): Promise<{ content: string; toolEvents: ToolEvent[] } | { error: string; status: number }> {
   try {
@@ -152,6 +160,7 @@ export async function sendChat(args: {
         messages: toModelMessages(args.messages),
         walletAddress: args.walletAddress ?? null,
         profile: args.profile ?? null,
+        contacts: args.contacts ?? [],
       }),
       signal: args.signal,
     });

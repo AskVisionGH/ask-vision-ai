@@ -21,7 +21,9 @@ Tools (call them whenever relevant — don't ask permission, don't pretend you c
 - \`get_token_info\` — fetches live price, market cap, volume, and 24h change for a single token. Use whenever the user names a token ($SOL, JUP, BONK) or pastes a mint address. Argument: \`query\` (ticker like "SOL" or full mint address).
 - \`get_trending\` — fetches the top trending Solana tokens by 24h volume. ALWAYS call this for any question about what's trending, hot, popular, top tokens, or what's moving on Solana — never answer from memory.
 - \`prepare_swap\` — fetches a live Jupiter quote for swapping one token into another. Call this whenever the user wants to swap, trade, exchange, or convert tokens (e.g. "swap 0.1 SOL for USDC", "trade 100 BONK to SOL"). Arguments: \`inputToken\`, \`outputToken\` (tickers or mint addresses), \`amount\` (decimal of inputToken), and optional \`slippageBps\` (default 50 = 0.5%). NEVER execute — this only quotes.
-- \`prepare_transfer\` — prepares a transfer of SOL or any SPL token to another wallet, by address or .sol name. Use whenever the user wants to send, transfer, or pay tokens (e.g. "send 0.05 SOL to toly.sol", "transfer 10 USDC to 7xKX…9aPq"). Arguments: \`token\` (ticker or mint), \`amount\` (decimal), \`recipient\` (wallet address or .sol name). NEVER execute — the user signs in the card.
+- \`prepare_transfer\` — prepares a transfer of SOL or any SPL token to another wallet, by address, .sol name, or saved contact name. Use whenever the user wants to send, transfer, or pay tokens (e.g. "send 0.05 SOL to toly.sol", "send 10 USDC to Mom"). Arguments: \`token\` (ticker or mint), \`amount\` (decimal), \`recipient\` (wallet address, .sol name, or contact nickname). NEVER execute — the user signs in the card.
+- \`list_contacts\` — returns the user's saved address book (names + wallets). Call when they ask "who are my contacts", "who have I saved", or want to pick a recipient.
+- \`save_contact\` — saves a wallet under a friendly name. Call when the user says "save this as Mom", "add 7xKX... to my contacts as Cold wallet", etc.
 
 CRITICAL: If a user asks for live data (prices, balances, what's trending, swap quotes), you MUST call the matching tool. Never make up numbers. Never say "here are the top tokens" without first calling \`get_trending\`. Never quote a swap rate without calling \`prepare_swap\`.
 
@@ -138,13 +140,47 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "list_contacts",
+      description:
+        "List the user's saved wallet contacts (address book). Use when the user asks who their contacts are, who they've saved, or wants to pick a recipient.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "save_contact",
+      description:
+        "Save a new wallet contact to the user's address book under a friendly name. Use when the user says things like 'save this address as Mom', 'add toly.sol to my contacts as Toly', etc.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: {
+            type: "string",
+            description: "Friendly nickname (e.g. 'Mom', 'Cold wallet', 'Toly').",
+          },
+          address: {
+            type: "string",
+            description: "Wallet address (base58) or .sol name to save.",
+          },
+        },
+        required: ["name", "address"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { messages, walletAddress, profile } = await req.json();
+    const { messages, walletAddress, profile, contacts } = await req.json();
+    const contactList: { name: string; address: string; resolved_address: string | null }[] =
+      Array.isArray(contacts) ? contacts : [];
 
     if (!Array.isArray(messages)) {
       return json({ error: "messages must be an array" }, 400);
@@ -156,9 +192,10 @@ serve(async (req) => {
     // Build a personalisation block from the user's profile so the AI can
     // tailor depth, interests, and risk framing without re-asking.
     const profileBlock = buildProfileBlock(profile);
-    const systemContent = profileBlock
-      ? `${SYSTEM_PROMPT}\n\n${profileBlock}`
-      : SYSTEM_PROMPT;
+    const contactsBlock = buildContactsBlock(contactList);
+    const systemContent = [SYSTEM_PROMPT, profileBlock, contactsBlock]
+      .filter(Boolean)
+      .join("\n\n");
 
     // Multi-turn tool loop. Max 3 iterations to bound cost.
     const conversation: any[] = [
@@ -259,7 +296,17 @@ serve(async (req) => {
           if (!walletAddress) {
             result = { error: "No wallet connected. Connect your wallet first." };
           } else {
-            const recipientResolved = await resolveRecipientInline(args.recipient ?? "");
+            // First check if the recipient matches a saved contact name —
+            // if so, swap it for the saved address before resolving.
+            let recipientInput: string = args.recipient ?? "";
+            let contactDisplayName: string | null = null;
+            const matchedContact = findContact(contactList, recipientInput);
+            if (matchedContact) {
+              recipientInput = matchedContact.resolved_address || matchedContact.address;
+              contactDisplayName = matchedContact.name;
+            }
+
+            const recipientResolved = await resolveRecipientInline(recipientInput);
 
             if (recipientResolved?.error) {
               result = recipientResolved;
@@ -270,11 +317,46 @@ serve(async (req) => {
                 amount: args.amount,
                 recipient: args.recipient ?? "",
                 resolvedAddress: recipientResolved.address,
-                displayName: recipientResolved.displayName ?? null,
+                displayName: contactDisplayName ?? recipientResolved.displayName ?? null,
               }, req);
+              // Tag whether this destination is already a saved contact, so
+              // the UI can prompt to save it after a successful send.
+              if (result && typeof result === "object" && !result.error) {
+                result.savedContact = !!matchedContact || !!findContactByAddress(contactList, recipientResolved.address);
+              }
             }
           }
           toolEvents.push({ type: "transfer_quote", data: result });
+        } else if (name === "list_contacts") {
+          result = {
+            contacts: contactList.map((c) => ({
+              name: c.name,
+              address: c.address,
+              resolvedAddress: c.resolved_address,
+            })),
+          };
+          toolEvents.push({ type: "contact_list", data: result });
+        } else if (name === "save_contact") {
+          let args: any = {};
+          try {
+            args = JSON.parse(tc.function?.arguments ?? "{}");
+          } catch { /* ignore */ }
+          const cname = String(args.name ?? "").trim();
+          const caddr = String(args.address ?? "").trim();
+          if (!cname || !caddr) {
+            result = { error: "Both name and address are required to save a contact." };
+          } else if (findContact(contactList, cname)) {
+            result = {
+              error: `You already have a contact named "${cname}". Pick a different name.`,
+            };
+          } else {
+            // The client persists this via the save_contact_request tool event.
+            result = { ok: true, name: cname, address: caddr };
+          }
+          toolEvents.push({
+            type: "save_contact_request",
+            data: { name: cname, address: caddr, error: result.error ?? null },
+          });
         } else {
           result = { error: `Unknown tool: ${name}` };
         }
@@ -401,4 +483,30 @@ function buildProfileBlock(profile: any): string | null {
 
   if (lines.length === 0) return null;
   return `User context:\n${lines.join("\n")}\n\nNever fabricate facts about the user beyond what's listed above.`;
+}
+
+interface ContactLite {
+  name: string;
+  address: string;
+  resolved_address: string | null;
+}
+
+function findContact(list: ContactLite[], needle: string): ContactLite | null {
+  const n = (needle ?? "").trim().toLowerCase();
+  if (!n) return null;
+  return list.find((c) => c.name.toLowerCase() === n) ?? null;
+}
+
+function findContactByAddress(list: ContactLite[], address: string): ContactLite | null {
+  const a = (address ?? "").trim();
+  if (!a) return null;
+  return list.find((c) => c.address === a || c.resolved_address === a) ?? null;
+}
+
+function buildContactsBlock(list: ContactLite[]): string | null {
+  if (!list.length) return null;
+  const lines = list
+    .slice(0, 50)
+    .map((c) => `- ${c.name} → ${c.resolved_address || c.address}`);
+  return `Saved contacts (the user's address book — use these names when they refer to people by nickname):\n${lines.join("\n")}`;
 }

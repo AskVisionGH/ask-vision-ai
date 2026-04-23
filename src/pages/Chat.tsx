@@ -12,6 +12,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Menu } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
+import { useContacts } from "@/hooks/useContacts";
 import {
   autoTitleConversation,
   fetchMessages,
@@ -31,6 +32,7 @@ const SUGGESTIONS = [
 const Chat = () => {
   const { user } = useAuth();
   const { profile } = useProfile();
+  const { contacts, addContact } = useContacts();
   const { connected, publicKey } = useWallet();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -142,6 +144,11 @@ const Chat = () => {
             riskTolerance: profile.risk_tolerance,
           }
         : undefined,
+      contacts: contacts.map((c) => ({
+        name: c.name,
+        address: c.address,
+        resolved_address: c.resolved_address,
+      })),
     });
 
     setIsThinking(false);
@@ -155,6 +162,15 @@ const Chat = () => {
         toast.error("Vision hit a snag", { description: result.error });
       }
       return;
+    }
+
+    // If the AI asked to save a contact, persist it client-side now.
+    for (const ev of result.toolEvents) {
+      if (ev.type === "save_contact_request" && ev.data && !ev.data.error && ev.data.name && ev.data.address) {
+        const r = await addContact({ name: ev.data.name, address: ev.data.address });
+        if ("error" in r) toast.error("Couldn't save contact", { description: r.error });
+        else toast.success(`Saved ${r.name} to contacts`);
+      }
     }
 
     const assistantMsg: ChatMessage = {
