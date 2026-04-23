@@ -14,6 +14,7 @@ import Onboarding from "./pages/Onboarding.tsx";
 import Settings from "./pages/Settings.tsx";
 import Contacts from "./pages/Contacts.tsx";
 import TrackedWallets from "./pages/TrackedWallets.tsx";
+import Admin from "./pages/Admin.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -93,6 +94,14 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <TrackedWallets />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin"
+                element={
+                  <ProtectedRoute requireOnboarding={false}>
+                    <Admin />
                   </ProtectedRoute>
                 }
               />
