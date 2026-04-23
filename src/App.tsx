@@ -11,6 +11,7 @@ import Auth from "./pages/Auth.tsx";
 import Chat from "./pages/Chat.tsx";
 import Onboarding from "./pages/Onboarding.tsx";
 import Settings from "./pages/Settings.tsx";
+import Contacts from "./pages/Contacts.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
