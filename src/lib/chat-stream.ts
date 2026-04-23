@@ -316,6 +316,71 @@ export interface SmartMoneyActivityData {
   error?: string;
 }
 
+export interface ParsedTx {
+  signature: string;
+  timestamp: number;
+  type: "swap" | "transfer_in" | "transfer_out" | "other";
+  description: string | null;
+  source: string | null;
+  fee: number;
+  inToken?: { mint: string; symbol: string; amount: number };
+  outToken?: { mint: string; symbol: string; amount: number };
+  solChange?: number;
+  counterparty?: string | null;
+  valueUsd: number | null;
+}
+
+export interface TokenPnL {
+  mint: string;
+  symbol: string;
+  name: string;
+  logo: string | null;
+  buys: number;
+  sells: number;
+  costUsd: number;
+  proceedsUsd: number;
+  unitsBought: number;
+  unitsSold: number;
+  currentUnits: number;
+  currentPriceUsd: number | null;
+  currentValueUsd: number | null;
+  realizedUsd: number;
+  unrealizedUsd: number;
+  pairUrl: string | null;
+}
+
+export interface WalletPnLData {
+  address: string;
+  windowDays: number;
+  totals: {
+    totalRealizedUsd: number;
+    totalUnrealizedUsd: number;
+    totalCostUsd: number;
+    totalProceedsUsd: number;
+    currentPortfolioUsd: number;
+    txCount: number;
+  };
+  tokens: TokenPnL[];
+  recentTxs: ParsedTx[];
+  error?: string;
+}
+
+export interface RecentTxsData {
+  address: string;
+  windowDays: number;
+  txs: ParsedTx[];
+  totalCount: number;
+  error?: string;
+}
+
+export interface TokenPnLData {
+  address: string;
+  windowDays: number;
+  token: TokenPnL | null;
+  recentTxs: ParsedTx[];
+  error?: string;
+}
+
 export type ToolEvent =
   | { type: "wallet_balance"; data: WalletBalanceData }
   | { type: "token_info"; data: TokenInfoData }
@@ -328,6 +393,9 @@ export type ToolEvent =
   | { type: "solana_news"; data: SolanaNewsData }
   | { type: "early_buyers"; data: EarlyBuyersData }
   | { type: "smart_money_activity"; data: SmartMoneyActivityData }
+  | { type: "wallet_pnl"; data: WalletPnLData }
+  | { type: "recent_txs"; data: RecentTxsData }
+  | { type: "token_pnl"; data: TokenPnLData }
   | { type: string; data: any };
 
 export interface ChatMessage {
