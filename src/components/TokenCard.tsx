@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowUpRight, TrendingUp, TrendingDown, Shield, Loader2, LineChart, MessageCircle, type LucideIcon } from "lucide-react";
+import { ArrowUpRight, TrendingUp, TrendingDown, Shield, Loader2, LineChart, MessageCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TokenLogo } from "@/components/TokenLogo";
 import { RiskReportCard } from "@/components/RiskReportCard";
