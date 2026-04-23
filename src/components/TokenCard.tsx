@@ -365,9 +365,6 @@ const LoadingBox = ({ text }: { text: string }) => (
     {text}
   </div>
 );
-    </div>
-  );
-};
 
 const Stat = ({ label, value, dim }: { label: string; value: string; dim?: boolean }) => (
   <div>
