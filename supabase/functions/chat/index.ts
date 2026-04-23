@@ -422,6 +422,10 @@ serve(async (req) => {
       const emittedToolKeys = new Set<string>();
       let cardEmitted = false;
       let toolErrored = false;
+      // Set when we forcibly inject a tool call because the model already
+      // produced text without invoking the right tool. After the card is
+      // emitted we exit the loop so the model can't write a second framing.
+      let isForcedFallbackTurn = false;
 
       try {
         for (let iter = 0; iter < 3; iter++) {
@@ -535,6 +539,7 @@ serve(async (req) => {
                 name: forced.name,
                 arguments: JSON.stringify(forced.args),
               });
+              isForcedFallbackTurn = true;
             } else {
               break;
             }
@@ -790,6 +795,12 @@ serve(async (req) => {
               content: JSON.stringify(toolPayload),
             });
           }
+
+          // If this round was triggered by our forced fallback (model already
+          // wrote framing without calling a tool), stop now — otherwise the
+          // next iteration would have the model write another paragraph
+          // duplicating what it just said.
+          if (isForcedFallbackTurn && cardEmitted) break;
         }
 
         send("done", {});
