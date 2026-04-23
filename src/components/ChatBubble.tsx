@@ -10,6 +10,8 @@ import { TrendingCard } from "@/components/TrendingCard";
 import { SwapPreviewCard } from "@/components/SwapPreviewCard";
 import { TransferPreviewCard } from "@/components/TransferPreviewCard";
 import { RiskReportCard } from "@/components/RiskReportCard";
+import { TokenChartCard } from "@/components/TokenChartCard";
+import { SocialSentimentCard } from "@/components/SocialSentimentCard";
 
 interface Props {
   message: ChatMessage;
