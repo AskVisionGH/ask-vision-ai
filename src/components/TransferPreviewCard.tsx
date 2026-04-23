@@ -87,18 +87,16 @@ export const TransferPreviewCard = ({ data: initial }: Props) => {
 
   // Auto-refresh price/fee — paused once user starts confirming
   useEffect(() => {
-    if (data.error || dismissed || phase.name !== "preview") return;
+    if (data.error || !data.from || dismissed || phase.name !== "preview") return;
     const timer = setInterval(async () => {
       if (!mounted.current) return;
       setRefreshing(true);
       try {
         const fresh = await supaPost("transfer-quote", {
-          fromAddress: data.from.address,
-          token: data.token.mint === "So11111111111111111111111111111111111111112" && data.token.isNative
-            ? "SOL"
-            : data.token.mint,
+          fromAddress: data.from?.address,
+          token: data.token?.isNative ? "SOL" : data.token?.mint,
           amount: data.amountUi,
-          recipient: data.to.displayName ?? data.to.address,
+          recipient: data.to?.displayName ?? data.to?.address,
         });
         if (mounted.current && !fresh.error) setData(fresh);
       } catch {
@@ -108,7 +106,7 @@ export const TransferPreviewCard = ({ data: initial }: Props) => {
       }
     }, REFRESH_MS);
     return () => clearInterval(timer);
-  }, [data.error, dismissed, phase.name, data.from.address, data.token.mint, data.token.isNative, data.amountUi, data.to.displayName, data.to.address]);
+  }, [data.error, dismissed, phase.name, data.from?.address, data.token?.mint, data.token?.isNative, data.amountUi, data.to?.displayName, data.to?.address]);
 
   const handleConfirm = async () => {
     if (!connected || !publicKey || !signTransaction) {

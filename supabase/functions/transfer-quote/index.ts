@@ -161,33 +161,40 @@ serve(async (req) => {
     const rpcUrl = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
     const connection = new Connection(rpcUrl, "confirmed");
 
-    // 1. Resolve recipient
+    // 1+2. Resolve recipient AND token in parallel — both are network-bound
     const trimmedRecipient = recipientInput.trim();
-    let toAddress: string;
-    let displayName: string | null = null;
 
-    if (trimmedRecipient.toLowerCase().endsWith(".sol")) {
-      try {
-        const domain = trimmedRecipient.replace(/\.sol$/i, "");
-        const owner = await resolveSns(connection, domain);
-        toAddress = owner.toBase58();
-        displayName = trimmedRecipient.toLowerCase();
-      } catch (e) {
-        console.error("SNS resolve error:", e);
-        return json(
-          { error: `"${trimmedRecipient}" doesn't resolve to a wallet.` },
-          404,
-        );
-      }
-    } else if (isBase58Pubkey(trimmedRecipient)) {
-      try {
-        toAddress = new PublicKey(trimmedRecipient).toBase58();
-      } catch {
-        return json({ error: "That doesn't look like a valid Solana address." }, 400);
-      }
-    } else {
-      return json({ error: "Recipient must be a wallet address or .sol name." }, 400);
+    const recipientPromise: Promise<{ address: string; displayName: string | null } | { error: string }> =
+      (async () => {
+        if (trimmedRecipient.toLowerCase().endsWith(".sol")) {
+          try {
+            const domain = trimmedRecipient.replace(/\.sol$/i, "");
+            const owner = await resolveSns(connection, domain);
+            return { address: owner.toBase58(), displayName: trimmedRecipient.toLowerCase() };
+          } catch (e) {
+            console.error("SNS resolve error:", e);
+            return { error: `"${trimmedRecipient}" doesn't resolve to a wallet.` };
+          }
+        }
+        if (isBase58Pubkey(trimmedRecipient)) {
+          try {
+            return { address: new PublicKey(trimmedRecipient).toBase58(), displayName: null };
+          } catch {
+            return { error: "That doesn't look like a valid Solana address." };
+          }
+        }
+        return { error: "Recipient must be a wallet address or .sol name." };
+      })();
+
+    const [recipientResult, tokenMeta] = await Promise.all([
+      recipientPromise,
+      resolveToken(tokenInput),
+    ]);
+
+    if ("error" in recipientResult) {
+      return json({ error: recipientResult.error }, 404);
     }
+    const { address: toAddress, displayName } = recipientResult;
 
     if (toAddress === fromAddress) {
       return json({ error: "You can't send to your own wallet." }, 400);
@@ -200,8 +207,6 @@ serve(async (req) => {
       isOnCurve = true;
     }
 
-    // 2. Resolve token
-    const tokenMeta = await resolveToken(tokenInput);
     if (!tokenMeta) {
       return json({ error: `Couldn't find token "${tokenInput}".` }, 404);
     }
