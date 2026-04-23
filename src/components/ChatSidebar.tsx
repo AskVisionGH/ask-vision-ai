@@ -98,13 +98,38 @@ export const ChatSidebar = ({
         {loading ? (
           <div className="px-3 py-2 text-xs text-muted-foreground/60">Loading…</div>
         ) : conversations.length === 0 ? (
-          <div className="px-3 py-2 text-xs text-muted-foreground/60">
-            No conversations yet.
-          </div>
+          <>
+            <SectionHeader label="Conversations" />
+            <div className="px-3 py-2 text-xs text-muted-foreground/60">
+              No conversations yet.
+            </div>
+          </>
         ) : (
-          <ul className="space-y-0.5">
-            {conversations.map((c) => {
-              const isActive = c.id === activeId;
+          (() => {
+            const active = activeId ? conversations.find((c) => c.id === activeId) : null;
+            const previous = conversations.filter((c) => c.id !== activeId);
+            return (
+              <>
+                {active && (
+                  <>
+                    <SectionHeader label="Current" />
+                    <ul className="mb-3 space-y-0.5">
+                      {renderItem(active, true)}
+                    </ul>
+                  </>
+                )}
+                {previous.length > 0 && (
+                  <>
+                    <SectionHeader label={active ? "Previous" : "Conversations"} />
+                    <ul className="space-y-0.5">
+                      {previous.map((c) => renderItem(c, false))}
+                    </ul>
+                  </>
+                )}
+              </>
+            );
+
+            function renderItem(c: ConversationRow, isActive: boolean) {
               const isRenaming = c.id === renamingId;
               return (
                 <li key={c.id} className="group relative">
@@ -130,6 +155,13 @@ export const ChatSidebar = ({
                           : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
                       )}
                     >
+                      <span
+                        className={cn(
+                          "h-1.5 w-1.5 flex-shrink-0 rounded-full",
+                          isActive ? "bg-up shadow-[0_0_6px_hsl(var(--up))]" : "bg-muted-foreground/30",
+                        )}
+                        aria-hidden
+                      />
                       <span className="truncate flex-1">{c.title}</span>
                     </button>
                   )}
@@ -165,8 +197,8 @@ export const ChatSidebar = ({
                   )}
                 </li>
               );
-            })}
-          </ul>
+            }
+          })()
         )}
       </div>
 
