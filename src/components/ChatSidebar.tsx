@@ -14,6 +14,7 @@ import {
   Radar,
   Search,
   Settings as SettingsIcon,
+  Shield,
   Trash2,
   Users,
   X,
@@ -53,6 +54,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { useProfile } from "@/hooks/useProfile";
 import { UserAvatar } from "@/components/UserAvatar";
 import { VisionLogo } from "@/components/VisionLogo";
