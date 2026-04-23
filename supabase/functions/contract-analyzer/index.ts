@@ -98,18 +98,27 @@ serve(async (req) => {
 });
 
 async function fetchRugCheck(mint: string): Promise<any | null> {
+  // Full /report has holder distribution, markets, and authority info.
+  // /report/summary is much thinner — only score + named risks + lpLockedPct.
+  // Try full first; fall back to summary if blocked or rate-limited.
+  try {
+    const resp = await fetch(
+      `https://api.rugcheck.xyz/v1/tokens/${mint}/report`,
+      { headers: { Accept: "application/json" } },
+    );
+    if (resp.ok) return await resp.json();
+    console.warn("RugCheck full report non-200:", resp.status);
+  } catch (e) {
+    console.warn("RugCheck full report fetch failed:", e);
+  }
   try {
     const resp = await fetch(
       `https://api.rugcheck.xyz/v1/tokens/${mint}/report/summary`,
       { headers: { Accept: "application/json" } },
     );
-    if (!resp.ok) {
-      console.warn("RugCheck non-200:", resp.status);
-      return null;
-    }
+    if (!resp.ok) return null;
     return await resp.json();
-  } catch (e) {
-    console.warn("RugCheck fetch failed:", e);
+  } catch {
     return null;
   }
 }
