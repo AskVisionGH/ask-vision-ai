@@ -1,84 +1,79 @@
 
-# Vision App — v1 Build Plan
 
-Build `app.askvision.ai`: a conversational AI interface for Solana, with a clear path to Base + bridging later. Inherits the exact dark/lilac aesthetic from your landing page.
+## Step 5: Swap Preview Card
 
-## Tech stack (locked)
-- **Frontend:** React 18 + Vite + TypeScript + Tailwind (Lovable's stack)
-- **Backend:** Lovable Cloud (Supabase) — auth, database, edge functions, secrets
-- **AI:** Lovable AI Gateway — `google/gemini-3-flash-preview` for intent parsing & chat
-- **Wallets:** Solana Wallet Adapter (Phantom, Solflare, Backpack) — direct, no third-party SDK
-- **Solana RPC:** Helius (free tier, best DX) — API key stored in Lovable Cloud secrets
-- **Swaps:** Jupiter Aggregator API (no key required)
-- **Token data:** Jupiter token list + Birdeye/DexScreener for prices
-- **Hosting:** Lovable's hosting → custom domain `app.askvision.ai`
+Vision learns to **prepare swaps** — read a sentence like "swap 10 USDC to SOL", fetch a real Jupiter quote, and render a preview card in chat. **No signing yet** — that's Step 6. This step nails the UX and proves the quote pipeline.
 
-## Design system (from your landing page)
-- Background `#09090b`, panels `#111114` / `#16161a`
-- Borders `rgba(255,255,255,.08)`, text `#f4f4f5` / dim `#a1a1aa`
-- Accent lilac `#c4b5fd`, glow `#8b5cf6`
-- Fonts: **Geist** (UI), **Instrument Serif italic** (accents), **JetBrains Mono** (chat/code/captions)
-- Subtle grain overlay, radial purple aurora glows, smooth `cubic-bezier(.2,.7,.2,1)` easing
-- White triangle logo, pill-shaped buttons, 14px / 20px radii
+### What you'll see
 
-## v1 — what we ship first (the foundation)
+Type **"swap 0.1 SOL for USDC"** (or JUP, BONK, anything). Vision replies with one short sentence and a card:
 
-**1. App shell & auth**
-- Landing screen at `/` matching your "almost here" page energy: triangle + beam, "Connect wallet to begin"
-- Solana Wallet Adapter modal (Phantom / Solflare / Backpack)
-- Wallet address = identity. Lovable Cloud stores user profile keyed to wallet address (signed message proves ownership)
-- Persistent sidebar after connect: chat history, settings, disconnect
+```text
+┌─────────────────────────────────────────┐
+│  Swap preview                           │
+│                                         │
+│   0.1 SOL          →     ~14.82 USDC    │
+│   ≈ $14.85               ≈ $14.82       │
+│                                         │
+│   Rate     1 SOL = 148.20 USDC          │
+│   Impact   0.02%        ● low           │
+│   Slippage 0.5% (auto)                  │
+│   Route    SOL → USDC  via Raydium      │
+│   Fee      ~0.00008 SOL network         │
+│                                         │
+│   [ Confirm & sign ]   [ Cancel ]       │
+│                                         │
+│   Quote refreshes every 15s             │
+└─────────────────────────────────────────┘
+```
 
-**2. Conversational chat (the core)**
-- Full-screen chat UI, JetBrains Mono input, markdown-rendered AI replies, streaming token-by-token
-- System prompt teaches the AI to recognize crypto intents and call structured tools
-- Edge function `chat` proxies to Lovable AI Gateway with conversation history
-- Suggested prompts on empty state: "What's in my wallet?", "Swap 10 USDC to SOL", "Show trending tokens"
+Buttons are **visible but disabled** with a tooltip: "Signing ships in the next step." This keeps the UX honest while we build toward Step 6.
 
-**3. Intent recognition via tool-calling**
-The AI uses structured tool calls (not freeform JSON) for these intents in v1:
-- `get_wallet_balance` — show SOL + SPL token holdings with USD values
-- `get_token_info` — price, 24h change, market cap, links
-- `get_trending` — top tokens by volume from DexScreener
-- `prepare_swap` — Jupiter quote + route for "swap X for Y"
-- `prepare_transfer` — SOL or SPL token send
+### What gets built
 
-**4. Action preview cards (the "human-readable preview")**
-- AI never executes silently. Every action returns a rich preview card rendered inline in chat:
-  - Swap: from-token → to-token, amount in/out, price impact, slippage, route, fees, ~USD
-  - Transfer: recipient (with `.sol` SNS resolution), amount, network fee
-- Two buttons: **Confirm & Sign** / **Cancel**
+**1. New edge function — `supabase/functions/swap-quote/index.ts`**
+- Input: `{ inputMint, outputMint, amount, slippageBps? }` (amount in human units, e.g. `0.1`)
+- Resolves tickers → mint addresses via the Jupiter token list (cached in-memory per cold start) so the AI can pass `"SOL"` or a full mint
+- Calls Jupiter Quote API: `https://lite-api.jup.ag/swap/v1/quote`
+- Enriches with token metadata (symbol, decimals, logo) and current USD prices (DexScreener, same source as Step 4)
+- Returns a normalized payload: input/output token, amounts (raw + UI), USD values, price impact, route hops, slippage used, est. network fee
 
-**5. On-chain execution (real, on Solana mainnet)**
-- Confirm → build transaction client-side using Jupiter / @solana/web3.js
-- Wallet adapter prompts user to sign in their wallet
-- Submit via Helius RPC, show toast with progress, link to Solscan on success
-- Failed/rejected tx shown inline in chat with retry option
+**2. New AI tool — `prepare_swap`**
+Added to the `chat` edge function tool list:
+```ts
+{
+  name: "prepare_swap",
+  description: "Prepare a swap quote between two Solana tokens. Use whenever the user wants to swap, trade, exchange, or convert tokens. Never execute — only quote.",
+  parameters: {
+    inputToken: "ticker or mint of token to sell",
+    outputToken: "ticker or mint of token to buy",
+    amount: "decimal amount of inputToken to swap",
+    slippageBps: "optional, default 50 (0.5%)"
+  }
+}
+```
+System prompt updated so the AI calls this tool whenever it detects a swap intent and frames replies as previews, not confirmations.
 
-**6. Wallet & history pages**
-- `/wallet` — clean portfolio view: tokens, balances, USD totals (uses same data as chat)
-- `/history` — past conversations + past transactions (synced from on-chain)
+**3. New UI component — `src/components/SwapPreviewCard.tsx`**
+- Same visual language as `TokenCard` / `PortfolioCard` (dark panel, lilac accents, JetBrains Mono for numbers)
+- Color-coded price impact: green <1%, amber 1–3%, red >3%
+- Route shown as `SOL → USDC` with the AMM name (Raydium, Orca, Meteora…)
+- **Confirm & Sign** button rendered disabled with a tooltip; **Cancel** removes the card from the message
+- Auto-refresh quote every 15s while the card is mounted (calls `swap-quote` again, swaps in the new numbers smoothly)
 
-## What we explicitly defer (so we ship)
-- Base / EVM chains → v2 (after Solana works end-to-end)
-- Bridging via LiFi → v2
-- Privy embedded wallets → v2 (Wallet Adapter is fine for crypto-native users)
-- Limit orders, DCA, perps, NFTs, pump.fun integration → later
-- Mobile app → web is responsive; native later
+**4. Wire-up**
+- `chat-stream.ts` → add `SwapQuoteData` type and `swap_quote` to the `ToolEvent` union
+- `ChatBubble.tsx` → render `SwapPreviewCard` when `event.type === "swap_quote"` (placed below text, same as other cards after the fix from last step)
 
-## Setup tasks before first code
-- Enable Lovable Cloud (auto)
-- You create a free **Helius** account → grab API key → I'll add it as a Cloud secret
-- Connect GitHub once we have something working (you mentioned you already use this pattern)
+### What we explicitly defer to Step 6
+- Wallet signing, transaction building, mainnet submission
+- Confirmation toasts, Solscan links, retry-on-fail flow
+- SNS (`.sol` name) resolution — that lives with transfers in Step 7
 
-## Build order (for our chats — we'll do these one at a time)
-1. **Today:** App shell, dark theme, design tokens, landing/connect screen, wallet adapter integration
-2. **Next:** Chat UI + AI streaming + basic conversation (no tools yet, just talking)
-3. **Then:** First tool — `get_wallet_balance` end-to-end (proves the architecture)
-4. **Then:** Token info + trending (read-only, low risk)
-5. **Then:** Swap preview card + Jupiter quote (still no signing)
-6. **Then:** Real swap execution with wallet signing (the big milestone)
-7. **Then:** Transfers + SNS resolution
-8. **Then:** Wallet page, history, polish, custom domain
+### Notes
+- Jupiter's quote API is free and keyless — no new secrets needed
+- DexScreener is already in use for USD pricing, so no new data source either
+- The Jupiter token list (~5MB) is fetched once per function cold start and held in module scope — fast enough for chat latency
 
-Each step is a separate chat so you can see, test, and learn before we move on. Approve this and we'll start with step 1.
+Approve and I'll build it.
+
