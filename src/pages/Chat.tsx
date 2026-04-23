@@ -295,6 +295,8 @@ const Chat = () => {
       }
       convoId = created.id;
       isFirstMessage = true;
+      // Mark as local BEFORE updating the URL so the activeId effect skips its fetch.
+      localConvoIds.current.add(convoId);
       setSearchParams({ c: convoId }, { replace: true });
     } else if (messages.length === 0) {
       isFirstMessage = true;
