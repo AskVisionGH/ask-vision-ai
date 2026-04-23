@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Menu } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { displayNameFor, useProfile } from "@/hooks/useProfile";
 import {
   autoTitleConversation,
   fetchMessages,
