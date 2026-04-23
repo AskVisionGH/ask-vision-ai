@@ -212,29 +212,14 @@ serve(async (req) => {
       );
     }
 
-    // 3. ATA detection (SPL only)
+    // Keep preview lightweight. Recipient ATA existence is checked again during
+    // transfer-build, where the actual transaction is assembled.
     let needsAtaCreation = false;
     let ataCreationFeeSol = 0;
     if (!tokenMeta.isNative) {
-      try {
-        const tokenProgramId = tokenMeta.tokenProgram === TOKEN_2022_PROGRAM_ID.toBase58()
-          ? TOKEN_2022_PROGRAM_ID
-          : TOKEN_PROGRAM_ID;
-        const recipientAta = getAssociatedTokenAddressSync(
-          new PublicKey(tokenMeta.mint),
-          new PublicKey(toAddress),
-          true,
-          tokenProgramId,
-        );
-        const acct = await connection.getAccountInfo(recipientAta);
-        if (!acct) {
-          needsAtaCreation = true;
-          ataCreationFeeSol = 0.00203928; // Standard ATA rent
-        }
-      } catch (e) {
-        console.error("ATA check error:", e);
-      }
+      ataCreationFeeSol = 0.00203928;
     }
+
 
     const amountAtomic = Math.floor(amount * Math.pow(10, tokenMeta.decimals));
     if (amountAtomic <= 0) {
