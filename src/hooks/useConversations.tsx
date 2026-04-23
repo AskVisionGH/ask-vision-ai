@@ -7,6 +7,7 @@ export interface ConversationRow {
   id: string;
   title: string;
   wallet_address: string | null;
+  pinned: boolean;
   created_at: string;
   updated_at: string;
 }
