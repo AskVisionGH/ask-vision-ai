@@ -1,9 +1,17 @@
 import { useState } from "react";
-import { ArrowUpRight, TrendingUp, TrendingDown, Shield, Loader2 } from "lucide-react";
+import { ArrowUpRight, TrendingUp, TrendingDown, Shield, Loader2, LineChart, MessageCircle, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TokenLogo } from "@/components/TokenLogo";
 import { RiskReportCard } from "@/components/RiskReportCard";
-import type { TokenInfoData, RiskReportData } from "@/lib/chat-stream";
+import { TokenChartCard } from "@/components/TokenChartCard";
+import { SocialSentimentCard } from "@/components/SocialSentimentCard";
+import type {
+  TokenInfoData,
+  RiskReportData,
+  TokenChartData,
+  SocialSentimentData,
+  SentimentVerdict,
+} from "@/lib/chat-stream";
 
 interface Props {
   data: TokenInfoData;
