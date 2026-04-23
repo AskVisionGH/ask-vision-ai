@@ -61,12 +61,20 @@ const Chat = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchHits, setSearchHits] = useState<Set<string> | null>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
+  // Conversations created in-session via send() — we already have their
+  // messages locally, so skip the network fetch (which would race against
+  // the optimistic user message + streaming assistant placeholder).
+  const localConvoIds = useRef<Set<string>>(new Set());
 
   // Load messages when active conversation changes.
   useEffect(() => {
     let cancelled = false;
     if (!activeId) {
       setMessages([]);
+      return;
+    }
+    if (localConvoIds.current.has(activeId)) {
+      // Just-created convo — local state is already correct.
       return;
     }
     setLoadingThread(true);
@@ -287,6 +295,8 @@ const Chat = () => {
       }
       convoId = created.id;
       isFirstMessage = true;
+      // Mark as local BEFORE updating the URL so the activeId effect skips its fetch.
+      localConvoIds.current.add(convoId);
       setSearchParams({ c: convoId }, { replace: true });
     } else if (messages.length === 0) {
       isFirstMessage = true;
