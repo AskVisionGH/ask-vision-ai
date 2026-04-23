@@ -225,6 +225,7 @@ export interface SocialSentimentData {
   series: SentimentSeriesPoint[];
   topPosts: SocialPost[];
   sources: string[];
+  reportUrl?: string | null;
   error?: string;
 }
 

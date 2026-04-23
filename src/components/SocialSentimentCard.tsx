@@ -213,10 +213,10 @@ export const SocialSentimentCard = ({ data }: Props) => {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="line-clamp-2 text-sm text-foreground">{post.title}</p>
-                    <div className="mt-1 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground/80">
+                    <div className="mt-1 flex flex-wrap items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground/80">
                       {post.creatorName && <span>{post.creatorName}</span>}
-                      {post.creatorName && <span>·</span>}
-                      <span>{fmtCount(post.interactions24h)} interactions</span>
+                      {post.creatorName && post.interactions24h > 0 && <span>·</span>}
+                      {post.interactions24h > 0 && <span>{fmtCount(post.interactions24h)} interactions</span>}
                       <span
                         className={cn(
                           "rounded-full border px-1.5 py-px text-[9px]",
@@ -240,14 +240,16 @@ export const SocialSentimentCard = ({ data }: Props) => {
         <span className="font-mono text-[10px] tracking-wider uppercase text-muted-foreground">
           Source: {data.sources.join(" + ") || "—"}
         </span>
-        <a
-          href={`https://lunarcrush.com/coins/${encodeURIComponent(data.topic)}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="font-mono text-[10px] tracking-wider uppercase text-muted-foreground hover:text-foreground"
-        >
-          Full report →
-        </a>
+        {data.reportUrl && (
+          <a
+            href={data.reportUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-mono text-[10px] tracking-wider uppercase text-muted-foreground hover:text-foreground"
+          >
+            Explore source →
+          </a>
+        )}
       </div>
     </div>
   );
