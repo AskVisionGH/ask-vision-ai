@@ -6,8 +6,8 @@
 // browser, or trigger a sync from the Inngest dashboard. INNGEST_SIGNING_KEY
 // is read automatically by the SDK to verify webhook payloads.
 
-import { Inngest } from "https://esm.sh/inngest@3.27.5?target=deno";
-import { serve } from "https://esm.sh/inngest@3.27.5/edge?target=deno";
+import { Inngest } from "https://esm.sh/inngest@3.39.0?target=deno";
+import { serve } from "https://esm.sh/inngest@3.39.0/edge?target=deno";
 
 const inngest = new Inngest({ id: "vision-fee-sweeper" });
 
