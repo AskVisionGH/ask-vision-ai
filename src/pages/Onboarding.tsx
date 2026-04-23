@@ -1,7 +1,7 @@
 import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowRight, Camera, Check, ChevronLeft } from "lucide-react";
+import { ArrowRight, Camera, Check, ChevronLeft, Sparkles } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import {
   CryptoExperience,
@@ -23,6 +23,13 @@ import { cn } from "@/lib/utils";
 const STEPS = ["welcome", "experience", "interests", "risk"] as const;
 type Step = (typeof STEPS)[number];
 
+const STEP_LABELS: Record<Step, string> = {
+  welcome: "About you",
+  experience: "Experience",
+  interests: "Interests",
+  risk: "Risk",
+};
+
 const Onboarding = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -36,6 +43,7 @@ const Onboarding = () => {
   const [risk, setRisk] = useState<RiskTolerance | null>(null);
   const [savingAvatar, setSavingAvatar] = useState(false);
   const [finishing, setFinishing] = useState(false);
+  const [transitioning, setTransitioning] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Hydrate any existing values so re-running onboarding pre-fills.
@@ -57,6 +65,20 @@ const Onboarding = () => {
 
   const stepIndex = STEPS.indexOf(step);
   const isLast = stepIndex === STEPS.length - 1;
+  const progress = ((stepIndex + 1) / STEPS.length) * 100;
+
+  // Brief fade between steps so the transition feels intentional rather than snappy.
+  const advance = (next: Step | "finish") => {
+    setTransitioning(true);
+    window.setTimeout(() => {
+      if (next === "finish") {
+        void finish();
+      } else {
+        setStep(next);
+      }
+      setTransitioning(false);
+    }, 150);
+  };
 
   const goNext = async () => {
     // Persist the per-step value so partial onboarding still saves.
@@ -68,14 +90,14 @@ const Onboarding = () => {
       await updateProfile({ interests });
     }
     if (isLast) {
-      await finish();
+      advance("finish");
     } else {
-      setStep(STEPS[stepIndex + 1]);
+      advance(STEPS[stepIndex + 1]);
     }
   };
 
   const goBack = () => {
-    if (stepIndex > 0) setStep(STEPS[stepIndex - 1]);
+    if (stepIndex > 0) advance(STEPS[stepIndex - 1]);
   };
 
   const finish = async () => {
@@ -122,12 +144,24 @@ const Onboarding = () => {
     );
   };
 
+  // Disable Continue when the current step requires a choice but none made.
+  const canContinue = (() => {
+    if (transitioning || finishing || savingAvatar) return false;
+    if (step === "experience") return experience !== null;
+    if (step === "risk") return risk !== null;
+    return true;
+  })();
+
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4 py-10 text-foreground sm:px-6">
       <div className="pointer-events-none absolute inset-0 bg-aurora" aria-hidden />
+      <div
+        className="pointer-events-none absolute left-1/2 top-0 h-[40vh] w-[2px] -translate-x-1/2 beam animate-pulse-glow"
+        aria-hidden
+      />
 
       <div className="relative z-10 w-full max-w-xl">
-        {/* Progress + brand */}
+        {/* Brand + skip */}
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <VisionLogo size={20} />
@@ -143,209 +177,227 @@ const Onboarding = () => {
           </button>
         </div>
 
-        <div className="mb-8 flex gap-1.5">
-          {STEPS.map((s, i) => (
-            <div
-              key={s}
-              className={cn(
-                "h-0.5 flex-1 rounded-full ease-vision",
-                i <= stepIndex ? "bg-primary" : "bg-border",
-              )}
-            />
-          ))}
+        {/* Progress: smooth bar + numbered step */}
+        <div className="mb-2 flex items-center justify-between font-mono text-[10px] tracking-widest uppercase text-muted-foreground/70">
+          <span>
+            Step {stepIndex + 1} of {STEPS.length} · {STEP_LABELS[step]}
+          </span>
+          <span>{Math.round(progress)}%</span>
+        </div>
+        <div className="mb-8 h-0.5 w-full overflow-hidden rounded-full bg-border">
+          <div
+            className="h-full bg-primary transition-all duration-500 ease-vision"
+            style={{ width: `${progress}%`, boxShadow: "0 0 12px hsl(var(--primary-glow) / 0.5)" }}
+          />
         </div>
 
         <div className="rounded-2xl border border-border bg-card/40 p-6 backdrop-blur-md sm:p-8">
-          {step === "welcome" && (
-            <div className="space-y-6">
-              <div>
-                <h1 className="text-2xl font-light tracking-tight sm:text-3xl">
-                  Welcome to <span className="font-serif-italic text-primary">Vision</span>
-                </h1>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  A few quick questions so I know how to talk with you. All optional.
-                </p>
-              </div>
+          <div
+            className={cn(
+              "transition-opacity duration-150 ease-vision",
+              transitioning ? "opacity-0" : "opacity-100 animate-fade-up",
+            )}
+          >
+            {step === "welcome" && (
+              <div className="space-y-6">
+                <div>
+                  <div className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-[10px] uppercase tracking-widest text-primary">
+                    <Sparkles className="h-3 w-3" />
+                    Let's set you up
+                  </div>
+                  <h1 className="text-2xl font-light tracking-tight sm:text-3xl">
+                    Welcome to <span className="font-serif-italic text-primary">Vision</span>
+                  </h1>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    A few quick questions so I know how to talk with you. All optional, takes under a minute.
+                  </p>
+                </div>
 
-              <div className="flex items-center gap-4">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="group relative"
-                  aria-label="Upload profile picture"
-                  disabled={savingAvatar}
-                >
-                  <UserAvatar
-                    name={name}
-                    email={user?.email}
-                    src={avatarUrl}
-                    size={64}
-                  />
-                  <span className="absolute inset-0 flex items-center justify-center rounded-full bg-background/70 opacity-0 transition-opacity group-hover:opacity-100">
-                    <Camera className="h-4 w-4 text-foreground" />
-                  </span>
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={onFileChange}
-                />
-                <div className="flex-1 space-y-1.5">
-                  <Label
-                    htmlFor="display-name"
-                    className="text-xs uppercase tracking-wider text-muted-foreground"
+                <div className="flex items-center gap-4">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="group relative"
+                    aria-label="Upload profile picture"
+                    disabled={savingAvatar}
                   >
-                    What should I call you?
-                  </Label>
-                  <Input
-                    id="display-name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Your name"
-                    maxLength={60}
+                    <UserAvatar
+                      name={name}
+                      email={user?.email}
+                      src={avatarUrl}
+                      size={72}
+                    />
+                    <span className="absolute inset-0 flex items-center justify-center rounded-full bg-background/70 opacity-0 transition-opacity group-hover:opacity-100">
+                      <Camera className="h-4 w-4 text-foreground" />
+                    </span>
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={onFileChange}
                   />
+                  <div className="flex-1 space-y-1.5">
+                    <Label
+                      htmlFor="display-name"
+                      className="text-xs uppercase tracking-wider text-muted-foreground"
+                    >
+                      What should I call you?
+                    </Label>
+                    <Input
+                      id="display-name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="Your name"
+                      maxLength={60}
+                    />
+                  </div>
+                </div>
+                {savingAvatar && (
+                  <p className="text-xs text-muted-foreground">Uploading…</p>
+                )}
+              </div>
+            )}
+
+            {step === "experience" && (
+              <div className="space-y-6">
+                <div>
+                  <h2 className="text-xl font-light tracking-tight sm:text-2xl">
+                    How well do you know <span className="font-serif-italic text-primary">crypto</span>?
+                  </h2>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    This shapes how much I explain vs. how fast I move.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  {EXPERIENCE_OPTIONS.map((opt) => {
+                    const active = experience === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        onClick={() => setExperience(opt.value)}
+                        className={cn(
+                          "flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left ease-vision",
+                          active
+                            ? "border-primary/60 bg-primary/10"
+                            : "border-border bg-card/30 hover:border-primary/30 hover:bg-card",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border",
+                            active
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-border",
+                          )}
+                        >
+                          {active && <Check className="h-2.5 w-2.5" />}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-foreground">
+                            {opt.label}
+                          </div>
+                          <div className="mt-0.5 text-xs text-muted-foreground">
+                            {opt.description}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
-              {savingAvatar && (
-                <p className="text-xs text-muted-foreground">Uploading…</p>
-              )}
-            </div>
-          )}
+            )}
 
-          {step === "experience" && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-xl font-light tracking-tight sm:text-2xl">
-                  How well do you know crypto?
-                </h2>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  This shapes how much I explain vs. how fast I move.
-                </p>
-              </div>
+            {step === "interests" && (
+              <div className="space-y-6">
+                <div>
+                  <h2 className="text-xl font-light tracking-tight sm:text-2xl">
+                    What are you <span className="font-serif-italic text-primary">into</span>?
+                  </h2>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Pick anything that fits — I'll lean into these in conversations.
+                  </p>
+                </div>
 
-              <div className="space-y-2">
-                {EXPERIENCE_OPTIONS.map((opt) => {
-                  const active = experience === opt.value;
-                  return (
-                    <button
-                      key={opt.value}
-                      onClick={() => setExperience(opt.value)}
-                      className={cn(
-                        "flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left ease-vision",
-                        active
-                          ? "border-primary/60 bg-primary/10"
-                          : "border-border bg-card/30 hover:border-primary/30 hover:bg-card",
-                      )}
-                    >
-                      <span
+                <div className="flex flex-wrap gap-2">
+                  {INTEREST_OPTIONS.map((opt) => {
+                    const active = interests.includes(opt.value);
+                    return (
+                      <button
+                        key={opt.value}
+                        onClick={() => toggleInterest(opt.value)}
                         className={cn(
-                          "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border",
+                          "rounded-full border px-4 py-2 text-xs ease-vision",
                           active
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-border",
+                            ? "border-primary/60 bg-primary/15 text-foreground"
+                            : "border-border bg-card/30 text-muted-foreground hover:border-primary/30 hover:text-foreground",
                         )}
                       >
-                        {active && <Check className="h-2.5 w-2.5" />}
-                      </span>
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium text-foreground">
-                          {opt.label}
-                        </div>
-                        <div className="mt-0.5 text-xs text-muted-foreground">
-                          {opt.description}
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {interests.length > 0 && (
+                  <p className="text-[11px] text-muted-foreground/70">
+                    {interests.length} selected
+                  </p>
+                )}
               </div>
-            </div>
-          )}
+            )}
 
-          {step === "interests" && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-xl font-light tracking-tight sm:text-2xl">
-                  What are you into?
-                </h2>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Pick anything that fits — I'll lean into these in conversations.
-                </p>
-              </div>
+            {step === "risk" && (
+              <div className="space-y-6">
+                <div>
+                  <h2 className="text-xl font-light tracking-tight sm:text-2xl">
+                    How should I frame <span className="font-serif-italic text-primary">risk</span>?
+                  </h2>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Affects how loud I am about downsides. Not financial advice either way.
+                  </p>
+                </div>
 
-              <div className="flex flex-wrap gap-2">
-                {INTEREST_OPTIONS.map((opt) => {
-                  const active = interests.includes(opt.value);
-                  return (
-                    <button
-                      key={opt.value}
-                      onClick={() => toggleInterest(opt.value)}
-                      className={cn(
-                        "rounded-full border px-4 py-2 text-xs ease-vision",
-                        active
-                          ? "border-primary/60 bg-primary/15 text-foreground"
-                          : "border-border bg-card/30 text-muted-foreground hover:border-primary/30 hover:text-foreground",
-                      )}
-                    >
-                      {opt.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {step === "risk" && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-xl font-light tracking-tight sm:text-2xl">
-                  How should I frame risk?
-                </h2>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Affects how loud I am about downsides. Not financial advice either way.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                {RISK_OPTIONS.map((opt) => {
-                  const active = risk === opt.value;
-                  return (
-                    <button
-                      key={opt.value}
-                      onClick={() => setRisk(opt.value)}
-                      className={cn(
-                        "flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left ease-vision",
-                        active
-                          ? "border-primary/60 bg-primary/10"
-                          : "border-border bg-card/30 hover:border-primary/30 hover:bg-card",
-                      )}
-                    >
-                      <span
+                <div className="space-y-2">
+                  {RISK_OPTIONS.map((opt) => {
+                    const active = risk === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        onClick={() => setRisk(opt.value)}
                         className={cn(
-                          "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border",
+                          "flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left ease-vision",
                           active
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-border",
+                            ? "border-primary/60 bg-primary/10"
+                            : "border-border bg-card/30 hover:border-primary/30 hover:bg-card",
                         )}
                       >
-                        {active && <Check className="h-2.5 w-2.5" />}
-                      </span>
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium text-foreground">
-                          {opt.label}
+                        <span
+                          className={cn(
+                            "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border",
+                            active
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-border",
+                          )}
+                        >
+                          {active && <Check className="h-2.5 w-2.5" />}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-foreground">
+                            {opt.label}
+                          </div>
+                          <div className="mt-0.5 text-xs text-muted-foreground">
+                            {opt.description}
+                          </div>
                         </div>
-                        <div className="mt-0.5 text-xs text-muted-foreground">
-                          {opt.description}
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Footer nav */}
           <div className="mt-8 flex items-center justify-between gap-3">
@@ -353,7 +405,7 @@ const Onboarding = () => {
               type="button"
               variant="ghost"
               onClick={goBack}
-              disabled={stepIndex === 0}
+              disabled={stepIndex === 0 || transitioning}
               className="text-muted-foreground"
             >
               <ChevronLeft className="mr-1 h-4 w-4" />
@@ -362,8 +414,8 @@ const Onboarding = () => {
             <Button
               type="button"
               onClick={goNext}
-              disabled={finishing || savingAvatar}
-              className="rounded-full bg-primary px-6 text-primary-foreground hover:bg-primary/90 ease-vision"
+              disabled={!canContinue}
+              className="rounded-full bg-primary px-6 text-primary-foreground hover:bg-primary/90 ease-vision shadow-glow"
             >
               {isLast ? (finishing ? "Finishing…" : "Finish") : "Continue"}
               <ArrowRight className="ml-1.5 h-4 w-4" />
