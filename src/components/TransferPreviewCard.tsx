@@ -8,8 +8,22 @@ import {
   AlertCircle,
   AlertTriangle,
 } from "lucide-react";
-import { useWallet } from "@solana/wallet-adapter-react";
-import { VersionedTransaction } from "@solana/web3.js";
+import { useConnection, useWallet } from "@solana/wallet-adapter-react";
+import {
+  ComputeBudgetProgram,
+  PublicKey,
+  SystemProgram,
+  TransactionMessage,
+  VersionedTransaction,
+} from "@solana/web3.js";
+import {
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+  createAssociatedTokenAccountInstruction,
+  createTransferCheckedInstruction,
+  getAssociatedTokenAddressSync,
+  TOKEN_2022_PROGRAM_ID,
+  TOKEN_PROGRAM_ID,
+} from "@solana/spl-token";
 import { cn } from "@/lib/utils";
 import { TokenLogo } from "@/components/TokenLogo";
 import { Button } from "@/components/ui/button";
@@ -76,6 +90,7 @@ export const TransferPreviewCard = ({ data: initial }: Props) => {
   const [refreshing, setRefreshing] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const mounted = useRef(true);
+  const { connection } = useConnection();
   const { publicKey, signTransaction, connected } = useWallet();
 
   useEffect(() => {
@@ -120,23 +135,85 @@ export const TransferPreviewCard = ({ data: initial }: Props) => {
     const startedAt = Date.now();
 
     try {
-      // 1. Build
+      // 1. Build locally to avoid backend worker CPU limits
       setPhase({ name: "building" });
-      const built = await supaPost("transfer-build", {
-        fromAddress: data.from.address,
-        toAddress: data.to.address,
-        mint: data.token.isNative ? "SOL" : data.token.mint,
-        amountAtomic: data.amountAtomic,
-        decimals: data.token.decimals,
-        tokenProgram: data.token.tokenProgram,
-      });
-      if (!built.transaction) throw new Error("No transaction returned");
+      const fromPk = new PublicKey(data.from.address);
+      const toPk = new PublicKey(data.to.address);
 
-      // 2. Deserialize + sign
+      const instructions = [
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }),
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
+      ];
+
+      if (data.token.isNative) {
+        instructions.push(
+          SystemProgram.transfer({
+            fromPubkey: fromPk,
+            toPubkey: toPk,
+            lamports: Math.floor(data.amountAtomic),
+          }),
+        );
+      } else {
+        const recipientIsOnCurve = PublicKey.isOnCurve(toPk.toBytes());
+        if (!recipientIsOnCurve) {
+          throw new Error(
+            "That recipient address isn't a regular wallet (off-curve). SPL transfers there could be lost. Double-check the address.",
+          );
+        }
+
+        const tokenProgramId = data.token.tokenProgram === TOKEN_2022_PROGRAM_ID.toBase58()
+          ? TOKEN_2022_PROGRAM_ID
+          : TOKEN_PROGRAM_ID;
+        const mintPk = new PublicKey(data.token.mint);
+        const fromAta = getAssociatedTokenAddressSync(mintPk, fromPk, true, tokenProgramId);
+        const toAta = getAssociatedTokenAddressSync(mintPk, toPk, true, tokenProgramId);
+
+        const [fromAtaAcct, toAtaAcct] = await Promise.all([
+          connection.getAccountInfo(fromAta),
+          connection.getAccountInfo(toAta),
+        ]);
+
+        if (!fromAtaAcct) {
+          throw new Error("You don't hold any of this token in this wallet.");
+        }
+
+        if (!toAtaAcct) {
+          instructions.push(
+            createAssociatedTokenAccountInstruction(
+              fromPk,
+              toAta,
+              toPk,
+              mintPk,
+              tokenProgramId,
+              ASSOCIATED_TOKEN_PROGRAM_ID,
+            ),
+          );
+        }
+
+        instructions.push(
+          createTransferCheckedInstruction(
+            fromAta,
+            mintPk,
+            toAta,
+            fromPk,
+            BigInt(Math.floor(data.amountAtomic)),
+            data.token.decimals,
+            [],
+            tokenProgramId,
+          ),
+        );
+      }
+
+      const { blockhash } = await connection.getLatestBlockhash("confirmed");
+      const message = new TransactionMessage({
+        payerKey: fromPk,
+        recentBlockhash: blockhash,
+        instructions,
+      }).compileToV0Message();
+      const tx = new VersionedTransaction(message);
+
+      // 2. Sign
       setPhase({ name: "awaiting_signature" });
-      const txBytes = Uint8Array.from(atob(built.transaction), (c) => c.charCodeAt(0));
-      const tx = VersionedTransaction.deserialize(txBytes);
-
       let signed: VersionedTransaction;
       try {
         signed = await signTransaction(tx);
