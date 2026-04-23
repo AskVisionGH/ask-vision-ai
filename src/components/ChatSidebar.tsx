@@ -270,6 +270,8 @@ export const ChatSidebar = ({
   onReorderPinned,
   onShare,
   onUnshare,
+  collapsed = false,
+  onToggleCollapsed,
 }: Props) => {
   const { user, signOut } = useAuth();
   const { profile } = useProfile();
