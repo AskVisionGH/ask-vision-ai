@@ -36,8 +36,9 @@ export const useConversations = () => {
     }
     const { data, error } = await supabase
       .from("conversations")
-      .select("id, title, wallet_address, pinned, created_at, updated_at")
+      .select("id, title, wallet_address, pinned, pin_order, created_at, updated_at")
       .order("pinned", { ascending: false })
+      .order("pin_order", { ascending: true })
       .order("updated_at", { ascending: false });
     if (!error && data) setConversations(data as ConversationRow[]);
     setLoading(false);
