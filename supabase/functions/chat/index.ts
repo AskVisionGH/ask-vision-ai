@@ -310,6 +310,51 @@ async function invokeFn(name: string, body: unknown, req: Request) {
   return await resp.json();
 }
 
+const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
+// Lightweight recipient resolver — no @solana/web3.js, no extra worker hop.
+// .sol names go through the SNS HTTP proxy. Raw addresses are format-checked only.
+// Full on-curve / Solana validation happens inside transfer-quote where web3.js
+// is already loaded.
+async function resolveRecipientInline(
+  recipient: string,
+): Promise<{ address: string; displayName: string | null } | { error: string }> {
+  const trimmed = (recipient ?? "").trim();
+  if (!trimmed) return { error: "recipient required" };
+
+  if (trimmed.toLowerCase().endsWith(".sol")) {
+    try {
+      const resp = await fetch(
+        `https://sdk-proxy.sns.id/resolve/${encodeURIComponent(trimmed)}`,
+      );
+      const data = await resp.json().catch(() => null);
+      if (!resp.ok || !data || data.s !== "ok" || typeof data.result !== "string") {
+        return {
+          error:
+            `I couldn't resolve "${trimmed}" right now. Try again in a moment, or paste the wallet address.`,
+        };
+      }
+      const result = data.result.trim();
+      if (!BASE58_RE.test(result)) {
+        return { error: `Resolver returned an invalid address for "${trimmed}".` };
+      }
+      return { address: result, displayName: trimmed.toLowerCase() };
+    } catch (e) {
+      console.error("SNS resolve error:", e);
+      return {
+        error:
+          `I couldn't resolve "${trimmed}" right now. Try again in a moment, or paste the wallet address.`,
+      };
+    }
+  }
+
+  if (BASE58_RE.test(trimmed)) {
+    return { address: trimmed, displayName: null };
+  }
+
+  return { error: "Recipient must be a wallet address or .sol name." };
+}
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
