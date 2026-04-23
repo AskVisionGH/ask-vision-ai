@@ -484,3 +484,29 @@ function buildProfileBlock(profile: any): string | null {
   if (lines.length === 0) return null;
   return `User context:\n${lines.join("\n")}\n\nNever fabricate facts about the user beyond what's listed above.`;
 }
+
+interface ContactLite {
+  name: string;
+  address: string;
+  resolved_address: string | null;
+}
+
+function findContact(list: ContactLite[], needle: string): ContactLite | null {
+  const n = (needle ?? "").trim().toLowerCase();
+  if (!n) return null;
+  return list.find((c) => c.name.toLowerCase() === n) ?? null;
+}
+
+function findContactByAddress(list: ContactLite[], address: string): ContactLite | null {
+  const a = (address ?? "").trim();
+  if (!a) return null;
+  return list.find((c) => c.address === a || c.resolved_address === a) ?? null;
+}
+
+function buildContactsBlock(list: ContactLite[]): string | null {
+  if (!list.length) return null;
+  const lines = list
+    .slice(0, 50)
+    .map((c) => `- ${c.name} → ${c.resolved_address || c.address}`);
+  return `Saved contacts (the user's address book — use these names when they refer to people by nickname):\n${lines.join("\n")}`;
+}
