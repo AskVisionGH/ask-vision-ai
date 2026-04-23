@@ -17,7 +17,7 @@ Voice:
 - Never use emojis unless the user uses them first.
 
 Tools (call them whenever relevant — don't ask permission, don't pretend you called them):
-- \`get_wallet_balance\` — fetches the connected user's holdings. Use for "what's in my wallet", "my balance", "my portfolio", etc. No arguments; the wallet address is injected.
+- \`get_wallet_balance\` — fetches a Solana wallet's holdings. Defaults to the connected user's wallet if no \`address\` is given. If the user includes ANY base58 wallet address in their message (e.g., "holdings 8xELsrJN..." or "what does CjkG...U1eh hold"), pass that exact address as the \`address\` argument — do NOT default to the connected wallet.
 - \`get_token_info\` — fetches live price, market cap, volume, and 24h change for a single token. Use whenever the user names a token ($SOL, JUP, BONK) or pastes a mint address. Argument: \`query\` (ticker like "SOL" or full mint address).
 - \`get_trending\` — fetches the top trending Solana tokens by 24h volume. ALWAYS call this for any question about what's trending, hot, popular, top tokens, or what's moving on Solana — never answer from memory.
 - \`prepare_swap\` — fetches a live Jupiter quote for swapping one token into another. Call this whenever the user wants to swap, trade, exchange, or convert tokens (e.g. "swap 0.1 SOL for USDC", "trade 100 BONK to SOL"). Arguments: \`inputToken\`, \`outputToken\` (tickers or mint addresses), \`amount\` (decimal of inputToken), and optional \`slippageBps\` (default 50 = 0.5%). NEVER execute — this only quotes.
@@ -58,8 +58,17 @@ const TOOLS = [
     function: {
       name: "get_wallet_balance",
       description:
-        "Fetch the connected user's Solana wallet holdings: SOL balance, all SPL tokens, USD values, and total portfolio value. Use whenever the user asks about their balance, holdings, portfolio, or what they own.",
-      parameters: { type: "object", properties: {}, additionalProperties: false },
+        "Fetch Solana wallet holdings (SOL + SPL tokens, USD values, total portfolio value). Defaults to the connected user's wallet. If the user pastes or mentions any other wallet address (base58, ~32-44 chars), pass it as the `address` argument so we look up THAT wallet, not the connected one.",
+      parameters: {
+        type: "object",
+        properties: {
+          address: {
+            type: "string",
+            description: "Optional Solana wallet address to look up. Omit to use the connected user's wallet.",
+          },
+        },
+        additionalProperties: false,
+      },
     },
   },
   {
@@ -579,10 +588,12 @@ serve(async (req) => {
             let eventType: string | null = null;
 
             if (name === "get_wallet_balance") {
-              if (!walletAddress) {
+              const args = safeJson(tc.function?.arguments);
+              const target = (args.address ?? "").trim() || walletAddress;
+              if (!target) {
                 result = { error: "No wallet connected" };
               } else {
-                result = await invokeFn("wallet-balance", { address: walletAddress }, req);
+                result = await invokeFn("wallet-balance", { address: target }, req);
               }
               eventType = "wallet_balance";
             } else if (name === "get_token_info") {
