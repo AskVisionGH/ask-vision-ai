@@ -795,6 +795,12 @@ serve(async (req) => {
               content: JSON.stringify(toolPayload),
             });
           }
+
+          // If this round was triggered by our forced fallback (model already
+          // wrote framing without calling a tool), stop now — otherwise the
+          // next iteration would have the model write another paragraph
+          // duplicating what it just said.
+          if (isForcedFallbackTurn && cardEmitted) break;
         }
 
         send("done", {});
