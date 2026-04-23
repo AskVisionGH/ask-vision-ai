@@ -214,13 +214,13 @@ const TOOLS = [
     function: {
       name: "get_token_chart",
       description:
-        "Fetch OHLCV price candles for a Solana token across selectable intervals (5m, 15m, 1h, 4h, 1d). Use whenever the user asks for a chart, price action, trend, or to 'show' the price for a token.",
+        "Fetch OHLCV price candles across selectable intervals (5m, 15m, 1h, 4h, 1d). Works for Solana SPL tokens (chart is built from the most-liquid Solana DEX pool) AND for major-cap coins across all chains — BTC, ETH, XRP, BNB, ADA, DOGE, etc — anything in the CoinGecko top-250 (chart is aggregated cross-exchange CEX pricing, not a single low-liquidity pool). Use whenever the user asks for a chart, price action, trend, or to 'show' the price for a token.",
       parameters: {
         type: "object",
         properties: {
           query: {
             type: "string",
-            description: "Token ticker (e.g. 'SOL', 'BONK') or full Solana mint address.",
+            description: "Token ticker (e.g. 'BTC', 'ETH', 'SOL', 'BONK'), full coin name, or Solana mint address.",
           },
           interval: {
             type: "string",
