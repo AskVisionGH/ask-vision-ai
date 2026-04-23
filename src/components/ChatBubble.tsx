@@ -176,6 +176,9 @@ export const ChatBubble = ({ message, onEdit, readOnly = false }: Props) => {
         if (event.type === "social_sentiment") {
           return <SocialSentimentCard key={i} data={event.data} />;
         }
+        if (event.type === "solana_news") {
+          return <NewsCard key={i} data={event.data} />;
+        }
         return null;
       })}
     </div>

@@ -60,18 +60,8 @@ const NewsRow = ({ item }: { item: NewsItem }) => {
             }}
           />
         ) : (
-          <div
-            className={cn(
-              "flex h-14 w-14 flex-none items-center justify-center rounded-md",
-              item.kind === "reddit" ? "bg-orange-500/10" : "bg-primary/10",
-            )}
-          >
-            <Newspaper
-              className={cn(
-                "h-5 w-5",
-                item.kind === "reddit" ? "text-orange-500" : "text-primary",
-              )}
-            />
+          <div className="flex h-14 w-14 flex-none items-center justify-center rounded-md bg-primary/10">
+            <Newspaper className="h-5 w-5 text-primary" />
           </div>
         )}
 
