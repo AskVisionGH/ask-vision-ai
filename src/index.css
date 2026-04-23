@@ -2,95 +2,65 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* Vision design system — dark, minimal, lilac.
+   All colors HSL. Inherits the askvision.ai landing page aesthetic. */
+
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@300;400;500&display=swap');
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Surfaces */
+    --background: 240 6% 6%;          /* #09090b */
+    --foreground: 240 5% 96%;         /* #f4f4f5 */
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card: 240 7% 8%;                /* #111114 */
+    --card-foreground: 240 5% 96%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover: 240 8% 9%;             /* #16161a */
+    --popover-foreground: 240 5% 96%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* Lilac accent */
+    --primary: 252 95% 85%;           /* #c4b5fd */
+    --primary-foreground: 240 6% 6%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --primary-glow: 258 90% 66%;      /* #8b5cf6 */
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --secondary: 240 7% 12%;
+    --secondary-foreground: 240 5% 96%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --muted: 240 6% 14%;
+    --muted-foreground: 240 5% 65%;   /* #a1a1aa */
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --accent: 252 95% 85%;
+    --accent-foreground: 240 6% 6%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 240 5% 96%;
 
-    --radius: 0.5rem;
+    --border: 240 5% 16%;             /* rgba(255,255,255,.08) on dark */
+    --input: 240 5% 16%;
+    --ring: 252 95% 85%;
 
-    --sidebar-background: 0 0% 98%;
+    --radius: 0.875rem;               /* 14px base */
 
-    --sidebar-foreground: 240 5.3% 26.1%;
+    /* Gradients & glows */
+    --gradient-aurora: radial-gradient(ellipse 80% 60% at 50% -20%, hsl(258 90% 66% / 0.25), transparent 70%);
+    --gradient-beam: linear-gradient(180deg, hsl(252 95% 85% / 0.6) 0%, hsl(258 90% 66% / 0.1) 50%, transparent 100%);
+    --shadow-glow: 0 0 60px hsl(258 90% 66% / 0.35);
+    --shadow-soft: 0 1px 0 hsl(0 0% 100% / 0.04) inset, 0 8px 32px hsl(240 6% 0% / 0.4);
 
-    --sidebar-primary: 240 5.9% 10%;
+    /* Easing */
+    --ease-vision: cubic-bezier(0.2, 0.7, 0.2, 1);
 
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
-  }
-
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Sidebar */
+    --sidebar-background: 240 7% 7%;
+    --sidebar-foreground: 240 5% 85%;
+    --sidebar-primary: 252 95% 85%;
+    --sidebar-primary-foreground: 240 6% 6%;
+    --sidebar-accent: 240 6% 12%;
+    --sidebar-accent-foreground: 240 5% 96%;
+    --sidebar-border: 240 5% 14%;
+    --sidebar-ring: 252 95% 85%;
   }
 }
 
@@ -99,7 +69,83 @@ All colors MUST be HSL.
     @apply border-border;
   }
 
+  html {
+    font-family: 'Geist', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "ss01", "cv11";
   }
+
+  /* Subtle film grain overlay */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 100;
+    opacity: 0.035;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.3);
+    color: hsl(var(--foreground));
+  }
+}
+
+@layer utilities {
+  .font-serif-italic {
+    font-family: 'Instrument Serif', serif;
+    font-style: italic;
+    font-weight: 400;
+  }
+
+  .font-mono {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+  }
+
+  .bg-aurora {
+    background-image: var(--gradient-aurora);
+  }
+
+  .shadow-glow {
+    box-shadow: var(--shadow-glow);
+  }
+
+  .shadow-soft {
+    box-shadow: var(--shadow-soft);
+  }
+
+  .ease-vision {
+    transition-timing-function: var(--ease-vision);
+  }
+
+  /* Vertical light beam */
+  .beam {
+    background: var(--gradient-beam);
+    filter: blur(8px);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.7; transform: scaleY(1); }
+  50% { opacity: 1; transform: scaleY(1.05); }
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 4s var(--ease-vision) infinite;
+}
+
+.animate-fade-up {
+  animation: fade-up 0.8s var(--ease-vision) both;
 }
