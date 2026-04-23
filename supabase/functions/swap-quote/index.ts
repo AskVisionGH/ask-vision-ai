@@ -144,6 +144,15 @@ serve(async (req) => {
     quoteUrl.searchParams.set("slippageBps", String(slippageBps));
     quoteUrl.searchParams.set("restrictIntermediateTokens", "true");
 
+    // Platform fee — Jupiter takes it in the OUTPUT mint and routes it to
+    // a token account owned by our referral PDA. Configured via secret so
+    // we can rotate without code changes.
+    const PLATFORM_FEE_BPS = 100; // 1%
+    const referralAccount = Deno.env.get("JUPITER_REFERRAL_ACCOUNT") ?? "";
+    if (referralAccount) {
+      quoteUrl.searchParams.set("platformFeeBps", String(PLATFORM_FEE_BPS));
+    }
+
     const qResp = await fetch(quoteUrl.toString());
     if (!qResp.ok) {
       const t = await qResp.text();
@@ -171,6 +180,13 @@ serve(async (req) => {
       outputMint: step.swapInfo?.outputMint ?? null,
     }));
 
+    // Platform fee surfaced for UI disclosure
+    const platformFeeBps = referralAccount ? PLATFORM_FEE_BPS : 0;
+    const platformFeeUi = quote.platformFee?.amount
+      ? Number(quote.platformFee.amount) / Math.pow(10, outMeta.decimals)
+      : (platformFeeBps > 0 ? outUi * (platformFeeBps / 10_000) : 0);
+    const platformFeeUsd = outMeta.priceUsd != null ? platformFeeUi * outMeta.priceUsd : null;
+
     return json({
       input: { ...inMeta, amountUi: inUi, amountAtomic: atomicIn, valueUsd: inValueUsd },
       output: { ...outMeta, amountUi: outUi, amountAtomic: atomicOut, valueUsd: outValueUsd },
@@ -180,6 +196,12 @@ serve(async (req) => {
       route,
       // Typical Solana network fee for a swap (rough estimate, in SOL)
       estNetworkFeeSol: 0.000075,
+      platformFee: {
+        bps: platformFeeBps,
+        amountUi: platformFeeUi,
+        symbol: outMeta.symbol,
+        valueUsd: platformFeeUsd,
+      },
       quotedAt: Date.now(),
     });
   } catch (e) {

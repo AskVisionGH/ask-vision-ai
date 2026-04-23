@@ -80,6 +80,12 @@ export interface SwapQuoteData {
   slippageBps: number;
   route: SwapRouteHop[];
   estNetworkFeeSol: number;
+  platformFee?: {
+    bps: number;
+    amountUi: number;
+    symbol: string;
+    valueUsd: number | null;
+  };
   quotedAt: number;
   error?: string;
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, RefreshCw, Loader2, CheckCircle2, ExternalLink, AlertCircle } from "lucide-react";
+import { ArrowRight, RefreshCw, Loader2, CheckCircle2, ExternalLink, AlertCircle, Info } from "lucide-react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { VersionedTransaction } from "@solana/web3.js";
 import { cn } from "@/lib/utils";
@@ -347,13 +347,44 @@ export const SwapPreviewCard = ({ data: initial }: Props) => {
             }
           />
           <Row
-            label="Fee"
+            label="Network fee"
             value={
               <span className="font-mono text-[13px] text-muted-foreground">
-                ~{data.estNetworkFeeSol.toFixed(6)} SOL network
+                ~{data.estNetworkFeeSol.toFixed(6)} SOL
               </span>
             }
           />
+          {data.platformFee && data.platformFee.bps > 0 && (
+            <Row
+              label="Platform fee"
+              value={
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono text-[13px] text-foreground">
+                    {(data.platformFee.bps / 100).toFixed(2)}%
+                  </span>
+                  <span className="font-mono text-[11px] text-muted-foreground">
+                    (~{fmtAmount(data.platformFee.amountUi)} {data.platformFee.symbol})
+                  </span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        className="ease-vision text-muted-foreground/60 transition-colors hover:text-foreground"
+                        aria-label="About platform fee"
+                      >
+                        <Info className="h-3 w-3" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-[240px]">
+                      <p className="font-mono text-[11px] leading-relaxed">
+                        Vision charges a 1% platform fee on swaps, taken in the output token. Transfers and bridges are free.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              }
+            />
+          )}
         </div>
 
         {/* Inline error banner */}
