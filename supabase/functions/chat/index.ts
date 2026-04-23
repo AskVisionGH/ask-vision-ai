@@ -296,6 +296,7 @@ serve(async (req) => {
       // cards if the model decides to call the same tool again.
       const emittedToolKeys = new Set<string>();
       let cardEmitted = false;
+      let toolErrored = false;
 
       try {
         for (let iter = 0; iter < 3; iter++) {
