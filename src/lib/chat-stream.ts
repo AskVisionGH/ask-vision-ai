@@ -303,6 +303,7 @@ export interface StreamChatCallbacks {
 export async function streamChat(args: {
   messages: ChatMessage[];
   walletAddress?: string;
+  userId?: string | null;
   profile?: UserProfileContext;
   contacts?: ContactContext[];
   signal?: AbortSignal;
@@ -318,6 +319,7 @@ export async function streamChat(args: {
       body: JSON.stringify({
         messages: toModelMessages(args.messages),
         walletAddress: args.walletAddress ?? null,
+        userId: args.userId ?? null,
         profile: args.profile ?? null,
         contacts: args.contacts ?? [],
       }),
