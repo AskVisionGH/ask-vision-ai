@@ -84,18 +84,53 @@ export const useConversations = () => {
   }, []);
 
   const togglePin = useCallback(async (id: string, pinned: boolean) => {
+    let newOrder = 0;
     setConversations((prev) => {
-      const next = prev.map((c) => (c.id === id ? { ...c, pinned } : c));
-      // Re-sort: pinned first, then by updated_at desc
+      // When pinning, place at the end of the pinned list (highest order + 1).
+      // When unpinning, order is irrelevant — reset to 0.
+      if (pinned) {
+        const maxOrder = prev
+          .filter((c) => c.pinned)
+          .reduce((m, c) => Math.max(m, c.pin_order), -1);
+        newOrder = maxOrder + 1;
+      }
+      const next = prev.map((c) =>
+        c.id === id ? { ...c, pinned, pin_order: pinned ? newOrder : 0 } : c,
+      );
       return next.sort((a, b) => {
         if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+        if (a.pinned && b.pinned) return a.pin_order - b.pin_order;
         return b.updated_at.localeCompare(a.updated_at);
       });
     });
     await supabase
       .from("conversations")
-      .update({ pinned } as never)
+      .update({ pinned, pin_order: pinned ? newOrder : 0 } as never)
       .eq("id", id);
+  }, []);
+
+  /** Reorders the pinned conversations to the given id sequence. */
+  const reorderPinned = useCallback(async (orderedIds: string[]) => {
+    setConversations((prev) => {
+      const orderMap = new Map(orderedIds.map((id, i) => [id, i]));
+      const next = prev.map((c) =>
+        orderMap.has(c.id) ? { ...c, pin_order: orderMap.get(c.id)! } : c,
+      );
+      return next.sort((a, b) => {
+        if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+        if (a.pinned && b.pinned) return a.pin_order - b.pin_order;
+        return b.updated_at.localeCompare(a.updated_at);
+      });
+    });
+    // Persist each pin_order in parallel.
+    await Promise.all(
+      orderedIds.map((id, i) =>
+        supabase
+          .from("conversations")
+          .update({ pin_order: i } as never)
+          .eq("id", id),
+      ),
+    );
   }, []);
 
   return {
@@ -106,6 +141,7 @@ export const useConversations = () => {
     renameConversation,
     deleteConversation,
     togglePin,
+    reorderPinned,
   };
 };
 
