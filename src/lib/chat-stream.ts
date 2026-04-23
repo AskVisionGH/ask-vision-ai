@@ -169,6 +169,9 @@ export interface TokenChartData {
   priceChangePct: number | null;
   high: number | null;
   low: number | null;
+  /** "coingecko" for cross-exchange aggregated charts (BTC, ETH, etc),
+   *  "solana-dex" for SPL tokens charted from a single Solana pool. */
+  source?: "coingecko" | "solana-dex";
   error?: string;
 }
 
