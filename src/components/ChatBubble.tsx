@@ -78,12 +78,11 @@ export const ChatBubble = ({ message, onEdit, readOnly = false }: Props) => {
         >
           {editing ? (
             <div className="flex flex-col gap-2">
-              <Textarea
+              <textarea
                 ref={textareaRef}
                 value={draft}
                 onChange={(e) => {
                   setDraft(e.target.value);
-                  // Grow with content.
                   e.currentTarget.style.height = "auto";
                   e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
                 }}
@@ -97,31 +96,28 @@ export const ChatBubble = ({ message, onEdit, readOnly = false }: Props) => {
                     setDraft(message.content);
                   }
                 }}
-                className="min-h-[40px] resize-none border-0 bg-transparent p-0 font-mono text-[13px] leading-relaxed shadow-none focus-visible:ring-0"
+                rows={1}
+                className="w-full resize-none border-0 bg-transparent p-0 font-mono text-[13px] leading-relaxed text-foreground outline-none focus:outline-none focus:ring-0"
               />
-              <div className="flex items-center justify-end gap-2">
-                <Button
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
                   type="button"
-                  variant="ghost"
-                  size="sm"
                   onClick={() => {
                     setEditing(false);
                     setDraft(message.content);
                   }}
-                  className="h-7 px-2 text-xs text-muted-foreground"
+                  className="text-xs text-muted-foreground hover:text-foreground"
                 >
-                  <X className="mr-1 h-3 w-3" />
                   Cancel
-                </Button>
-                <Button
+                </button>
+                <button
                   type="button"
-                  size="sm"
                   onClick={commitEdit}
                   disabled={!draft.trim() || draft.trim() === message.content}
-                  className="h-7 rounded-full bg-primary px-3 text-xs text-primary-foreground hover:bg-primary/90"
+                  className="rounded-full bg-primary px-3 py-1 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                 >
                   Save & regenerate
-                </Button>
+                </button>
               </div>
             </div>
           ) : (
