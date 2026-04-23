@@ -581,6 +581,7 @@ serve(async (req) => {
             // model finishes writing its framing text — but only on success.
             if (eventType && !hasError) {
               send("tool", { type: eventType, data: result });
+              cardEmitted = true;
             }
 
             conversation.push({
