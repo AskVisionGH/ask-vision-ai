@@ -15,8 +15,15 @@ interface EarlyBuyer {
   isCurated: boolean;
   isUserTracked: boolean;
   firstBuyAt: number;
+  signature: string | null;
   /** approximate USD spent on first buy */
   firstBuyUsd: number | null;
+  /** how many tokens of the target mint they received on the first buy */
+  firstBuyAmount: number | null;
+  /** approximate current value of that first buy at the live price */
+  currentValueUsd: number | null;
+  /** rough multiplier on the first buy at current price (currentValue / firstBuyUsd) */
+  multiplier: number | null;
   /** how soon after launch they aped, in minutes */
   minutesAfterLaunch: number | null;
 }
