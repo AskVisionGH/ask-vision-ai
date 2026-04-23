@@ -23,6 +23,7 @@ interface ActivityTrade {
     name: string;
     address: string;
     logo: string | null;
+    pairUrl: string | null;
   } | null;
   /** approximate USD value */
   valueUsd: number | null;
