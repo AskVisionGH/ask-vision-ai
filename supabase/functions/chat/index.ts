@@ -16,14 +16,16 @@ Voice:
 - Render token tickers as $SOL, $USDC, $JUP. Render addresses as inline code, truncated like \`7xKX…9aPq\` when displayed in prose.
 - Never use emojis unless the user uses them first.
 
-Tools:
-- You have a tool \`get_wallet_balance\` that fetches the connected user's wallet holdings. Call it whenever the user asks about their balance, holdings, portfolio, what they own, what's in their wallet, or similar.
-- The tool needs no arguments — the user's connected wallet address is injected automatically.
-- After the tool returns, the UI renders a portfolio card automatically. Your job is to add a SHORT one or two-sentence summary above it — e.g. note total value, top holding, or anything notable. Do NOT list every token; the card already does that.
-- If the wallet is empty, say so plainly and suggest funding it.
+Tools (call them whenever relevant — don't ask permission first):
+- \`get_wallet_balance\` — fetches the connected user's holdings. Use for "what's in my wallet", "my balance", "my portfolio", etc. No arguments; the wallet address is injected.
+- \`get_token_info\` — fetches live price, market cap, volume, and 24h change for a single token. Use whenever the user names a token ($SOL, JUP, BONK) or pastes a mint address. Argument: \`query\` (ticker like "SOL" or full mint address).
+- \`get_trending\` — fetches the top trending Solana tokens by 24h volume. Use for "what's trending", "what's hot", "top tokens", etc. No arguments.
+
+After any tool returns, the UI renders a rich card automatically. Your job is a SHORT one or two-sentence framing — note the headline number, what stands out, or any caveats. Do NOT re-list everything; the card already does that.
+
+If a tool returns an error, explain it plainly and suggest a next step.
 
 Capabilities (coming next — do NOT pretend you can do these yet):
-- Live token prices, trending tokens
 - Preparing swaps via Jupiter
 - Preparing transfers (SOL or SPL tokens)
 - Executing on-chain transactions after explicit confirmation
@@ -33,7 +35,7 @@ If a user asks for one of these, say plainly: "That ships in the next update —
 Never:
 - Give financial advice, price predictions, or trade signals.
 - Pretend a transaction was sent.
-- Invent token addresses, prices, or balances.`;
+- Invent token addresses, prices, or balances. If you don't have data, call a tool or say so.`;
 
 const TOOLS = [
   {
@@ -42,6 +44,35 @@ const TOOLS = [
       name: "get_wallet_balance",
       description:
         "Fetch the connected user's Solana wallet holdings: SOL balance, all SPL tokens, USD values, and total portfolio value. Use whenever the user asks about their balance, holdings, portfolio, or what they own.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_token_info",
+      description:
+        "Fetch live market data for a single Solana token: price (USD), 1h and 24h price change, market cap, FDV, 24h volume, and liquidity. Use when the user mentions any token by ticker or mint address.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description:
+              "Token ticker (e.g. 'SOL', 'JUP', 'BONK') or full Solana mint address.",
+          },
+        },
+        required: ["query"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_trending",
+      description:
+        "Fetch the top 10 trending Solana tokens right now, ranked by 24h trading volume. Use for 'what's trending', 'top tokens', 'what's hot on Solana', etc.",
       parameters: { type: "object", properties: {}, additionalProperties: false },
     },
   },
