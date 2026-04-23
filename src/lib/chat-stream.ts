@@ -19,8 +19,44 @@ export interface WalletBalanceData {
   error?: string;
 }
 
+export interface TokenInfoData {
+  symbol: string;
+  name: string;
+  address: string;
+  logo: string | null;
+  priceUsd: number | null;
+  priceChange24h: number | null;
+  priceChange1h: number | null;
+  marketCapUsd: number | null;
+  fdvUsd: number | null;
+  volume24hUsd: number | null;
+  liquidityUsd: number | null;
+  pairUrl: string | null;
+  error?: string;
+}
+
+export interface TrendingToken {
+  symbol: string;
+  name: string;
+  address: string;
+  logo: string | null;
+  priceUsd: number | null;
+  priceChange24h: number | null;
+  volume24hUsd: number | null;
+  liquidityUsd: number | null;
+  marketCapUsd: number | null;
+  pairUrl: string | null;
+}
+
+export interface TrendingData {
+  tokens: TrendingToken[];
+  error?: string;
+}
+
 export type ToolEvent =
   | { type: "wallet_balance"; data: WalletBalanceData }
+  | { type: "token_info"; data: TokenInfoData }
+  | { type: "trending"; data: TrendingData }
   | { type: string; data: any };
 
 export interface ChatMessage {
@@ -32,7 +68,6 @@ export interface ChatMessage {
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
 const AUTH_TOKEN = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-// Strip toolEvents before sending to model (it only needs role + content history)
 function toModelMessages(msgs: ChatMessage[]) {
   return msgs.map(({ role, content }) => ({ role, content }));
 }
