@@ -28,6 +28,8 @@ Tools (call them whenever relevant — don't ask permission, don't pretend you c
 - \`get_token_chart\` — fetches OHLCV price candles for a Solana token across 5m/15m/1h/4h/1d intervals and returns a renderable chart. Call this whenever the user asks for a chart, price action, the trend, "show me the chart", "how's it looking on the 5m", "draw a graph", etc. Arguments: \`query\` (ticker or mint), \`interval\` (one of "5m", "15m", "1h", "4h", "1d" — default "1h" if unspecified).
 - \`get_social_sentiment\` — pulls Twitter/X + Reddit + news sentiment, social volume, top posts and Galaxy Score for a token via LunarCrush. Call this for any "what's twitter saying about $X", "social sentiment", "what's the lore on X", "is X trending on twitter", "vibe check", "how bullish is the crowd". Argument: \`query\` (ticker like "BONK" or full mint).
 - \`get_solana_news\` — fetches the latest Solana ecosystem news headlines aggregated from Solana Foundation, CoinDesk, Decrypt, Reddit r/solana and CoinGecko. Call this for any "what's new on Solana", "latest news", "any updates", "what's happening", "ecosystem news", "headlines" question. No arguments — ecosystem-wide only.
+- \`get_early_buyers\` — finds which curated/tracked smart-money wallets bought a specific token in its first 24h after launch. Use for "who bought $X early", "smart money on $X", "did anyone good ape $X", "early buyers", "who got in early". Argument: \`query\` (ticker or mint).
+- \`get_smart_money_activity\` — shows what curated/tracked smart-money wallets have been buying or selling recently. Use for "what is smart money buying", "what are the pros doing", "what's smart money trading right now", "any alpha from tracked wallets". Optional argument: \`windowHours\` (default 24, max 168).
 
 CRITICAL: If a user asks for live data (prices, balances, what's trending, swap quotes, charts, social sentiment), you MUST call the matching tool — every single time, even if you called it earlier in this conversation for a different token, even if the user just asks again. Never make up numbers. Never say "here's the chart" or "here are the top tokens" without first calling the matching tool. The UI cannot render a chart, portfolio, or any data card unless you actually invoke the tool. Past assistant turns showing cards do NOT count — you must re-invoke the tool for each new request.
 
@@ -245,6 +247,43 @@ const TOOLS = [
       description:
         "Fetch the latest Solana ecosystem news headlines from Solana Foundation, CoinDesk, Decrypt, Reddit r/solana and CoinGecko. Use for any 'what's new on Solana', 'latest news', 'any updates', 'ecosystem news', 'headlines', 'what's happening' question. No arguments.",
       parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_early_buyers",
+      description:
+        "Find which curated/tracked smart-money wallets bought a token in its first 24h after launch. Use for 'who bought X early', 'smart money on X', 'did pros ape X', 'early buyers', 'who got in early on X'.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "Token ticker (e.g. 'WIF', 'BONK') or full Solana mint address.",
+          },
+        },
+        required: ["query"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_smart_money_activity",
+      description:
+        "Show recent buys/sells from curated and user-tracked smart-money wallets. Use for 'what is smart money buying', 'what are pros trading', 'tracked wallet activity', 'smart-money feed', 'any alpha right now'.",
+      parameters: {
+        type: "object",
+        properties: {
+          windowHours: {
+            type: "number",
+            description: "Lookback window in hours. Default 24, max 168 (7 days).",
+          },
+        },
+        additionalProperties: false,
+      },
     },
   },
 ];
