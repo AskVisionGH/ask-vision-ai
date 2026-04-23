@@ -173,6 +173,25 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "analyze_contract",
+      description:
+        "Run a safety/rug-risk audit on a Solana token: mint authority, freeze authority, LP lock %, top holder concentration, transfer tax, and known scam flags. Use for any safety/legitimacy question ('is X safe', 'rug check', 'honeypot', 'who holds this', 'is LP locked'), or proactively when the user pastes an unfamiliar mint.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "Token ticker (e.g. 'WIF') or full Solana mint address.",
+          },
+        },
+        required: ["query"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 serve(async (req) => {
@@ -444,6 +463,10 @@ serve(async (req) => {
                 content: JSON.stringify(result),
               });
               continue;
+            } else if (name === "analyze_contract") {
+              const args = safeJson(tc.function?.arguments);
+              result = await invokeFn("contract-analyzer", { query: args.query ?? "" }, req);
+              eventType = "risk_report";
             } else {
               result = { error: `Unknown tool: ${name}` };
             }

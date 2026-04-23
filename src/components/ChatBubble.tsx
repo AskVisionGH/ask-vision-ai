@@ -9,6 +9,7 @@ import { TokenCard } from "@/components/TokenCard";
 import { TrendingCard } from "@/components/TrendingCard";
 import { SwapPreviewCard } from "@/components/SwapPreviewCard";
 import { TransferPreviewCard } from "@/components/TransferPreviewCard";
+import { RiskReportCard } from "@/components/RiskReportCard";
 
 interface Props {
   message: ChatMessage;
@@ -162,6 +163,9 @@ export const ChatBubble = ({ message, onEdit, readOnly = false }: Props) => {
         }
         if (event.type === "transfer_quote") {
           return <TransferPreviewCard key={i} data={event.data} />;
+        }
+        if (event.type === "risk_report") {
+          return <RiskReportCard key={i} data={event.data} />;
         }
         return null;
       })}
