@@ -204,6 +204,18 @@ serve(async (req) => {
         } else if (name === "get_trending") {
           result = await invokeFn("trending-tokens", {}, req);
           toolEvents.push({ type: "trending", data: result });
+        } else if (name === "prepare_swap") {
+          let args: any = {};
+          try {
+            args = JSON.parse(tc.function?.arguments ?? "{}");
+          } catch { /* ignore */ }
+          result = await invokeFn("swap-quote", {
+            inputToken: args.inputToken ?? "",
+            outputToken: args.outputToken ?? "",
+            amount: args.amount,
+            slippageBps: args.slippageBps,
+          }, req);
+          toolEvents.push({ type: "swap_quote", data: result });
         } else {
           result = { error: `Unknown tool: ${name}` };
         }
