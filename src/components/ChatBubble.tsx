@@ -3,6 +3,8 @@ import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/lib/chat-stream";
 import { PortfolioCard } from "@/components/PortfolioCard";
+import { TokenCard } from "@/components/TokenCard";
+import { TrendingCard } from "@/components/TrendingCard";
 
 interface Props {
   message: ChatMessage;

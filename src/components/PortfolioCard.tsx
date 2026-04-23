@@ -103,29 +103,3 @@ export const PortfolioCard = ({ data }: Props) => {
     </div>
   );
 };
-
-const TokenLogo = ({ logo, symbol }: { logo: string | null; symbol: string }) => {
-  return (
-    <div
-      className={cn(
-        "flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full",
-        "border border-border bg-secondary",
-      )}
-    >
-      {logo ? (
-        <img
-          src={logo}
-          alt={symbol}
-          className="h-full w-full object-cover"
-          onError={(e) => {
-            (e.currentTarget as HTMLImageElement).style.display = "none";
-          }}
-        />
-      ) : (
-        <span className="font-mono text-[10px] text-muted-foreground">
-          {symbol.slice(0, 2).toUpperCase()}
-        </span>
-      )}
-    </div>
-  );
-};
