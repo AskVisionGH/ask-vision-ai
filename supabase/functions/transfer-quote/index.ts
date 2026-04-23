@@ -170,7 +170,7 @@ serve(async (req) => {
     }
 
     let toAddress = resolvedAddress;
-    let isOnCurve = providedIsOnCurve ?? true;
+    let isOnCurve: boolean | null = providedIsOnCurve;
 
     if (!toAddress) {
       const trimmedRecipient = recipientInput.trim();
@@ -182,6 +182,15 @@ serve(async (req) => {
       }
       try {
         toAddress = new PublicKey(trimmedRecipient).toBase58();
+      } catch {
+        return json({ error: "That doesn't look like a valid Solana address." }, 400);
+      }
+    }
+
+    // Authoritative on-curve check — chat now resolves recipients without web3.js,
+    // so this function is the single place that runs the heavy validation.
+    if (isOnCurve === null) {
+      try {
         isOnCurve = PublicKey.isOnCurve(new PublicKey(toAddress).toBytes());
       } catch {
         return json({ error: "That doesn't look like a valid Solana address." }, 400);
