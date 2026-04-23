@@ -1,54 +1,61 @@
 import { useEffect, useState } from "react";
 
-// A scripted, looping conversation snippet shown beneath the hero. Pure
-// presentation — no real chat happens.
-const SCRIPT: Array<{ role: "user" | "assistant"; text: string }> = [
-  { role: "user", text: "what's in my wallet?" },
-  { role: "assistant", text: "$2,481 across 7 tokens. SOL leads at 64%." },
-  { role: "user", text: "swap 0.5 sol to usdc" },
-  { role: "assistant", text: "Best route: Jupiter → 87.42 USDC. Confirm?" },
-  { role: "user", text: "what's trending on solana?" },
-  { role: "assistant", text: "$JUP +12% · $JTO +8% · $WIF +5% in the last 24h." },
+// A single, fixed-height line that types out example prompts and cycles
+// through them. No layout shift, no growing box — just a quiet hint at
+// what you can ask Vision.
+const PROMPTS = [
+  "what's in my wallet?",
+  "swap 0.5 sol to usdc",
+  "what's trending on solana?",
+  "send 10 usdc to alex",
+  "explain jupiter routing",
+  "show me $bonk price",
 ];
 
-export const ChatPreview = () => {
-  const [visible, setVisible] = useState(0);
+const TYPE_MS = 55;
+const ERASE_MS = 25;
+const HOLD_MS = 1600;
 
-  // Reveal lines one at a time, then loop after a pause.
+export const ChatPreview = () => {
+  const [index, setIndex] = useState(0);
+  const [text, setText] = useState("");
+  const [phase, setPhase] = useState<"typing" | "holding" | "erasing">("typing");
+
   useEffect(() => {
-    const total = SCRIPT.length;
-    const id = window.setInterval(() => {
-      setVisible((v) => (v >= total ? 0 : v + 1));
-    }, 1400);
-    return () => window.clearInterval(id);
-  }, []);
+    const current = PROMPTS[index];
+    let timer: number;
+
+    if (phase === "typing") {
+      if (text.length < current.length) {
+        timer = window.setTimeout(() => setText(current.slice(0, text.length + 1)), TYPE_MS);
+      } else {
+        timer = window.setTimeout(() => setPhase("holding"), HOLD_MS);
+      }
+    } else if (phase === "holding") {
+      timer = window.setTimeout(() => setPhase("erasing"), 0);
+    } else {
+      if (text.length > 0) {
+        timer = window.setTimeout(() => setText(current.slice(0, text.length - 1)), ERASE_MS);
+      } else {
+        setIndex((i) => (i + 1) % PROMPTS.length);
+        setPhase("typing");
+      }
+    }
+
+    return () => window.clearTimeout(timer);
+  }, [text, phase, index]);
 
   return (
     <div className="mx-auto w-full max-w-md">
-      <div
-        className="rounded-2xl border border-border/60 bg-card/30 p-4 backdrop-blur-md"
-        style={{ minHeight: "11rem" }}
-      >
-        <div className="flex flex-col gap-2">
-          {SCRIPT.slice(0, visible).map((line, i) => (
-            <div
-              key={i}
-              className={`flex animate-fade-up ${
-                line.role === "user" ? "justify-end" : "justify-start"
-              }`}
-            >
-              <div
-                className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-xs leading-relaxed ${
-                  line.role === "user"
-                    ? "bg-primary/15 text-foreground"
-                    : "bg-secondary text-muted-foreground"
-                }`}
-              >
-                {line.text}
-              </div>
-            </div>
-          ))}
-        </div>
+      <div className="flex h-10 items-center justify-center gap-2 font-mono text-sm text-muted-foreground">
+        <span className="text-muted-foreground/40">›</span>
+        <span className="truncate">
+          {text}
+          <span
+            className="ml-0.5 inline-block h-3.5 w-[2px] -translate-y-[1px] bg-primary align-middle animate-pulse"
+            aria-hidden
+          />
+        </span>
       </div>
     </div>
   );
