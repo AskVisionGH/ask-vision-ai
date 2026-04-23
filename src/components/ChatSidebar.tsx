@@ -14,6 +14,7 @@ import {
   Radar,
   Search,
   Settings as SettingsIcon,
+  Shield,
   Trash2,
   Users,
   X,
@@ -53,6 +54,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { useProfile } from "@/hooks/useProfile";
 import { UserAvatar } from "@/components/UserAvatar";
 import { VisionLogo } from "@/components/VisionLogo";
@@ -265,6 +267,7 @@ export const ChatSidebar = ({
 }: Props) => {
   const { user, signOut } = useAuth();
   const { profile } = useProfile();
+  const { isAdmin } = useIsAdmin();
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [pendingDelete, setPendingDelete] = useState<ConversationRow | null>(null);
@@ -389,6 +392,15 @@ export const ChatSidebar = ({
           <Radar className="h-3.5 w-3.5" />
           Tracked wallets
         </Link>
+        {isAdmin ? (
+          <Link
+            to="/admin"
+            className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground ease-vision hover:bg-secondary/60 hover:text-foreground"
+          >
+            <Shield className="h-3.5 w-3.5" />
+            Admin
+          </Link>
+        ) : null}
         <button
           type="button"
           disabled
