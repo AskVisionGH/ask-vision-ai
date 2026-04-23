@@ -247,6 +247,70 @@ export interface SolanaNewsData {
   error?: string;
 }
 
+export interface SmartWalletInfo {
+  address: string;
+  label: string | null;
+  twitterHandle: string | null;
+  category: string | null;
+  isCurated: boolean;
+  isUserTracked?: boolean;
+  isUserAdded?: boolean;
+}
+
+export interface EarlyBuyer extends SmartWalletInfo {
+  firstBuyAt: number;
+  firstBuyUsd: number | null;
+  minutesAfterLaunch: number | null;
+}
+
+export interface EarlyBuyersData {
+  token: {
+    symbol: string;
+    name: string;
+    address: string;
+    logo: string | null;
+    priceUsd: number | null;
+    pairUrl: string | null;
+  } | null;
+  launchTimestamp: number | null;
+  curatedBuyers: EarlyBuyer[];
+  totalCuratedTracked: number;
+  windowHours: number;
+  error?: string;
+}
+
+export interface SmartMoneyTrade {
+  id: string;
+  wallet: {
+    address: string;
+    label: string;
+    twitterHandle: string | null;
+    category: string | null;
+    isCurated: boolean;
+    isUserAdded: boolean;
+  };
+  side: "buy" | "sell" | "transfer" | "other";
+  token: {
+    symbol: string;
+    name: string;
+    address: string;
+    logo: string | null;
+  } | null;
+  valueUsd: number | null;
+  amountUi: number | null;
+  timestamp: number;
+  signature: string;
+  source: string | null;
+}
+
+export interface SmartMoneyActivityData {
+  trades: SmartMoneyTrade[];
+  walletsTracked: number;
+  windowHours: number;
+  fetchedAt: number;
+  error?: string;
+}
+
 export type ToolEvent =
   | { type: "wallet_balance"; data: WalletBalanceData }
   | { type: "token_info"; data: TokenInfoData }
@@ -257,6 +321,8 @@ export type ToolEvent =
   | { type: "token_chart"; data: TokenChartData }
   | { type: "social_sentiment"; data: SocialSentimentData }
   | { type: "solana_news"; data: SolanaNewsData }
+  | { type: "early_buyers"; data: EarlyBuyersData }
+  | { type: "smart_money_activity"; data: SmartMoneyActivityData }
   | { type: string; data: any };
 
 export interface ChatMessage {
