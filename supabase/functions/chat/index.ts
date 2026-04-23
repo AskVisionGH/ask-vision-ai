@@ -296,7 +296,17 @@ serve(async (req) => {
           if (!walletAddress) {
             result = { error: "No wallet connected. Connect your wallet first." };
           } else {
-            const recipientResolved = await resolveRecipientInline(args.recipient ?? "");
+            // First check if the recipient matches a saved contact name —
+            // if so, swap it for the saved address before resolving.
+            let recipientInput: string = args.recipient ?? "";
+            let contactDisplayName: string | null = null;
+            const matchedContact = findContact(contactList, recipientInput);
+            if (matchedContact) {
+              recipientInput = matchedContact.resolved_address || matchedContact.address;
+              contactDisplayName = matchedContact.name;
+            }
+
+            const recipientResolved = await resolveRecipientInline(recipientInput);
 
             if (recipientResolved?.error) {
               result = recipientResolved;
@@ -307,11 +317,46 @@ serve(async (req) => {
                 amount: args.amount,
                 recipient: args.recipient ?? "",
                 resolvedAddress: recipientResolved.address,
-                displayName: recipientResolved.displayName ?? null,
+                displayName: contactDisplayName ?? recipientResolved.displayName ?? null,
               }, req);
+              // Tag whether this destination is already a saved contact, so
+              // the UI can prompt to save it after a successful send.
+              if (result && typeof result === "object" && !result.error) {
+                result.savedContact = !!matchedContact || !!findContactByAddress(contactList, recipientResolved.address);
+              }
             }
           }
           toolEvents.push({ type: "transfer_quote", data: result });
+        } else if (name === "list_contacts") {
+          result = {
+            contacts: contactList.map((c) => ({
+              name: c.name,
+              address: c.address,
+              resolvedAddress: c.resolved_address,
+            })),
+          };
+          toolEvents.push({ type: "contact_list", data: result });
+        } else if (name === "save_contact") {
+          let args: any = {};
+          try {
+            args = JSON.parse(tc.function?.arguments ?? "{}");
+          } catch { /* ignore */ }
+          const cname = String(args.name ?? "").trim();
+          const caddr = String(args.address ?? "").trim();
+          if (!cname || !caddr) {
+            result = { error: "Both name and address are required to save a contact." };
+          } else if (findContact(contactList, cname)) {
+            result = {
+              error: `You already have a contact named "${cname}". Pick a different name.`,
+            };
+          } else {
+            // The client persists this via the save_contact_request tool event.
+            result = { ok: true, name: cname, address: caddr };
+          }
+          toolEvents.push({
+            type: "save_contact_request",
+            data: { name: cname, address: caddr, error: result.error ?? null },
+          });
         } else {
           result = { error: `Unknown tool: ${name}` };
         }
