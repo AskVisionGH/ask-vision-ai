@@ -12,6 +12,7 @@ import { TransferPreviewCard } from "@/components/TransferPreviewCard";
 import { RiskReportCard } from "@/components/RiskReportCard";
 import { TokenChartCard } from "@/components/TokenChartCard";
 import { SocialSentimentCard } from "@/components/SocialSentimentCard";
+import { NewsCard } from "@/components/NewsCard";
 
 interface Props {
   message: ChatMessage;
