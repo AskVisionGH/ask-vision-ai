@@ -1,7 +1,7 @@
 import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeft, Camera } from "lucide-react";
+import { ArrowLeft, Camera, Trash2, UserMinus } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import {
   CryptoExperience,
@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { UserAvatar } from "@/components/UserAvatar";
+import { DeleteAccountDialog } from "@/components/DeleteAccountDialog";
 import { cn } from "@/lib/utils";
 
 const Settings = () => {
