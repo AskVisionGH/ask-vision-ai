@@ -227,13 +227,7 @@ serve(async (req) => {
         for (let iter = 0; iter < 3; iter++) {
           const isLastIter = iter === 2;
 
-          // For non-final iterations we use non-streaming so we can inspect
-          // tool_calls atomically. Once we *suspect* this could be the final
-          // answer (no tool calls), we re-issue with streaming. To keep it
-          // simple we always do a non-streaming probe first; the user-perceived
-          // latency cost is one round trip on the FINAL turn only, which is
-          // dwarfed by the streaming gains.
-          const probeResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
             method: "POST",
             headers: {
               Authorization: `Bearer ${LOVABLE_API_KEY}`,
@@ -244,64 +238,117 @@ serve(async (req) => {
               messages: conversation,
               tools: TOOLS,
               tool_choice: "auto",
+              stream: true,
             }),
           });
 
-          if (!probeResp.ok) {
-            if (probeResp.status === 429) {
+          if (!aiResp.ok || !aiResp.body) {
+            if (aiResp.status === 429) {
               send("error", { error: "Rate limit hit. Wait a moment and try again.", status: 429 });
               break;
             }
-            if (probeResp.status === 402) {
+            if (aiResp.status === 402) {
               send("error", {
                 error: "AI credits exhausted. Add funds in Settings → Workspace → Usage.",
                 status: 402,
               });
               break;
             }
-            const errText = await probeResp.text();
-            console.error("AI gateway error:", probeResp.status, errText);
+            const errText = await aiResp.text().catch(() => "");
+            console.error("AI gateway error:", aiResp.status, errText);
             send("error", { error: "AI gateway error", status: 500 });
             break;
           }
 
-          const data = await probeResp.json();
-          const choice = data.choices?.[0];
-          const msg = choice?.message;
-          if (!msg) {
-            send("error", { error: "No response from AI", status: 500 });
-            break;
+          // Parse the SSE response from the gateway. We accumulate text in
+          // `assistantText` and assemble tool calls (which can stream their
+          // arguments across many chunks) in `pendingToolCalls`. Text deltas
+          // are forwarded immediately so the user sees tokens as they arrive.
+          const reader = aiResp.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+          let assistantText = "";
+          const pendingToolCalls: Array<{
+            id: string;
+            name: string;
+            arguments: string;
+          }> = [];
+          let streamDone = false;
+
+          while (!streamDone) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+
+            let nl: number;
+            while ((nl = buffer.indexOf("\n")) !== -1) {
+              let line = buffer.slice(0, nl);
+              buffer = buffer.slice(nl + 1);
+              if (line.endsWith("\r")) line = line.slice(0, -1);
+              if (!line || line.startsWith(":")) continue;
+              if (!line.startsWith("data: ")) continue;
+              const payloadStr = line.slice(6).trim();
+              if (payloadStr === "[DONE]") {
+                streamDone = true;
+                break;
+              }
+              let parsed: any;
+              try {
+                parsed = JSON.parse(payloadStr);
+              } catch {
+                // Partial JSON across chunks — put it back and wait.
+                buffer = line + "\n" + buffer;
+                break;
+              }
+              const delta = parsed.choices?.[0]?.delta;
+              if (!delta) continue;
+
+              if (typeof delta.content === "string" && delta.content.length > 0) {
+                assistantText += delta.content;
+                send("delta", { text: delta.content });
+              }
+
+              if (Array.isArray(delta.tool_calls)) {
+                for (const tcDelta of delta.tool_calls) {
+                  const idx = typeof tcDelta.index === "number" ? tcDelta.index : 0;
+                  const slot = pendingToolCalls[idx] ??
+                    (pendingToolCalls[idx] = { id: "", name: "", arguments: "" });
+                  if (tcDelta.id) slot.id = tcDelta.id;
+                  const fn = tcDelta.function;
+                  if (fn?.name) slot.name = fn.name;
+                  if (typeof fn?.arguments === "string") slot.arguments += fn.arguments;
+                }
+              }
+            }
           }
 
-          const toolCalls = msg.tool_calls;
-
-          if (!toolCalls || toolCalls.length === 0) {
-            // Final answer. We already have it — stream it out as fake deltas
-            // so the client sees the same SSE shape it does for real streams.
-            // (Issuing a second streaming request would double the cost for
-            // no UX gain since we already have the full text.)
-            const finalText: string = typeof msg.content === "string" ? msg.content : "";
-            // Chunk into ~12-char pieces so the typewriter feels alive even
-            // though it's coming from cache.
-            const CHUNK = 12;
-            for (let i = 0; i < finalText.length; i += CHUNK) {
-              send("delta", { text: finalText.slice(i, i + CHUNK) });
-              // Yield to event loop occasionally so the runtime can flush.
-              if ((i / CHUNK) % 8 === 0) await Promise.resolve();
-            }
+          // No tool calls -> the streamed text IS the final answer. We're done.
+          if (pendingToolCalls.length === 0) {
             break;
           }
 
           if (isLastIter) {
-            // Tool calls on the last allowed iteration — give up.
             send("delta", {
               text: "I tried but couldn't complete that — let's try a different angle.",
             });
             break;
           }
 
-          // Push assistant message verbatim so tool_call_ids match
-          conversation.push(msg);
+          // Reconstruct the assistant message verbatim for the next round.
+          conversation.push({
+            role: "assistant",
+            content: assistantText || null,
+            tool_calls: pendingToolCalls.map((tc) => ({
+              id: tc.id,
+              type: "function",
+              function: { name: tc.name, arguments: tc.arguments },
+            })),
+          });
+
+          const toolCalls = pendingToolCalls.map((tc) => ({
+            id: tc.id,
+            function: { name: tc.name, arguments: tc.arguments },
+          }));
 
           for (const tc of toolCalls) {
             const name = tc.function?.name;
