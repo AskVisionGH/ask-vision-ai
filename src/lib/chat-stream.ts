@@ -108,12 +108,44 @@ export interface TransferQuoteData {
   error?: string;
 }
 
+export type RiskCheckStatus = "good" | "warn" | "bad" | "unknown";
+
+export interface RiskCheck {
+  id: string;
+  label: string;
+  status: RiskCheckStatus;
+  detail: string;
+}
+
+export interface RiskReportData {
+  symbol: string;
+  name: string;
+  address: string;
+  logo: string | null;
+  /** 0-100, lower is safer. */
+  score: number;
+  verdict: "safe" | "caution" | "risky" | "danger" | "unknown";
+  headline: string;
+  checks: RiskCheck[];
+  sources: string[];
+  stats: {
+    topHolderPct: number | null;
+    top10HolderPct: number | null;
+    lpLockedPct: number | null;
+    holderCount: number | null;
+    mintAuthorityRevoked: boolean | null;
+    freezeAuthorityRevoked: boolean | null;
+  };
+  error?: string;
+}
+
 export type ToolEvent =
   | { type: "wallet_balance"; data: WalletBalanceData }
   | { type: "token_info"; data: TokenInfoData }
   | { type: "trending"; data: TrendingData }
   | { type: "swap_quote"; data: SwapQuoteData }
   | { type: "transfer_quote"; data: TransferQuoteData }
+  | { type: "risk_report"; data: RiskReportData }
   | { type: string; data: any };
 
 export interface ChatMessage {
