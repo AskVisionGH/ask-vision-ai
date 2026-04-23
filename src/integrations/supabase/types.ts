@@ -154,6 +154,54 @@ export type Database = {
         }
         Relationships: []
       }
+      siws_nonces: {
+        Row: {
+          consumed: boolean
+          created_at: string
+          expires_at: string
+          id: string
+          nonce: string
+          wallet_address: string
+        }
+        Insert: {
+          consumed?: boolean
+          created_at?: string
+          expires_at: string
+          id?: string
+          nonce: string
+          wallet_address: string
+        }
+        Update: {
+          consumed?: boolean
+          created_at?: string
+          expires_at?: string
+          id?: string
+          nonce?: string
+          wallet_address?: string
+        }
+        Relationships: []
+      }
+      wallet_links: {
+        Row: {
+          created_at: string
+          id: string
+          user_id: string
+          wallet_address: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          user_id: string
+          wallet_address: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          user_id?: string
+          wallet_address?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

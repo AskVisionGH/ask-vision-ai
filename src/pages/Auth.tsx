@@ -1,9 +1,13 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { toast } from "sonner";
+import { Apple, Mail, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
 import { useAuth } from "@/hooks/useAuth";
+import { signInWithSolana } from "@/lib/siws";
 import { VisionLogo } from "@/components/VisionLogo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,25 +15,37 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
+const GoogleGlyph = () => (
+  <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden>
+    <path
+      fill="#EA4335"
+      d="M12 11v3.2h4.5c-.2 1.2-1.5 3.6-4.5 3.6-2.7 0-4.9-2.2-4.9-5s2.2-5 4.9-5c1.5 0 2.6.6 3.2 1.2l2.2-2.1C15.9 5.6 14.1 5 12 5 7.6 5 4 8.6 4 13s3.6 8 8 8c4.6 0 7.7-3.2 7.7-7.8 0-.5-.1-.9-.1-1.2H12z"
+    />
+  </svg>
+);
+
 const Auth = () => {
   const navigate = useNavigate();
   const { session, loading } = useAuth();
+  const { publicKey, signMessage, connected, disconnect } = useWallet();
+  const { setVisible } = useWalletModal();
 
+  const [tab, setTab] = useState<"email" | "wallet">("email");
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [oauthLoading, setOauthLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState<"google" | "apple" | null>(null);
+  const [walletSigning, setWalletSigning] = useState(false);
 
   useEffect(() => {
     if (!loading && session) navigate("/chat", { replace: true });
   }, [loading, session, navigate]);
 
-  const submit = async (e: FormEvent) => {
+  const submitEmail = async (e: FormEvent) => {
     e.preventDefault();
     if (submitting) return;
     setSubmitting(true);
-
     try {
       if (mode === "signup") {
         const { error } = await supabase.auth.signUp({
@@ -51,111 +67,265 @@ const Auth = () => {
     }
   };
 
-  const signInWithGoogle = async () => {
+  const signInWithProvider = async (provider: "google" | "apple") => {
     if (oauthLoading) return;
-    setOauthLoading(true);
+    setOauthLoading(provider);
     try {
-      const result = await lovable.auth.signInWithOAuth("google", {
+      const result = await lovable.auth.signInWithOAuth(provider, {
         redirect_uri: `${window.location.origin}/chat`,
       });
       if (result.error) throw result.error;
-      // If `result.redirected` was true, browser is already navigating away.
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Couldn't open Google sign-in";
-      toast.error("Google sign-in failed", { description: msg });
-      setOauthLoading(false);
+      const msg = err instanceof Error ? err.message : `Couldn't open ${provider} sign-in`;
+      toast.error(`${provider === "google" ? "Google" : "Apple"} sign-in failed`, { description: msg });
+      setOauthLoading(null);
+    }
+  };
+
+  const signWithWallet = async () => {
+    if (!connected || !publicKey || !signMessage) {
+      setVisible(true);
+      return;
+    }
+    setWalletSigning(true);
+    try {
+      const result = await signInWithSolana({
+        walletAddress: publicKey.toBase58(),
+        signMessage: (msg) => signMessage(msg),
+      });
+      if (result.error) {
+        toast.error("Wallet sign-in failed", { description: result.error });
+      } else {
+        toast.success("Signed in with wallet");
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Couldn't complete signature";
+      toast.error("Wallet sign-in failed", { description: msg });
+    } finally {
+      setWalletSigning(false);
     }
   };
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-6 text-foreground">
-      <div className="pointer-events-none absolute inset-0 bg-aurora" aria-hidden />
+    <main className="relative grid min-h-screen grid-cols-1 overflow-hidden bg-background text-foreground lg:grid-cols-2">
+      {/* Left: branded panel */}
+      <aside className="relative hidden flex-col justify-between overflow-hidden border-r border-border/60 p-10 lg:flex">
+        <div className="pointer-events-none absolute inset-0 bg-aurora" aria-hidden />
+        <div
+          className="pointer-events-none absolute left-1/2 top-0 h-[60vh] w-[2px] -translate-x-1/2 beam animate-pulse-glow"
+          aria-hidden
+        />
 
-      <div className="relative z-10 w-full max-w-md">
-        <div className="mb-8 flex flex-col items-center text-center">
-          <VisionLogo size={36} className="mb-4 drop-shadow-[0_0_24px_hsl(var(--primary-glow)/0.6)]" />
-          <h1 className="text-2xl font-light tracking-tight sm:text-3xl">
-            Sign in to <span className="font-serif-italic text-primary">Vision</span>
-          </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Your conversations and history, kept across devices.
+        <div className="relative z-10 flex items-center gap-2">
+          <VisionLogo size={22} />
+          <span className="font-mono text-sm tracking-widest uppercase text-muted-foreground">
+            Vision
+          </span>
+        </div>
+
+        <div className="relative z-10 max-w-sm">
+          <h2 className="text-3xl font-light leading-tight tracking-tight sm:text-4xl">
+            Talk to crypto.{" "}
+            <span className="font-serif-italic text-primary">Naturally.</span>
+          </h2>
+          <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
+            Sign in to keep your conversations, contacts, and on-chain history
+            in sync across every device.
           </p>
         </div>
 
-        <div className="rounded-2xl border border-border bg-card/40 p-6 backdrop-blur-md">
-          <Tabs value={mode} onValueChange={(v) => setMode(v as "signin" | "signup")}>
-            <TabsList className="grid w-full grid-cols-2 bg-secondary">
-              <TabsTrigger value="signin">Sign in</TabsTrigger>
-              <TabsTrigger value="signup">Sign up</TabsTrigger>
-            </TabsList>
-
-            {(["signin", "signup"] as const).map((m) => (
-              <TabsContent key={m} value={m} className="mt-5">
-                <form onSubmit={submit} className="space-y-4">
-                  <div className="space-y-1.5">
-                    <Label htmlFor={`email-${m}`} className="text-xs uppercase tracking-wider text-muted-foreground">
-                      Email
-                    </Label>
-                    <Input
-                      id={`email-${m}`}
-                      type="email"
-                      autoComplete="email"
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="you@domain.com"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor={`pw-${m}`} className="text-xs uppercase tracking-wider text-muted-foreground">
-                      Password
-                    </Label>
-                    <Input
-                      id={`pw-${m}`}
-                      type="password"
-                      autoComplete={m === "signup" ? "new-password" : "current-password"}
-                      required
-                      minLength={8}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder={m === "signup" ? "8+ characters" : "••••••••"}
-                    />
-                  </div>
-                  <Button
-                    type="submit"
-                    disabled={submitting}
-                    className={cn(
-                      "w-full rounded-full bg-primary font-medium text-primary-foreground hover:bg-primary/90 ease-vision",
-                    )}
-                  >
-                    {submitting ? "…" : m === "signup" ? "Create account" : "Sign in"}
-                  </Button>
-                </form>
-              </TabsContent>
-            ))}
-          </Tabs>
-
-          <div className="my-5 flex items-center gap-3 text-[10px] uppercase tracking-widest text-muted-foreground/60">
-            <span className="h-px flex-1 bg-border" />
-            or
-            <span className="h-px flex-1 bg-border" />
-          </div>
-
-          <Button
-            type="button"
-            variant="outline"
-            onClick={signInWithGoogle}
-            disabled={oauthLoading}
-            className="w-full rounded-full border-border bg-secondary font-medium text-foreground hover:bg-muted ease-vision"
-          >
-            {oauthLoading ? "Opening Google…" : "Continue with Google"}
-          </Button>
-        </div>
-
-        <p className="mt-6 text-center font-mono text-[10px] tracking-widest uppercase text-muted-foreground/50">
+        <p className="relative z-10 font-mono text-[10px] tracking-widest uppercase text-muted-foreground/50">
           askvision.ai
         </p>
-      </div>
+      </aside>
+
+      {/* Right: auth form */}
+      <section className="relative flex items-center justify-center overflow-hidden px-6 py-10 sm:px-10">
+        <div className="pointer-events-none absolute inset-0 bg-aurora opacity-60 lg:hidden" aria-hidden />
+
+        <div className="relative z-10 w-full max-w-sm">
+          <div className="mb-8 flex flex-col items-center text-center lg:items-start lg:text-left">
+            <VisionLogo size={32} className="mb-4 drop-shadow-[0_0_24px_hsl(var(--primary-glow)/0.6)] lg:hidden" />
+            <h1 className="text-2xl font-light tracking-tight sm:text-3xl">
+              {mode === "signup" ? (
+                <>
+                  Create your <span className="font-serif-italic text-primary">Vision</span> account
+                </>
+              ) : (
+                <>
+                  Welcome <span className="font-serif-italic text-primary">back</span>
+                </>
+              )}
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Choose how you'd like to sign in.
+            </p>
+          </div>
+
+          <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
+            <TabsList className="grid w-full grid-cols-2 bg-secondary">
+              <TabsTrigger value="email" className="gap-1.5">
+                <Mail className="h-3.5 w-3.5" />
+                Email
+              </TabsTrigger>
+              <TabsTrigger value="wallet" className="gap-1.5">
+                <Wallet className="h-3.5 w-3.5" />
+                Wallet
+              </TabsTrigger>
+            </TabsList>
+
+            {/* Email tab */}
+            <TabsContent value="email" className="mt-5 space-y-4">
+              {/* OAuth buttons */}
+              <div className="space-y-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => signInWithProvider("google")}
+                  disabled={!!oauthLoading}
+                  className="w-full justify-center gap-2 rounded-full border-border bg-secondary font-medium text-foreground hover:bg-muted ease-vision"
+                >
+                  <GoogleGlyph />
+                  {oauthLoading === "google" ? "Opening Google…" : "Continue with Google"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => signInWithProvider("apple")}
+                  disabled={!!oauthLoading}
+                  className="w-full justify-center gap-2 rounded-full border-border bg-secondary font-medium text-foreground hover:bg-muted ease-vision"
+                >
+                  <Apple className="h-4 w-4" />
+                  {oauthLoading === "apple" ? "Opening Apple…" : "Continue with Apple"}
+                </Button>
+              </div>
+
+              <div className="flex items-center gap-3 text-[10px] uppercase tracking-widest text-muted-foreground/60">
+                <span className="h-px flex-1 bg-border" />
+                or
+                <span className="h-px flex-1 bg-border" />
+              </div>
+
+              {/* Email form */}
+              <div className="flex gap-1 rounded-full bg-secondary p-1 text-xs">
+                {(["signin", "signup"] as const).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setMode(m)}
+                    className={cn(
+                      "flex-1 rounded-full py-1.5 ease-vision",
+                      mode === m
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {m === "signin" ? "Sign in" : "Sign up"}
+                  </button>
+                ))}
+              </div>
+
+              <form onSubmit={submitEmail} className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="email" className="text-xs uppercase tracking-wider text-muted-foreground">
+                    Email
+                  </Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@domain.com"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="pw" className="text-xs uppercase tracking-wider text-muted-foreground">
+                    Password
+                  </Label>
+                  <Input
+                    id="pw"
+                    type="password"
+                    autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                    required
+                    minLength={8}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder={mode === "signup" ? "8+ characters" : "••••••••"}
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  disabled={submitting}
+                  className="w-full rounded-full bg-primary font-medium text-primary-foreground hover:bg-primary/90 ease-vision"
+                >
+                  {submitting ? "…" : mode === "signup" ? "Create account" : "Sign in"}
+                </Button>
+              </form>
+            </TabsContent>
+
+            {/* Wallet tab */}
+            <TabsContent value="wallet" className="mt-5">
+              <div className="rounded-2xl border border-border bg-card/40 p-5 backdrop-blur-md">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
+                    <Wallet className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground">
+                      Sign in with your Solana wallet
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      You'll sign a one-time message — no transaction, no gas.
+                      Your wallet address becomes your identity.
+                    </p>
+                  </div>
+                </div>
+
+                {connected && publicKey ? (
+                  <div className="mt-4 space-y-2">
+                    <div className="flex items-center justify-between rounded-lg border border-border/60 bg-secondary/60 px-3 py-2 text-xs">
+                      <span className="font-mono text-muted-foreground">
+                        {publicKey.toBase58().slice(0, 4)}…{publicKey.toBase58().slice(-4)}
+                      </span>
+                      <button
+                        onClick={() => disconnect()}
+                        className="text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground ease-vision"
+                      >
+                        Disconnect
+                      </button>
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={signWithWallet}
+                      disabled={walletSigning}
+                      className="w-full rounded-full bg-primary font-medium text-primary-foreground hover:bg-primary/90 ease-vision"
+                    >
+                      {walletSigning ? "Waiting for signature…" : "Sign in with wallet"}
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    type="button"
+                    onClick={() => setVisible(true)}
+                    className="mt-4 w-full rounded-full bg-primary font-medium text-primary-foreground hover:bg-primary/90 ease-vision"
+                  >
+                    Connect wallet
+                  </Button>
+                )}
+
+                <p className="mt-3 text-[10px] text-muted-foreground/70">
+                  Phantom · Solflare · Backpack · any Wallet Standard wallet
+                </p>
+              </div>
+            </TabsContent>
+          </Tabs>
+
+          <p className="mt-8 text-center font-mono text-[10px] tracking-widest uppercase text-muted-foreground/50 lg:text-left">
+            By continuing you agree to our terms.
+          </p>
+        </div>
+      </section>
     </main>
   );
 };

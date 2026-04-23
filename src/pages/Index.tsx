@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { VisionLogo } from "@/components/VisionLogo";
+import { ChatPreview } from "@/components/ChatPreview";
 import { Button } from "@/components/ui/button";
 
 const Index = () => {
@@ -15,12 +16,12 @@ const Index = () => {
   return (
     <main className="relative min-h-screen overflow-hidden bg-background text-foreground">
       <div className="pointer-events-none absolute inset-0 bg-aurora" aria-hidden />
-
       <div
         className="pointer-events-none absolute left-1/2 top-0 h-[60vh] w-[2px] -translate-x-1/2 beam animate-pulse-glow"
         aria-hidden
       />
 
+      {/* Header */}
       <header className="relative z-10 flex items-center justify-between px-6 py-6 sm:px-10">
         <div className="flex items-center gap-2">
           <VisionLogo size={22} />
@@ -28,7 +29,7 @@ const Index = () => {
             Vision
           </span>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-5">
           <button
             onClick={() => navigate("/auth")}
             className="font-mono text-xs tracking-widest uppercase text-muted-foreground transition-colors hover:text-foreground"
@@ -41,13 +42,14 @@ const Index = () => {
         </div>
       </header>
 
-      <section className="relative z-10 mx-auto flex min-h-[calc(100vh-96px)] max-w-2xl flex-col items-center justify-center px-6 text-center">
+      {/* Single-screen hero */}
+      <section className="relative z-10 mx-auto flex min-h-[calc(100vh-96px)] max-w-3xl flex-col items-center justify-center px-6 text-center">
         <div className="animate-fade-up">
-          <div className="mb-10 flex justify-center">
+          <div className="mb-8 flex justify-center">
             <VisionLogo size={56} className="drop-shadow-[0_0_24px_hsl(var(--primary-glow)/0.6)]" />
           </div>
 
-          <h1 className="text-4xl font-light leading-tight tracking-tight sm:text-5xl">
+          <h1 className="text-4xl font-light leading-tight tracking-tight sm:text-6xl">
             Talk to crypto.{" "}
             <span className="font-serif-italic text-primary">Naturally.</span>
           </h1>
@@ -56,17 +58,22 @@ const Index = () => {
             Vision turns plain English into on-chain action. Swap, send, and explore Solana — through one conversation.
           </p>
 
-          <div className="mt-10 flex flex-col items-center gap-4">
+          <div className="mt-10 flex flex-col items-center gap-3">
             <Button
               size="lg"
               onClick={() => navigate("/auth")}
-              className="rounded-full bg-primary px-8 font-medium text-primary-foreground hover:bg-primary/90 ease-vision shadow-glow"
+              className="rounded-full bg-primary px-10 font-medium text-primary-foreground hover:bg-primary/90 ease-vision shadow-glow"
             >
               Get started
             </Button>
             <p className="font-mono text-[11px] tracking-wider uppercase text-muted-foreground/70">
-              Email · Google · Phantom · Solflare · Backpack
+              Email · Google · Apple · Wallet
             </p>
+          </div>
+
+          {/* Subtle live preview */}
+          <div className="mt-12">
+            <ChatPreview />
           </div>
         </div>
       </section>
