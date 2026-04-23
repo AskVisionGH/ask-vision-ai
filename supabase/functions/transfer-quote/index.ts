@@ -5,7 +5,6 @@ import {
   TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
 } from "https://esm.sh/@solana/spl-token@0.4.8?deps=@solana/web3.js@1.95.3";
-import { resolve as resolveSns } from "https://esm.sh/@bonfida/spl-name-service@3.0.7?deps=@solana/web3.js@1.95.3";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -147,6 +146,9 @@ serve(async (req) => {
     const fromAddress: string = body.fromAddress ?? "";
     const tokenInput: string = body.token ?? "";
     const recipientInput: string = body.recipient ?? "";
+    const resolvedAddress: string = body.resolvedAddress ?? "";
+    const displayName: string | null = body.displayName ?? null;
+    const providedIsOnCurve = typeof body.isOnCurve === "boolean" ? body.isOnCurve : null;
     const amount = Number(body.amount);
 
     if (!fromAddress) return json({ error: "No wallet connected. Connect your wallet first." }, 400);
@@ -161,54 +163,33 @@ serve(async (req) => {
     const rpcUrl = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
     const connection = new Connection(rpcUrl, "confirmed");
 
-    // 1+2. Resolve recipient AND token in parallel — both are network-bound
-    const trimmedRecipient = recipientInput.trim();
-
-    const recipientPromise: Promise<{ address: string; displayName: string | null } | { error: string }> =
-      (async () => {
-        if (trimmedRecipient.toLowerCase().endsWith(".sol")) {
-          try {
-            const domain = trimmedRecipient.replace(/\.sol$/i, "");
-            const owner = await resolveSns(connection, domain);
-            return { address: owner.toBase58(), displayName: trimmedRecipient.toLowerCase() };
-          } catch (e) {
-            console.error("SNS resolve error:", e);
-            return { error: `"${trimmedRecipient}" doesn't resolve to a wallet.` };
-          }
-        }
-        if (isBase58Pubkey(trimmedRecipient)) {
-          try {
-            return { address: new PublicKey(trimmedRecipient).toBase58(), displayName: null };
-          } catch {
-            return { error: "That doesn't look like a valid Solana address." };
-          }
-        }
-        return { error: "Recipient must be a wallet address or .sol name." };
-      })();
-
-    const [recipientResult, tokenMeta] = await Promise.all([
-      recipientPromise,
-      resolveToken(tokenInput),
-    ]);
-
-    if ("error" in recipientResult) {
-      return json({ error: recipientResult.error }, 404);
+    // Resolve token only. Recipient should already be resolved by the caller when possible.
+    const tokenMeta = await resolveToken(tokenInput);
+    if (!tokenMeta) {
+      return json({ error: `Couldn't find token "${tokenInput}".` }, 404);
     }
-    const { address: toAddress, displayName } = recipientResult;
+
+    let toAddress = resolvedAddress;
+    let isOnCurve = providedIsOnCurve ?? true;
+
+    if (!toAddress) {
+      const trimmedRecipient = recipientInput.trim();
+      if (!trimmedRecipient) {
+        return json({ error: "recipient required" }, 400);
+      }
+      if (!isBase58Pubkey(trimmedRecipient)) {
+        return json({ error: "Recipient must be a wallet address or .sol name." }, 400);
+      }
+      try {
+        toAddress = new PublicKey(trimmedRecipient).toBase58();
+        isOnCurve = PublicKey.isOnCurve(new PublicKey(toAddress).toBytes());
+      } catch {
+        return json({ error: "That doesn't look like a valid Solana address." }, 400);
+      }
+    }
 
     if (toAddress === fromAddress) {
       return json({ error: "You can't send to your own wallet." }, 400);
-    }
-
-    let isOnCurve = true;
-    try {
-      isOnCurve = PublicKey.isOnCurve(new PublicKey(toAddress).toBytes());
-    } catch {
-      isOnCurve = true;
-    }
-
-    if (!tokenMeta) {
-      return json({ error: `Couldn't find token "${tokenInput}".` }, 404);
     }
 
     // SPL safety: don't let users send SPL to off-curve addresses (likely a program)
