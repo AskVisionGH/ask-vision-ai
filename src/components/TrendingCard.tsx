@@ -108,7 +108,7 @@ export const TrendingCard = ({ data }: Props) => {
                   <p
                     className={cn(
                       "mt-0.5 font-mono text-[11px]",
-                      isUp ? "text-emerald-400" : "text-rose-400",
+                      isUp ? "text-up" : "text-down",
                     )}
                   >
                     {fmtPct(t.priceChange24h)}

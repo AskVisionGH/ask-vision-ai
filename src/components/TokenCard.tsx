@@ -71,8 +71,8 @@ export const TokenCard = ({ data }: Props) => {
             className={cn(
               "flex items-center gap-1 rounded-full border px-2.5 py-1 font-mono text-[11px]",
               isUp
-                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
-                : "border-rose-500/30 bg-rose-500/10 text-rose-400",
+                ? "border-up/30 bg-up/10 text-up"
+                : "border-down/30 bg-down/10 text-down",
             )}
           >
             {isUp ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
