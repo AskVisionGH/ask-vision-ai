@@ -193,7 +193,7 @@ const Chat = () => {
                   <Menu className="h-4 w-4" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="left" className="w-72 p-0">
+              <SheetContent side="left" className="w-72 p-0 [&>button.absolute]:hidden">
                 {sidebar}
               </SheetContent>
             </Sheet>
