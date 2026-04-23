@@ -53,10 +53,42 @@ export interface TrendingData {
   error?: string;
 }
 
+export interface SwapTokenSide {
+  symbol: string;
+  name: string;
+  address: string;
+  decimals: number;
+  logo: string | null;
+  priceUsd: number | null;
+  amountUi: number;
+  amountAtomic: number;
+  valueUsd: number | null;
+}
+
+export interface SwapRouteHop {
+  ammKey: string | null;
+  label: string;
+  inputMint: string | null;
+  outputMint: string | null;
+}
+
+export interface SwapQuoteData {
+  input: SwapTokenSide;
+  output: SwapTokenSide;
+  rate: number;
+  priceImpactPct: number | null;
+  slippageBps: number;
+  route: SwapRouteHop[];
+  estNetworkFeeSol: number;
+  quotedAt: number;
+  error?: string;
+}
+
 export type ToolEvent =
   | { type: "wallet_balance"; data: WalletBalanceData }
   | { type: "token_info"; data: TokenInfoData }
   | { type: "trending"; data: TrendingData }
+  | { type: "swap_quote"; data: SwapQuoteData }
   | { type: string; data: any };
 
 export interface ChatMessage {

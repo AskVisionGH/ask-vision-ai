@@ -20,19 +20,20 @@ Tools (call them whenever relevant — don't ask permission, don't pretend you c
 - \`get_wallet_balance\` — fetches the connected user's holdings. Use for "what's in my wallet", "my balance", "my portfolio", etc. No arguments; the wallet address is injected.
 - \`get_token_info\` — fetches live price, market cap, volume, and 24h change for a single token. Use whenever the user names a token ($SOL, JUP, BONK) or pastes a mint address. Argument: \`query\` (ticker like "SOL" or full mint address).
 - \`get_trending\` — fetches the top trending Solana tokens by 24h volume. ALWAYS call this for any question about what's trending, hot, popular, top tokens, or what's moving on Solana — never answer from memory.
+- \`prepare_swap\` — fetches a live Jupiter quote for swapping one token into another. Call this whenever the user wants to swap, trade, exchange, or convert tokens (e.g. "swap 0.1 SOL for USDC", "trade 100 BONK to SOL"). Arguments: \`inputToken\`, \`outputToken\` (tickers or mint addresses), \`amount\` (decimal of inputToken), and optional \`slippageBps\` (default 50 = 0.5%). NEVER execute — this only quotes.
 
-CRITICAL: If a user asks for live data (prices, balances, what's trending), you MUST call the matching tool. Never make up numbers. Never say "here are the top tokens" without first calling \`get_trending\`.
+CRITICAL: If a user asks for live data (prices, balances, what's trending, swap quotes), you MUST call the matching tool. Never make up numbers. Never say "here are the top tokens" without first calling \`get_trending\`. Never quote a swap rate without calling \`prepare_swap\`.
 
-After any tool returns, the UI renders a rich card automatically. Your job is a SHORT one or two-sentence framing — note the headline number, what stands out, or any caveats. Do NOT re-list everything; the card already does that.
+After any tool returns, the UI renders a rich card automatically. Your job is a SHORT one or two-sentence framing — note the headline number, what stands out, or any caveats. Do NOT re-list everything; the card already does that. For \`prepare_swap\`, frame as a preview ("Here's the preview — review and confirm below"), never as a confirmed trade.
 
 If a tool returns an error, explain it plainly and suggest a next step.
 
 Capabilities (coming next — do NOT pretend you can do these yet):
-- Preparing swaps via Jupiter
+- Signing and submitting swaps on-chain (the preview is ready; signing ships next)
 - Preparing transfers (SOL or SPL tokens)
 - Executing on-chain transactions after explicit confirmation
 
-If a user asks for one of these, say plainly: "That ships in the next update — for now I can walk you through how it would work."
+If a user asks to actually send/sign/execute a swap or transfer, say plainly: "Signing ships in the next update — for now I can show you the preview."
 
 Never:
 - Give financial advice, price predictions, or trade signals.
@@ -76,6 +77,37 @@ const TOOLS = [
       description:
         "Fetch the top 10 trending Solana tokens right now, ranked by 24h trading volume. Use for 'what's trending', 'top tokens', 'what's hot on Solana', etc.",
       parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "prepare_swap",
+      description:
+        "Prepare a Jupiter swap quote between two Solana tokens. Use whenever the user wants to swap, trade, exchange, or convert tokens. NEVER executes — only returns a preview quote.",
+      parameters: {
+        type: "object",
+        properties: {
+          inputToken: {
+            type: "string",
+            description: "Ticker (e.g. 'SOL', 'USDC') or full mint address of the token to sell.",
+          },
+          outputToken: {
+            type: "string",
+            description: "Ticker or full mint address of the token to buy.",
+          },
+          amount: {
+            type: "number",
+            description: "Decimal amount of inputToken to swap (e.g. 0.1 for 0.1 SOL).",
+          },
+          slippageBps: {
+            type: "number",
+            description: "Optional slippage tolerance in basis points (default 50 = 0.5%).",
+          },
+        },
+        required: ["inputToken", "outputToken", "amount"],
+        additionalProperties: false,
+      },
     },
   },
 ];
@@ -172,6 +204,18 @@ serve(async (req) => {
         } else if (name === "get_trending") {
           result = await invokeFn("trending-tokens", {}, req);
           toolEvents.push({ type: "trending", data: result });
+        } else if (name === "prepare_swap") {
+          let args: any = {};
+          try {
+            args = JSON.parse(tc.function?.arguments ?? "{}");
+          } catch { /* ignore */ }
+          result = await invokeFn("swap-quote", {
+            inputToken: args.inputToken ?? "",
+            outputToken: args.outputToken ?? "",
+            amount: args.amount,
+            slippageBps: args.slippageBps,
+          }, req);
+          toolEvents.push({ type: "swap_quote", data: result });
         } else {
           result = { error: `Unknown tool: ${name}` };
         }
