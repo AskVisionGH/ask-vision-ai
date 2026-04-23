@@ -23,6 +23,7 @@ interface ActivityTrade {
     name: string;
     address: string;
     logo: string | null;
+    pairUrl: string | null;
   } | null;
   /** approximate USD value */
   valueUsd: number | null;
@@ -120,13 +121,13 @@ serve(async (req) => {
       });
     }
 
-    // To stay under CPU limits: only sample up to 20 wallets per call,
+    // To stay under CPU limits: only sample up to 25 wallets per call,
     // prioritizing user-added ones.
     const sortedWallets = [...wallets.entries()].sort((a, b) => {
       const aScore = (a[1].isUserAdded ? 2 : 0) + (a[1].isCurated ? 1 : 0);
       const bScore = (b[1].isUserAdded ? 2 : 0) + (b[1].isCurated ? 1 : 0);
       return bScore - aScore;
-    }).slice(0, 20);
+    }).slice(0, 25);
 
     const trades: ActivityTrade[] = [];
 
@@ -141,8 +142,22 @@ serve(async (req) => {
       if (r.status === "fulfilled") trades.push(...r.value);
     }
 
-    trades.sort((a, b) => b.timestamp - a.timestamp);
-    const limited = trades.slice(0, 30);
+    // Diversify: cap each wallet to its 5 most-recent trades so a single
+    // chatty wallet (e.g. an MM bot) can't dominate the feed.
+    const perWalletCap = 5;
+    const byWallet = new Map<string, ActivityTrade[]>();
+    for (const t of trades) {
+      const list = byWallet.get(t.wallet.address) ?? [];
+      list.push(t);
+      byWallet.set(t.wallet.address, list);
+    }
+    const diversified: ActivityTrade[] = [];
+    for (const [, list] of byWallet) {
+      list.sort((a, b) => b.timestamp - a.timestamp);
+      diversified.push(...list.slice(0, perWalletCap));
+    }
+    diversified.sort((a, b) => b.timestamp - a.timestamp);
+    const limited = diversified.slice(0, 60);
 
     return json({
       trades: limited,
@@ -274,7 +289,10 @@ function sumValueUsd(
   return any ? usd : null;
 }
 
-const tokenCache = new Map<string, { symbol: string; name: string; address: string; logo: string | null } | null>();
+const tokenCache = new Map<
+  string,
+  { symbol: string; name: string; address: string; logo: string | null; pairUrl: string | null } | null
+>();
 
 async function lookupToken(mint: string) {
   if (tokenCache.has(mint)) return tokenCache.get(mint) ?? null;
@@ -299,6 +317,7 @@ async function lookupToken(mint: string) {
       name: base?.name ?? base?.symbol ?? "Unknown",
       address: base?.address ?? mint,
       logo: top?.info?.imageUrl ?? null,
+      pairUrl: top?.url ?? null,
     };
     tokenCache.set(mint, result);
     return result;
