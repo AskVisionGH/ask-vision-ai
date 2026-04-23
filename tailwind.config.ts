@@ -37,6 +37,8 @@ export default {
         },
         up: "hsl(var(--up))",
         down: "hsl(var(--down))",
+        warn: "hsl(var(--warn))",
+        risk: "hsl(var(--risk))",
         muted: {
           DEFAULT: "hsl(var(--muted))",
           foreground: "hsl(var(--muted-foreground))",

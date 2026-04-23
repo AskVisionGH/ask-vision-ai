@@ -37,9 +37,11 @@
     --destructive: 0 72% 51%;
     --destructive-foreground: 240 5% 96%;
 
-    /* Market direction */
+    /* Market direction + safety */
     --up: 152 65% 55%;
     --down: 350 75% 60%;
+    --warn: 38 92% 60%;               /* amber — minor risks / caution */
+    --risk: 22 95% 60%;               /* orange — notable risks */
 
     --border: 240 5% 16%;             /* rgba(255,255,255,.08) on dark */
     --input: 240 5% 16%;
