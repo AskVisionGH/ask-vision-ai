@@ -79,6 +79,37 @@ const TOOLS = [
       parameters: { type: "object", properties: {}, additionalProperties: false },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "prepare_swap",
+      description:
+        "Prepare a Jupiter swap quote between two Solana tokens. Use whenever the user wants to swap, trade, exchange, or convert tokens. NEVER executes — only returns a preview quote.",
+      parameters: {
+        type: "object",
+        properties: {
+          inputToken: {
+            type: "string",
+            description: "Ticker (e.g. 'SOL', 'USDC') or full mint address of the token to sell.",
+          },
+          outputToken: {
+            type: "string",
+            description: "Ticker or full mint address of the token to buy.",
+          },
+          amount: {
+            type: "number",
+            description: "Decimal amount of inputToken to swap (e.g. 0.1 for 0.1 SOL).",
+          },
+          slippageBps: {
+            type: "number",
+            description: "Optional slippage tolerance in basis points (default 50 = 0.5%).",
+          },
+        },
+        required: ["inputToken", "outputToken", "amount"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 serve(async (req) => {
