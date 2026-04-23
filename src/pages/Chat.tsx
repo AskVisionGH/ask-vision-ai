@@ -6,89 +6,71 @@ import { VisionLogo } from "@/components/VisionLogo";
 import { ConnectWalletButton } from "@/components/ConnectWalletButton";
 import { ChatBubble } from "@/components/ChatBubble";
 import { ChatComposer } from "@/components/ChatComposer";
-import { streamChat, type ChatMessage } from "@/lib/chat-stream";
+import { sendChat, type ChatMessage } from "@/lib/chat-stream";
 import { cn } from "@/lib/utils";
 
 const SUGGESTIONS = [
   "What's in my wallet?",
-  "Swap 10 USDC to SOL",
-  "Show trending tokens on Solana",
+  "Show my SOL balance",
   "Explain Jupiter routing in plain English",
+  "What are SPL tokens?",
 ];
 
 const Chat = () => {
-  const { connected } = useWallet();
+  const { connected, publicKey } = useWallet();
   const navigate = useNavigate();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
-  const [isStreaming, setIsStreaming] = useState(false);
+  const [isThinking, setIsThinking] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
-  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (!connected) navigate("/");
   }, [connected, navigate]);
 
-  // Auto-scroll on new content
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [messages]);
+  }, [messages, isThinking]);
 
   const send = async (text: string) => {
     const trimmed = text.trim();
-    if (!trimmed || isStreaming) return;
+    if (!trimmed || isThinking) return;
 
     const userMsg: ChatMessage = { role: "user", content: trimmed };
     const next = [...messages, userMsg];
     setMessages(next);
     setInput("");
-    setIsStreaming(true);
+    setIsThinking(true);
 
-    let assistantBuffer = "";
-    let assistantStarted = false;
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    await streamChat({
+    const result = await sendChat({
       messages: next,
-      signal: controller.signal,
-      onDelta: (chunk) => {
-        assistantBuffer += chunk;
-        setMessages((prev) => {
-          if (!assistantStarted) {
-            assistantStarted = true;
-            return [...prev, { role: "assistant", content: assistantBuffer }];
-          }
-          const copy = [...prev];
-          copy[copy.length - 1] = { role: "assistant", content: assistantBuffer };
-          return copy;
-        });
-      },
-      onDone: () => {
-        setIsStreaming(false);
-        abortRef.current = null;
-      },
-      onError: (status, msg) => {
-        setIsStreaming(false);
-        abortRef.current = null;
-        if (status === 429) {
-          toast.error("Slow down", { description: msg });
-        } else if (status === 402) {
-          toast.error("Out of AI credits", { description: msg });
-        } else {
-          toast.error("Vision hit a snag", { description: msg });
-        }
-        // Drop the empty assistant placeholder if no content arrived
-        setMessages((prev) => {
-          const last = prev[prev.length - 1];
-          if (last?.role === "assistant" && !last.content) return prev.slice(0, -1);
-          return prev;
-        });
-      },
+      walletAddress: publicKey?.toBase58(),
     });
+
+    setIsThinking(false);
+
+    if ("error" in result) {
+      if (result.status === 429) {
+        toast.error("Slow down", { description: result.error });
+      } else if (result.status === 402) {
+        toast.error("Out of AI credits", { description: result.error });
+      } else if (result.status !== 0) {
+        toast.error("Vision hit a snag", { description: result.error });
+      }
+      return;
+    }
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "assistant",
+        content: result.content,
+        toolEvents: result.toolEvents,
+      },
+    ]);
   };
 
   const isEmpty = messages.length === 0;
@@ -125,7 +107,7 @@ const Chat = () => {
                 <span className="font-serif-italic text-primary">do</span>?
               </h2>
               <p className="mt-3 max-w-sm text-sm text-muted-foreground">
-                Ask anything about Solana — tokens, swaps, wallets, protocols, or how something works.
+                Ask anything about Solana — your wallet, tokens, protocols, or how something works.
               </p>
 
               <div className="mt-10 grid w-full max-w-md grid-cols-1 gap-2 sm:grid-cols-2">
@@ -144,20 +126,11 @@ const Chat = () => {
               </div>
             </div>
           ) : (
-            messages.map((m, i) => {
-              const isLast = i === messages.length - 1;
-              return (
-                <ChatBubble
-                  key={i}
-                  message={m}
-                  isStreaming={isStreaming && isLast && m.role === "assistant"}
-                />
-              );
-            })
+            messages.map((m, i) => <ChatBubble key={i} message={m} />)
           )}
 
-          {isStreaming && messages[messages.length - 1]?.role === "user" && (
-            <div className="flex gap-1.5 px-1 text-muted-foreground">
+          {isThinking && (
+            <div className="flex items-center gap-1.5 px-1 text-muted-foreground">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary [animation-delay:0ms]" />
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary [animation-delay:150ms]" />
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary [animation-delay:300ms]" />
@@ -173,7 +146,7 @@ const Chat = () => {
             value={input}
             onChange={setInput}
             onSubmit={() => send(input)}
-            disabled={isStreaming}
+            disabled={isThinking}
           />
           <p className="mt-2 text-center font-mono text-[10px] tracking-wider uppercase text-muted-foreground/50">
             Vision can make mistakes · not financial advice
