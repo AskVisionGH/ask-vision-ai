@@ -1,79 +1,103 @@
 
 
-## Step 6: Sign & Submit Swaps
+## Step 7: Transfers & SNS Resolution
 
-The preview card already shows live Jupiter quotes. Now we wire up the **Confirm & Sign** button so the swap actually executes on Solana mainnet through the user's connected wallet.
+Vision learns to **send tokens** — SOL or any SPL — to a wallet address or a `.sol` name. Same conversational pattern as swaps: AI prepares a preview card, the user reviews and signs, the card flips to a success state.
 
 ### What you'll see
 
-In the preview card from Step 5, **Confirm & Sign** becomes enabled. Click it →
-
-1. Button changes to `Building transaction…` (spinner)
-2. Wallet popup appears asking to approve the swap
-3. Button changes to `Submitting…` while it broadcasts
-4. Card collapses into a compact **success state**:
+Type **"send 0.05 SOL to toly.sol"** or **"send 10 USDC to 7xKX…9aPq"**. Vision replies with one short sentence and a card:
 
 ```text
 ┌─────────────────────────────────────────┐
-│  ✓ Swapped 0.1 SOL → 14.81 USDC          │
-│    Confirmed in 1.4s                    │
-│    Tx  5xK8…9aPq  ↗ Solscan             │
+│  Transfer preview                       │
+│                                         │
+│   You send       0.05 SOL               │
+│                  ≈ $7.42                │
+│                                         │
+│   To             toly.sol               │
+│                  4Nd1m…h2Cj             │
+│                                         │
+│   Network fee    ~0.000005 SOL          │
+│   Total          0.050005 SOL           │
+│                                         │
+│   [ Confirm & sign ]   [ Cancel ]       │
 └─────────────────────────────────────────┘
 ```
 
-If the user rejects the wallet popup, the card stays in preview mode with a small "Cancelled — try again or adjust" note. If the on-chain submit fails (slippage, expired blockhash, insufficient funds), the card shows a clear error and a **Retry** button that re-fetches a fresh quote.
+After signing, the card collapses to the same green success state used for swaps:
+
+```text
+┌─────────────────────────────────────────┐
+│  ✓ Sent 0.05 SOL to toly.sol            │
+│    Confirmed in 1.2s                    │
+│    Tx  3yQ2…7nFp  ↗ Solscan             │
+└─────────────────────────────────────────┘
+```
+
+If the recipient address is invalid, the SNS name doesn't resolve, or the wallet has insufficient balance, the AI explains plainly and the card never renders.
 
 ### What gets built
 
-**1. New edge function — `supabase/functions/swap-build/index.ts`**
-- Input: the same quote object the preview already has, plus `userPublicKey`
-- Calls Jupiter Swap API (`https://lite-api.jup.ag/swap/v1/swap`) to get a serialized v0 transaction ready for signing
-- Sets sane defaults: `wrapAndUnwrapSol: true`, `dynamicComputeUnitLimit: true`, `prioritizationFeeLamports: "auto"` — so swaps land reliably without us hand-tuning fees
-- Returns `{ swapTransaction: <base64>, lastValidBlockHeight, prioritizationFeeLamports }`
-- Keyless, same Jupiter API as the quote — no new secrets needed
+**1. New edge function — `supabase/functions/resolve-recipient/index.ts`**
+- Input: `{ recipient: string }` — either a base58 wallet address or a `.sol` name
+- If `.sol` suffix: resolves via Bonfida SNS SDK over Helius RPC (`@bonfida/spl-name-service` for Deno)
+- If raw address: validates it's a valid base58 32-byte public key
+- Returns `{ address, displayName, isOnCurve }` — `isOnCurve` flags PDAs (rare but worth catching to avoid sending to a program-owned account)
 
-**2. New edge function — `supabase/functions/tx-status/index.ts`**
-- Input: `{ signature, lastValidBlockHeight }`
-- Polls Helius RPC (`HELIUS_API_KEY` already configured) for confirmation status
-- Returns `{ status: "confirmed" | "pending" | "failed", err?, slot?, blockTime? }`
-- Used by the frontend after submission to confirm landing
+**2. New edge function — `supabase/functions/transfer-build/index.ts`**
+- Input: `{ fromAddress, toAddress, mint, amount }` (mint = `"SOL"` or SPL mint address; amount in human units)
+- For **SOL**: builds a `SystemProgram.transfer` instruction
+- For **SPL tokens**:
+  - Looks up sender's associated token account (ATA) for the mint
+  - Looks up recipient's ATA; if missing, prepends a `createAssociatedTokenAccountInstruction` (sender pays the ~0.002 SOL rent — this is shown in the preview)
+  - Adds a `createTransferCheckedInstruction` with proper decimals
+- Wraps in a `VersionedTransaction` with a recent blockhash from Helius
+- Returns `{ transaction: <base64>, lastValidBlockHeight, estNetworkFeeSol, ataCreationFeeSol }`
 
-**3. `SwapPreviewCard.tsx` — enable the action**
-- Replace the disabled tooltip with a real handler:
-  - Call `swap-build` → get serialized transaction
-  - Deserialize as `VersionedTransaction` (using `@solana/web3.js`, already a dep via `@solana/wallet-adapter-react`)
-  - Call `wallet.sendTransaction(tx, connection)` — wallet adapter handles sign + submit in one step
-  - Poll `tx-status` every 1.5s for up to 60s
-- Card has 4 visual states driven by a local state machine:
-  - `preview` (current) → `building` → `awaiting_signature` → `submitting` → `success` | `error`
-- Auto-refresh quote pauses the moment the user clicks **Confirm & Sign** so the quote can't change mid-flight
-- **Cancel** still works in preview state; in error state it becomes **Retry** (re-fetches quote and resets to preview)
+**3. New AI tool — `prepare_transfer`**
+Added to the `chat` edge function tool list:
+```ts
+{
+  name: "prepare_transfer",
+  description: "Prepare a transfer of SOL or an SPL token to another wallet. Use whenever the user wants to send, transfer, or pay tokens to an address or .sol name.",
+  parameters: {
+    token: "ticker (SOL, USDC, JUP) or full mint address",
+    amount: "decimal amount to send",
+    recipient: "wallet address or .sol name"
+  }
+}
+```
+The chat function calls `resolve-recipient` first; if it fails, it returns a clear error event so the AI can explain ("That .sol name doesn't resolve to anything"). On success it calls a new `transfer-quote` helper that bundles recipient resolution + USD pricing + fee estimate into the same event shape the UI expects.
 
-**4. Success state component**
-- Compact green-tinted variant of the card
-- Shows `swapped X → Y`, confirmation time, truncated tx signature, and a Solscan link (`https://solscan.io/tx/<sig>`)
-- Replaces the full preview card in place — same message, no chat duplication
+**4. New UI component — `src/components/TransferPreviewCard.tsx`**
+- Same visual language as `SwapPreviewCard` (dark panel, lilac accents, JetBrains Mono numbers)
+- Reuses the same state machine: `preview` → `building` → `awaiting_signature` → `submitting` → `confirming` → `success` | `error`
+- Reuses the existing `tx-submit` and `tx-status` edge functions verbatim — they're transaction-agnostic
+- Shows the resolved address under a `.sol` name so the user always sees where funds are actually going
+- Highlights ATA creation fee in amber when the recipient doesn't have a token account yet ("First-time send to this address — adds ~0.002 SOL")
 
-**5. System prompt tweak**
-- Remove the "Signing ships in the next update" deflection
-- Add: "After a swap confirms, the user sees a success card automatically — don't restate the result, just acknowledge briefly if they ask follow-ups."
+**5. Wire-up**
+- `chat-stream.ts` → add `TransferQuoteData` type and `transfer_quote` to the `ToolEvent` union
+- `ChatBubble.tsx` → render `TransferPreviewCard` when `event.type === "transfer_quote"`
+- System prompt: add the `prepare_transfer` tool guidance and the rule "Always show the resolved address alongside any `.sol` name in your reply, so the user can sanity-check the destination."
 
 ### Technical details
 
-- **Versioned transactions**: Jupiter returns v0 transactions with address lookup tables. We must use `VersionedTransaction.deserialize(Buffer.from(swapTx, 'base64'))`, not legacy `Transaction`.
-- **Connection**: Uses the existing `WalletContextProvider` connection (Helius RPC) for `sendTransaction` — keeps RPC calls authenticated through our own key.
-- **Confirmation strategy**: We poll `tx-status` rather than using `connection.confirmTransaction` because the latter can hang past blockhash expiry. Polling Helius gives us deterministic timeout behavior.
-- **Error mapping**: Jupiter/Solana errors are translated to plain English — `0x1771` → "price moved beyond your slippage tolerance", `BlockhashNotFound` → "quote expired, try again", etc.
+- **SNS resolution**: Bonfida's `@bonfida/spl-name-service` Deno-compatible build resolves `name.sol` → owner pubkey via on-chain account reads through Helius RPC. No API key needed beyond what we already have.
+- **ATA detection**: Use `getAssociatedTokenAddressSync` for the address, then `connection.getAccountInfo` to check existence. Missing ATA → prepend creation instruction.
+- **Decimals**: Pulled from the same Jupiter token list cache that `swap-quote` already uses — no extra RPC call for known tokens.
+- **Safety check**: `PublicKey.isOnCurve()` flags PDAs. We block sending SPL tokens to non-curve addresses (programs) but allow SOL (some valid recipients are off-curve, e.g. Squads vaults). The card surfaces a warning either way.
+- **Reuse**: `tx-submit` and `tx-status` are unchanged — any signed `VersionedTransaction` flows through them.
 
-### What we explicitly defer to Step 7
-- SOL/SPL transfers (separate intent, separate tool)
-- SNS (`.sol` name) resolution
-- Per-swap slippage adjustment UI (the AI can already pass `slippageBps`; we'll add a manual control later if needed)
+### What we explicitly defer to a later step
+- Address book / contacts ("send to mom")
+- Batch sends (one tx, multiple recipients)
+- Memo field on transfers
+- NFT transfers (separate intent — different account model)
 
 ### Notes
-- No new secrets, no new dependencies — `@solana/web3.js` is already pulled in by the wallet adapter
-- Helius RPC is already configured via `HELIUS_API_KEY` — same key we use for balances
-- All transactions go to **mainnet-beta**; this is real money. The wallet popup is the user's safety gate.
-
-Approve and I'll build it.
+- No new secrets needed — Helius RPC and Jupiter token list are already in place
+- New Deno dep: `@bonfida/spl-name-service` (imported via esm.sh in the edge function — no package install)
+- Real mainnet money — same wallet popup safety gate as swaps
 
