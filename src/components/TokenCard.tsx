@@ -53,13 +53,35 @@ const fmtPct = (n: number | null | undefined) => {
 const SAFETY_PILL_MCAP_THRESHOLD = 50_000_000;
 
 const CONTRACT_ANALYZER_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/contract-analyzer`;
+const CHART_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/token-chart`;
+const SENTIMENT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/social-sentiment`;
 const ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
+type Pane = null | "safety" | "chart" | "vibe";
+
+const VIBE_DOT_COLOR: Record<SentimentVerdict, string> = {
+  very_bullish: "text-up",
+  bullish: "text-up",
+  neutral: "text-muted-foreground",
+  bearish: "text-down",
+  very_bearish: "text-down",
+  unknown: "text-muted-foreground",
+};
+
 export const TokenCard = ({ data }: Props) => {
-  const [expanded, setExpanded] = useState(false);
+  const [pane, setPane] = useState<Pane>(null);
+
   const [report, setReport] = useState<RiskReportData | null>(null);
   const [loadingReport, setLoadingReport] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
+
+  const [chart, setChart] = useState<TokenChartData | null>(null);
+  const [loadingChart, setLoadingChart] = useState(false);
+  const [chartError, setChartError] = useState<string | null>(null);
+
+  const [vibe, setVibe] = useState<SocialSentimentData | null>(null);
+  const [loadingVibe, setLoadingVibe] = useState(false);
+  const [vibeError, setVibeError] = useState<string | null>(null);
 
   if (data.error) {
     return (
@@ -72,21 +94,19 @@ export const TokenCard = ({ data }: Props) => {
   const change24h = data.priceChange24h;
   const isUp = (change24h ?? 0) >= 0;
 
-  // Show the safety pill for smaller/newer tokens where it actually helps.
-  // We don't fetch the report up-front — the pill is just an entry point;
-  // tapping it triggers the heavier RugCheck call on demand.
   const showSafetyPill =
     !!data.address &&
     (data.marketCapUsd == null || data.marketCapUsd < SAFETY_PILL_MCAP_THRESHOLD);
 
+  const togglePane = (next: Pane) => {
+    setPane((cur) => (cur === next ? null : next));
+  };
+
   const loadReport = async () => {
-    if (report || loadingReport) {
-      setExpanded((v) => !v);
-      return;
-    }
+    togglePane("safety");
+    if (report || loadingReport) return;
     setLoadingReport(true);
     setReportError(null);
-    setExpanded(true);
     try {
       const resp = await fetch(CONTRACT_ANALYZER_URL, {
         method: "POST",
@@ -97,15 +117,60 @@ export const TokenCard = ({ data }: Props) => {
         body: JSON.stringify({ query: data.address }),
       });
       const json = await resp.json();
-      if (!resp.ok || json?.error) {
-        setReportError(json?.error ?? "Couldn't load risk report");
-      } else {
-        setReport(json as RiskReportData);
-      }
+      if (!resp.ok || json?.error) setReportError(json?.error ?? "Couldn't load risk report");
+      else setReport(json as RiskReportData);
     } catch (e) {
       setReportError(e instanceof Error ? e.message : "Network error");
     } finally {
       setLoadingReport(false);
+    }
+  };
+
+  const loadChart = async () => {
+    togglePane("chart");
+    if (chart || loadingChart) return;
+    setLoadingChart(true);
+    setChartError(null);
+    try {
+      const resp = await fetch(CHART_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${ANON_KEY}`,
+        },
+        body: JSON.stringify({ query: data.address || data.symbol, interval: "15m" }),
+      });
+      const json = await resp.json();
+      if (!resp.ok || json?.error) setChartError(json?.error ?? "Couldn't load chart");
+      else setChart(json as TokenChartData);
+    } catch (e) {
+      setChartError(e instanceof Error ? e.message : "Network error");
+    } finally {
+      setLoadingChart(false);
+    }
+  };
+
+  const loadVibe = async () => {
+    togglePane("vibe");
+    if (vibe || loadingVibe) return;
+    setLoadingVibe(true);
+    setVibeError(null);
+    try {
+      const resp = await fetch(SENTIMENT_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${ANON_KEY}`,
+        },
+        body: JSON.stringify({ query: data.symbol }),
+      });
+      const json = await resp.json();
+      if (!resp.ok || json?.error) setVibeError(json?.error ?? "Couldn't load sentiment");
+      else setVibe(json as SocialSentimentData);
+    } catch (e) {
+      setVibeError(e instanceof Error ? e.message : "Network error");
+    } finally {
+      setLoadingVibe(false);
     }
   };
 
