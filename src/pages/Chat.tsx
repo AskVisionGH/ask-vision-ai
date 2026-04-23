@@ -114,7 +114,6 @@ const Chat = () => {
       }
       convoId = created.id;
       isFirstMessage = true;
-      setDraftingNew(false);
       setSearchParams({ c: convoId }, { replace: true });
     } else if (messages.length === 0) {
       isFirstMessage = true;
