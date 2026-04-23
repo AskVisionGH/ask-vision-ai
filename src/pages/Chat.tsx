@@ -194,6 +194,7 @@ const Chat = () => {
       onNew={startNewConversation}
       onRename={renameConversation}
       onDelete={handleDelete}
+      onTogglePin={togglePin}
     />
   );
 
