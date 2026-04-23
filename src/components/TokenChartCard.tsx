@@ -343,3 +343,31 @@ const Stat = ({ label, value }: { label: string; value: string }) => (
     <p className="mt-0.5 font-mono text-sm text-foreground">{value}</p>
   </div>
 );
+
+interface CandleShapeProps {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  payload?: { up: boolean };
+  kind: "wick" | "body";
+  upColor: string;
+  downColor: string;
+}
+
+// Custom shape for both the wick (thin vertical line) and body (filled rect)
+// of a candle. Recharts gives us the bar's bounding box for the [low, high]
+// or [openMin, closeMax] range, which we then style accordingly.
+const CandleShape = ({ x, y, width, height, payload, kind, upColor, downColor }: CandleShapeProps) => {
+  if (x == null || y == null || width == null || height == null) return null;
+  const color = payload?.up ? upColor : downColor;
+  if (kind === "wick") {
+    const cx = x + width / 2;
+    return <line x1={cx} x2={cx} y1={y} y2={y + height} stroke={color} strokeWidth={1} />;
+  }
+  // body — clamp width and ensure at least 1px tall so doji candles still render
+  const bodyW = Math.max(2, Math.min(width * 0.7, 14));
+  const bodyX = x + (width - bodyW) / 2;
+  const bodyH = Math.max(1, height);
+  return <rect x={bodyX} y={y} width={bodyW} height={bodyH} fill={color} rx={1} />;
+};
