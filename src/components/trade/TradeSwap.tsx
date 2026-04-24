@@ -457,15 +457,15 @@ export const TradeSwap = () => {
 
   return (
     <TooltipProvider delayDuration={150}>
-      <div className="w-full max-w-[440px] space-y-3">
-        {/* Tabs row */}
-        <div className="flex items-center justify-between gap-2">
+      <div className="w-full max-w-[440px] space-y-4">
+        {/* Tabs row — tabs centered over card, gear floats to the right */}
+        <div className="relative flex items-center justify-center">
           <TradeTabs active={tab} onChange={setTab} />
           <Popover>
             <PopoverTrigger asChild>
               <button
                 type="button"
-                className="ease-vision flex h-9 w-9 items-center justify-center rounded-full border border-border/60 bg-secondary/40 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                className="ease-vision absolute right-0 flex h-9 w-9 items-center justify-center rounded-full border border-border/60 bg-secondary/40 text-muted-foreground hover:bg-secondary hover:text-foreground sm:-right-12"
                 aria-label="Settings"
               >
                 <SettingsIcon className="h-4 w-4" />
