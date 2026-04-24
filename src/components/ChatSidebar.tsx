@@ -500,18 +500,25 @@ export const ChatSidebar = ({
       {/* Quick links */}
       <div className="shrink-0 border-b border-border/60 px-2 py-2">
         <Link
-          to="/contacts"
+          to="/trade"
           className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground ease-vision hover:bg-secondary/60 hover:text-foreground"
         >
-          <Users className="h-3.5 w-3.5" />
-          Contacts
+          <Repeat className="h-3.5 w-3.5" />
+          Trade
         </Link>
         <Link
           to="/tracked-wallets"
           className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground ease-vision hover:bg-secondary/60 hover:text-foreground"
         >
           <Radar className="h-3.5 w-3.5" />
-          Tracked wallets
+          Tracking
+        </Link>
+        <Link
+          to="/contacts"
+          className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground ease-vision hover:bg-secondary/60 hover:text-foreground"
+        >
+          <Users className="h-3.5 w-3.5" />
+          Contacts
         </Link>
         <button
           type="button"
@@ -525,13 +532,6 @@ export const ChatSidebar = ({
             Soon
           </span>
         </button>
-        <Link
-          to="/trade"
-          className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground ease-vision hover:bg-secondary/60 hover:text-foreground"
-        >
-          <Repeat className="h-3.5 w-3.5" />
-          Trade
-        </Link>
         <button
           type="button"
           disabled
