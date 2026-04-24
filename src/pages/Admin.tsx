@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
-import { ArrowLeft, Check, Copy, ExternalLink, Loader2, Mail, RefreshCw, Shield, ShieldOff, Wallet } from "lucide-react";
+import { ArrowLeft, ArrowLeftRight, BarChart3, Check, Copy, ExternalLink, Loader2, Mail, MessageSquare, RefreshCw, Send, Shield, ShieldOff, TrendingUp, UserCheck, Users, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
@@ -141,13 +141,17 @@ const Admin = () => {
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-6">
-        <Tabs defaultValue="sweeps" className="space-y-4">
+        <Tabs defaultValue="stats" className="space-y-4">
           <TabsList>
+            <TabsTrigger value="stats">Stats</TabsTrigger>
             <TabsTrigger value="sweeps">Fee sweeps</TabsTrigger>
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="roles">Roles</TabsTrigger>
           </TabsList>
 
+          <TabsContent value="stats">
+            <StatsTab />
+          </TabsContent>
           <TabsContent value="sweeps">
             <SweepsTab />
           </TabsContent>
@@ -159,6 +163,394 @@ const Admin = () => {
           </TabsContent>
         </Tabs>
       </main>
+    </div>
+  );
+};
+
+/* -------------------------------- Stats tab ------------------------------- */
+
+type StatsData = {
+  totalUsers: number;
+  onboardedUsers: number;
+  signupsLast7d: number;
+  signupsLast30d: number;
+  signupsByDay: { date: string; count: number }[];
+  totalConversations: number;
+  totalMessages: number;
+  messagesLast7d: number;
+  activeUsers7d: number;
+  totalWalletLinks: number;
+  uniqueLinkedWallets: number;
+  totalTxs: number;
+  txByKind: Record<string, { count: number; valueUsd: number }>;
+  totalVolumeUsd: number;
+  experienceBreakdown: { value: string; count: number }[];
+  riskBreakdown: { value: string; count: number }[];
+  topInterests: { value: string; count: number }[];
+};
+
+const StatCard = ({
+  label,
+  value,
+  hint,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  icon: React.ComponentType<{ className?: string }>;
+}) => (
+  <Card>
+    <CardHeader className="pb-2">
+      <CardTitle className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        <Icon className="h-3.5 w-3.5" />
+        {label}
+      </CardTitle>
+    </CardHeader>
+    <CardContent className="pt-0">
+      <div className="text-2xl font-semibold tabular-nums">{value}</div>
+      {hint ? <div className="mt-0.5 text-xs text-muted-foreground">{hint}</div> : null}
+    </CardContent>
+  </Card>
+);
+
+const SignupsSparkline = ({ data }: { data: { date: string; count: number }[] }) => {
+  const max = Math.max(1, ...data.map((d) => d.count));
+  return (
+    <div className="flex h-24 items-end gap-0.5">
+      {data.map((d) => {
+        const heightPct = (d.count / max) * 100;
+        return (
+          <div
+            key={d.date}
+            className="group relative flex-1 rounded-sm bg-primary/30 ease-vision hover:bg-primary"
+            style={{ height: `${Math.max(2, heightPct)}%` }}
+            title={`${d.date}: ${d.count} signup${d.count === 1 ? "" : "s"}`}
+          />
+        );
+      })}
+    </div>
+  );
+};
+
+const BreakdownBar = ({
+  items,
+  labelMap,
+}: {
+  items: { value: string; count: number }[];
+  labelMap?: Record<string, string>;
+}) => {
+  const total = items.reduce((s, i) => s + i.count, 0);
+  if (total === 0) return <p className="text-xs text-muted-foreground">No data yet.</p>;
+  return (
+    <div className="space-y-2">
+      {items.map((i) => {
+        const pct = (i.count / total) * 100;
+        return (
+          <div key={i.value}>
+            <div className="mb-1 flex items-center justify-between text-xs">
+              <span>{labelMap?.[i.value] ?? i.value}</span>
+              <span className="tabular-nums text-muted-foreground">
+                {i.count} · {pct.toFixed(0)}%
+              </span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
+              <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+const StatsTab = () => {
+  const [stats, setStats] = useState<StatsData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      // Pull everything in parallel — RLS lets admins see all rows.
+      const [
+        profilesRes,
+        convsRes,
+        messagesRes,
+        walletsRes,
+        txRes,
+      ] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("user_id, experience, risk_tolerance, interests, onboarding_completed, created_at")
+          .limit(10000),
+        supabase.from("conversations").select("id, user_id, created_at").limit(10000),
+        supabase.from("messages").select("id, user_id, created_at").limit(50000),
+        supabase.from("wallet_links").select("user_id, wallet_address").limit(10000),
+        supabase.from("tx_events").select("kind, value_usd, created_at").limit(50000),
+      ]);
+
+      const profiles = (profilesRes.data ?? []) as Array<{
+        user_id: string;
+        experience: string | null;
+        risk_tolerance: string | null;
+        interests: string[];
+        onboarding_completed: boolean;
+        created_at: string;
+      }>;
+      const conversations = (convsRes.data ?? []) as Array<{ user_id: string; created_at: string }>;
+      const messages = (messagesRes.data ?? []) as Array<{ user_id: string; created_at: string }>;
+      const wallets = (walletsRes.data ?? []) as Array<{ user_id: string; wallet_address: string }>;
+      const txs = (txRes.data ?? []) as Array<{ kind: string; value_usd: number | null; created_at: string }>;
+
+      const now = Date.now();
+      const day = 24 * 60 * 60 * 1000;
+      const since7 = now - 7 * day;
+      const since30 = now - 30 * day;
+
+      // Build a 30-day signup histogram (oldest → newest).
+      const dayBuckets: { date: string; count: number }[] = [];
+      const bucketIndex = new Map<string, number>();
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(now - i * day);
+        const key = d.toISOString().slice(0, 10);
+        bucketIndex.set(key, dayBuckets.length);
+        dayBuckets.push({ date: key, count: 0 });
+      }
+      for (const p of profiles) {
+        const key = p.created_at.slice(0, 10);
+        const idx = bucketIndex.get(key);
+        if (idx !== undefined) dayBuckets[idx].count += 1;
+      }
+
+      const signupsLast7d = profiles.filter((p) => new Date(p.created_at).getTime() >= since7).length;
+      const signupsLast30d = profiles.filter((p) => new Date(p.created_at).getTime() >= since30).length;
+      const messagesLast7d = messages.filter((m) => new Date(m.created_at).getTime() >= since7).length;
+      const activeUserSet = new Set(
+        messages.filter((m) => new Date(m.created_at).getTime() >= since7).map((m) => m.user_id),
+      );
+
+      // Tx aggregates
+      const txByKind: Record<string, { count: number; valueUsd: number }> = {};
+      let totalVolumeUsd = 0;
+      for (const t of txs) {
+        const bucket = (txByKind[t.kind] ??= { count: 0, valueUsd: 0 });
+        bucket.count += 1;
+        bucket.valueUsd += t.value_usd ?? 0;
+        totalVolumeUsd += t.value_usd ?? 0;
+      }
+
+      // Onboarding breakdowns
+      const tally = (key: "experience" | "risk_tolerance") => {
+        const counts = new Map<string, number>();
+        for (const p of profiles) {
+          const v = p[key];
+          if (!v) continue;
+          counts.set(v, (counts.get(v) ?? 0) + 1);
+        }
+        return [...counts.entries()]
+          .map(([value, count]) => ({ value, count }))
+          .sort((a, b) => b.count - a.count);
+      };
+      const interestCounts = new Map<string, number>();
+      for (const p of profiles) {
+        for (const i of p.interests ?? []) {
+          interestCounts.set(i, (interestCounts.get(i) ?? 0) + 1);
+        }
+      }
+      const topInterests = [...interestCounts.entries()]
+        .map(([value, count]) => ({ value, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 8);
+
+      setStats({
+        totalUsers: profiles.length,
+        onboardedUsers: profiles.filter((p) => p.onboarding_completed).length,
+        signupsLast7d,
+        signupsLast30d,
+        signupsByDay: dayBuckets,
+        totalConversations: conversations.length,
+        totalMessages: messages.length,
+        messagesLast7d,
+        activeUsers7d: activeUserSet.size,
+        totalWalletLinks: wallets.length,
+        uniqueLinkedWallets: new Set(wallets.map((w) => w.wallet_address)).size,
+        totalTxs: txs.length,
+        txByKind,
+        totalVolumeUsd,
+        experienceBreakdown: tally("experience"),
+        riskBreakdown: tally("risk_tolerance"),
+        topInterests,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Unknown error";
+      toast({ title: "Failed to load stats", description: msg, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  if (loading || !stats) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  const onboardedPct = stats.totalUsers > 0
+    ? Math.round((stats.onboardedUsers / stats.totalUsers) * 100)
+    : 0;
+  const avgMessages = stats.totalUsers > 0
+    ? (stats.totalMessages / stats.totalUsers).toFixed(1)
+    : "0";
+
+  const expLabel = Object.fromEntries(EXPERIENCE_OPTIONS.map((o) => [o.value, o.label]));
+  const riskLabel = Object.fromEntries(RISK_OPTIONS.map((o) => [o.value, o.label]));
+  const interestLabel = Object.fromEntries(INTEREST_OPTIONS.map((o) => [o.value, o.label]));
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-medium text-muted-foreground">Overview</h2>
+        <Button variant="outline" size="sm" onClick={load}>
+          <RefreshCw className="mr-1 h-3.5 w-3.5" /> Refresh
+        </Button>
+      </div>
+
+      {/* Top-line numbers */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          icon={Users}
+          label="Total users"
+          value={stats.totalUsers.toLocaleString()}
+          hint={`+${stats.signupsLast7d} in last 7d`}
+        />
+        <StatCard
+          icon={UserCheck}
+          label="Onboarded"
+          value={`${stats.onboardedUsers.toLocaleString()}`}
+          hint={`${onboardedPct}% completion rate`}
+        />
+        <StatCard
+          icon={Wallet}
+          label="Linked wallets"
+          value={stats.uniqueLinkedWallets.toLocaleString()}
+          hint={`${stats.totalWalletLinks} total links`}
+        />
+        <StatCard
+          icon={TrendingUp}
+          label="Total volume"
+          value={formatUsd(stats.totalVolumeUsd) ?? "$0"}
+          hint={`${stats.totalTxs.toLocaleString()} transactions`}
+        />
+      </div>
+
+      {/* Engagement */}
+      <div>
+        <h3 className="mb-3 text-sm font-medium text-muted-foreground">Engagement</h3>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            icon={MessageSquare}
+            label="Conversations"
+            value={stats.totalConversations.toLocaleString()}
+          />
+          <StatCard
+            icon={MessageSquare}
+            label="Messages"
+            value={stats.totalMessages.toLocaleString()}
+            hint={`+${stats.messagesLast7d} in last 7d`}
+          />
+          <StatCard
+            icon={BarChart3}
+            label="Avg msgs / user"
+            value={avgMessages}
+          />
+          <StatCard
+            icon={Users}
+            label="Active users (7d)"
+            value={stats.activeUsers7d.toLocaleString()}
+            hint="Sent at least one message"
+          />
+        </div>
+      </div>
+
+      {/* Transaction kinds */}
+      <div>
+        <h3 className="mb-3 text-sm font-medium text-muted-foreground">Transactions by type</h3>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {(["swap", "transfer", "bridge"] as const).map((k) => {
+            const b = stats.txByKind[k] ?? { count: 0, valueUsd: 0 };
+            const Icon = k === "swap" ? ArrowLeftRight : k === "transfer" ? Send : ExternalLink;
+            return (
+              <Card key={k}>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground capitalize">
+                    <Icon className="h-3.5 w-3.5" />
+                    {k}s
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="text-2xl font-semibold tabular-nums">{b.count.toLocaleString()}</div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    {formatUsd(b.valueUsd) ?? "$0"} total
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+        {stats.totalTxs === 0 ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            No transactions logged yet — they'll appear here as users swap or transfer.
+          </p>
+        ) : null}
+      </div>
+
+      {/* Signups sparkline */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Signups · last 30 days</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <SignupsSparkline data={stats.signupsByDay} />
+          <div className="flex justify-between text-[10px] uppercase tracking-widest text-muted-foreground">
+            <span>{stats.signupsByDay[0]?.date}</span>
+            <span>Today</span>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Onboarding funnel */}
+      <div className="grid gap-3 lg:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Experience</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <BreakdownBar items={stats.experienceBreakdown} labelMap={expLabel} />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Risk tolerance</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <BreakdownBar items={stats.riskBreakdown} labelMap={riskLabel} />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Top interests</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <BreakdownBar items={stats.topInterests} labelMap={interestLabel} />
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };

@@ -295,6 +295,54 @@ export type Database = {
         }
         Relationships: []
       }
+      tx_events: {
+        Row: {
+          created_at: string
+          id: string
+          input_amount: number | null
+          input_mint: string | null
+          kind: Database["public"]["Enums"]["tx_event_kind"]
+          metadata: Json | null
+          output_amount: number | null
+          output_mint: string | null
+          recipient: string | null
+          signature: string
+          user_id: string
+          value_usd: number | null
+          wallet_address: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          input_amount?: number | null
+          input_mint?: string | null
+          kind: Database["public"]["Enums"]["tx_event_kind"]
+          metadata?: Json | null
+          output_amount?: number | null
+          output_mint?: string | null
+          recipient?: string | null
+          signature: string
+          user_id: string
+          value_usd?: number | null
+          wallet_address?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          input_amount?: number | null
+          input_mint?: string | null
+          kind?: Database["public"]["Enums"]["tx_event_kind"]
+          metadata?: Json | null
+          output_amount?: number | null
+          output_mint?: string | null
+          recipient?: string | null
+          signature?: string
+          user_id?: string
+          value_usd?: number | null
+          wallet_address?: string | null
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -361,6 +409,7 @@ export type Database = {
       app_role: "admin" | "user"
       crypto_experience: "new" | "intermediate" | "advanced"
       risk_tolerance: "cautious" | "balanced" | "aggressive"
+      tx_event_kind: "swap" | "transfer" | "bridge"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -491,6 +540,7 @@ export const Constants = {
       app_role: ["admin", "user"],
       crypto_experience: ["new", "intermediate", "advanced"],
       risk_tolerance: ["cautious", "balanced", "aggressive"],
+      tx_event_kind: ["swap", "transfer", "bridge"],
     },
   },
 } as const

@@ -245,10 +245,19 @@ export const TransferPreviewCard = ({ data: initial }: Props) => {
         return;
       }
 
-      // 3. Submit
+      // 3. Submit. Pass tx metadata so the server can record an entry in
+      // `tx_events` for the admin Stats panel.
       setPhase({ name: "submitting" });
       const signedB64 = btoa(String.fromCharCode(...signed.serialize()));
-      const submitted = await supaPost("tx-submit", { signedTransaction: signedB64 });
+      const submitted = await supaPost("tx-submit", {
+        signedTransaction: signedB64,
+        kind: "transfer",
+        valueUsd: data.valueUsd ?? null,
+        inputMint: data.token.isNative ? "So11111111111111111111111111111111111111112" : data.token.mint,
+        inputAmount: data.amountUi,
+        recipient: data.to.address,
+        walletAddress: publicKey.toBase58(),
+      });
       const signature = submitted.signature as string;
       if (!signature) throw new Error("No signature returned from submit");
 
