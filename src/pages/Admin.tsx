@@ -754,7 +754,7 @@ const TreasuryTab = () => {
               {filtered.length === 0 && !loading ? (
                 <TableRow>
                   <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
-                    No fees recorded yet. Press "Sync now" to backfill from sweeps and the ETH treasury.
+                    No fees recorded yet. Press "Refresh" to backfill from sweeps and the ETH treasury.
                   </TableCell>
                 </TableRow>
               ) : null}
