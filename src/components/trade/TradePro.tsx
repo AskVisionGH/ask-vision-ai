@@ -477,7 +477,7 @@ export const TradePro = ({ tab, onTabChange }: Props) => {
                 ))}
               </div>
               <p className="mt-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
-                Brackets auto-cancel after this period. Funds stay in your Jupiter vault until withdrawn.
+                Brackets auto-cancel after this period. Funds stay in your vault until withdrawn.
               </p>
             </PopoverContent>
           </Popover>
