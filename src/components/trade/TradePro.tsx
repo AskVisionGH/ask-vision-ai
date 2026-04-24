@@ -483,19 +483,6 @@ export const TradePro = ({ tab, onTabChange }: Props) => {
           </Popover>
         </div>
 
-        {/* Mode switcher: TP/SL preset vs Advanced OCO */}
-        <div className="flex items-center gap-1 rounded-full border border-border/60 bg-secondary/30 p-1">
-          <ModeChip
-            active={advancedMode === "tpsl"}
-            onClick={() => setAdvancedMode("tpsl")}
-            label="TP / SL"
-          />
-          <ModeChip
-            active={advancedMode === "oco"}
-            onClick={() => setAdvancedMode("oco")}
-            label="Advanced OCO"
-          />
-        </div>
 
         {/* Card */}
         <div className="overflow-hidden rounded-2xl border border-border bg-card/60 backdrop-blur-sm shadow-soft">
