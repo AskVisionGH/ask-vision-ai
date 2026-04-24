@@ -1,10 +1,13 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Trash2, UserRound, Wallet } from "lucide-react";
+import { ArrowLeft, Menu, Plus, Trash2, UserRound, Wallet } from "lucide-react";
+import { AppSidebar } from "@/components/AppSidebar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { VisionLogo } from "@/components/VisionLogo";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +25,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useAuth } from "@/hooks/useAuth";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
+import { useProfile } from "@/hooks/useProfile";
 import { ContactRow, useContacts } from "@/hooks/useContacts";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +35,19 @@ const truncate = (a: string) => (a.length > 12 ? `${a.slice(0, 6)}…${a.slice(-
 
 const Contacts = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { user, signOut } = useAuth();
+  const { profile } = useProfile();
+  const { isAdmin } = useIsAdmin();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("vision:sidebar-collapsed") === "1";
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("vision:sidebar-collapsed", sidebarCollapsed ? "1" : "0");
+  }, [sidebarCollapsed]);
   const { contacts, loading, addContact, updateContact, deleteContact } = useContacts();
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -88,17 +107,72 @@ const Contacts = () => {
   };
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-background px-4 py-8 text-foreground sm:px-6">
+    <div className="relative flex h-screen bg-background text-foreground">
       <div className="pointer-events-none absolute inset-0 bg-aurora" aria-hidden />
 
-      <div className="relative z-10 mx-auto max-w-2xl">
-        <button
-          onClick={() => navigate("/chat")}
-          className="mb-6 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground ease-vision"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Back to chat
-        </button>
+      {/* Desktop sidebar */}
+      <div
+        className={cn(
+          "relative z-10 hidden h-full shrink-0 transition-[width] duration-200 ease-vision md:flex",
+          sidebarCollapsed ? "w-14" : "w-64",
+        )}
+      >
+        <AppSidebar
+          collapsed={sidebarCollapsed}
+          onToggleCollapsed={() => setSidebarCollapsed((v) => !v)}
+          activePath={location.pathname}
+          isAdmin={isAdmin}
+          user={user}
+          profile={profile}
+          onSignOut={signOut}
+        />
+      </div>
+
+      {/* Main column */}
+      <div className="relative z-10 flex h-full min-w-0 flex-1 flex-col overflow-hidden">
+        {/* Mobile header */}
+        <header className="flex shrink-0 items-center justify-between border-b border-border/60 bg-background/60 px-4 py-3 backdrop-blur-md md:hidden">
+          <div className="flex items-center gap-2">
+            <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+              <SheetTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground"
+                  aria-label="Open menu"
+                >
+                  <Menu className="h-4 w-4" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-72 p-0 [&>button.absolute]:hidden">
+                <AppSidebar
+                  collapsed={false}
+                  activePath={location.pathname}
+                  isAdmin={isAdmin}
+                  user={user}
+                  profile={profile}
+                  onSignOut={signOut}
+                />
+              </SheetContent>
+            </Sheet>
+            <div className="flex items-center gap-2">
+              <VisionLogo size={20} />
+              <span className="font-mono text-xs tracking-widest uppercase text-muted-foreground">
+                Vision
+              </span>
+            </div>
+          </div>
+        </header>
+
+        <main className="flex-1 overflow-y-auto px-4 py-8 sm:px-6">
+          <div className="mx-auto max-w-2xl">
+            <button
+              onClick={() => navigate("/chat")}
+              className="mb-6 hidden md:flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground ease-vision"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Back to chat
+            </button>
 
         <div className="mb-8 flex items-end justify-between gap-4">
           <div>
@@ -180,6 +254,8 @@ const Contacts = () => {
             ))}
           </ul>
         )}
+          </div>
+        </main>
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -250,7 +326,7 @@ const Contacts = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </main>
+    </div>
   );
 };
 
