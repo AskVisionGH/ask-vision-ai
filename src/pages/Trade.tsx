@@ -340,15 +340,15 @@ const TradeSidebar = ({
         </button>
         <button
           type="button"
-          disabled
-          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-muted-foreground/50 ease-vision cursor-not-allowed"
-          aria-label="Bridge (coming soon)"
+          onClick={() => {
+            // Navigate to /trade?tab=bridge — Trade page reads ?tab and updates state.
+            window.location.assign("/trade?tab=bridge");
+          }}
+          className="ease-vision flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+          aria-label="Bridge"
         >
           <ArrowLeftRight className="h-3.5 w-3.5" />
           <span>Bridge</span>
-          <span className="ml-auto rounded-full border border-border/60 bg-secondary/40 px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
-            Soon
-          </span>
         </button>
         {isAdmin && <NavRow to="/admin" icon={<Shield className="h-3.5 w-3.5" />} label="Admin" />}
       </div>
