@@ -21,6 +21,7 @@ export interface Profile {
   experience: CryptoExperience | null;
   interests: string[];
   risk_tolerance: RiskTolerance | null;
+  language: string;
   onboarding_completed: boolean;
   created_at: string;
   updated_at: string;
@@ -34,6 +35,7 @@ export type ProfileUpdate = Partial<
     | "experience"
     | "interests"
     | "risk_tolerance"
+    | "language"
     | "onboarding_completed"
   >
 >;
