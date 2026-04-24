@@ -141,6 +141,17 @@ async function buildFreeSentiment(resolved: ResolvedToken): Promise<SocialSentim
       }),
   );
 
+  // Hacker News via Algolia search — fully open, no auth, no UA gating.
+  // Great signal for major coins (BTC/ETH/SOL) which Reddit + Pump.fun miss.
+  tasks.push(
+    fetchHackerNewsPosts(resolved)
+      .then((posts) => (posts.length ? { source: "Hacker News", posts } : null))
+      .catch((e) => {
+        console.warn("hn fetch failed:", e);
+        return null;
+      }),
+  );
+
   const neynarKey = Deno.env.get("NEYNAR_API_KEY");
   if (neynarKey) {
     tasks.push(
