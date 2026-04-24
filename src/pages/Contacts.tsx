@@ -1,10 +1,13 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Trash2, UserRound, Wallet } from "lucide-react";
+import { ArrowLeft, Menu, Plus, Trash2, UserRound, Wallet } from "lucide-react";
+import { AppSidebar } from "@/components/AppSidebar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { VisionLogo } from "@/components/VisionLogo";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +25,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useAuth } from "@/hooks/useAuth";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
+import { useProfile } from "@/hooks/useProfile";
 import { ContactRow, useContacts } from "@/hooks/useContacts";
 import { cn } from "@/lib/utils";
 
