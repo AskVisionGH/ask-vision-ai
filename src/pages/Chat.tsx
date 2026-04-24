@@ -228,6 +228,7 @@ const Chat = () => {
             experience: profile.experience,
             interests: profile.interests,
             riskTolerance: profile.risk_tolerance,
+            language: profile.language,
           }
         : undefined,
       contacts: contacts.map((c) => ({
