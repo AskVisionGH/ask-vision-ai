@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
-import { ArrowLeft, Check, Copy, ExternalLink, Loader2, Mail, RefreshCw, Shield, ShieldOff, Wallet } from "lucide-react";
+import { ArrowLeft, ArrowLeftRight, BarChart3, Check, Copy, ExternalLink, Loader2, Mail, MessageSquare, RefreshCw, Send, Shield, ShieldOff, TrendingUp, UserCheck, Users, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
@@ -141,13 +141,17 @@ const Admin = () => {
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-6">
-        <Tabs defaultValue="sweeps" className="space-y-4">
+        <Tabs defaultValue="stats" className="space-y-4">
           <TabsList>
+            <TabsTrigger value="stats">Stats</TabsTrigger>
             <TabsTrigger value="sweeps">Fee sweeps</TabsTrigger>
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="roles">Roles</TabsTrigger>
           </TabsList>
 
+          <TabsContent value="stats">
+            <StatsTab />
+          </TabsContent>
           <TabsContent value="sweeps">
             <SweepsTab />
           </TabsContent>
