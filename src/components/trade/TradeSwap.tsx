@@ -260,11 +260,15 @@ export const TradeSwap = () => {
   };
 
   const handleMax = () => {
-    if (inputToken.address === SOL_TOKEN.address && solBalance != null) {
-      // Reserve a bit for rent + fees
+    if (inputBalance == null) return;
+    if (inputToken.address === SOL_TOKEN.address) {
+      // Reserve a bit for rent + fees on native SOL
       const reserve = 0.01;
-      const max = Math.max(0, solBalance - reserve);
+      const max = Math.max(0, inputBalance - reserve);
       setAmount(max > 0 ? max.toFixed(6) : "");
+    } else {
+      // SPL tokens — full balance is spendable
+      setAmount(inputBalance > 0 ? String(inputBalance) : "");
     }
   };
 
@@ -284,10 +288,13 @@ export const TradeSwap = () => {
   };
 
   const insufficient =
-    inputToken.address === SOL_TOKEN.address &&
-    solBalance != null &&
+    inputBalance != null &&
     numericAmount > 0 &&
-    numericAmount > Math.max(0, solBalance - 0.005);
+    numericAmount >
+      (inputToken.address === SOL_TOKEN.address
+        ? Math.max(0, inputBalance - 0.005)
+        : inputBalance);
+
 
   const handleSwap = useCallback(async () => {
     if (!connected || !publicKey || !signTransaction || !quote || !outputToken) return;
