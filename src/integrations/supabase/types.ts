@@ -144,6 +144,7 @@ export type Database = {
           experience: Database["public"]["Enums"]["crypto_experience"] | null
           id: string
           interests: string[]
+          language: string
           onboarding_completed: boolean
           risk_tolerance: Database["public"]["Enums"]["risk_tolerance"] | null
           updated_at: string
@@ -156,6 +157,7 @@ export type Database = {
           experience?: Database["public"]["Enums"]["crypto_experience"] | null
           id?: string
           interests?: string[]
+          language?: string
           onboarding_completed?: boolean
           risk_tolerance?: Database["public"]["Enums"]["risk_tolerance"] | null
           updated_at?: string
@@ -168,6 +170,7 @@ export type Database = {
           experience?: Database["public"]["Enums"]["crypto_experience"] | null
           id?: string
           interests?: string[]
+          language?: string
           onboarding_completed?: boolean
           risk_tolerance?: Database["public"]["Enums"]["risk_tolerance"] | null
           updated_at?: string
