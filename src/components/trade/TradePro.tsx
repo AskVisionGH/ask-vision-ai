@@ -1,7 +1,13 @@
 import { useState } from "react";
+import { Settings as SettingsIcon } from "lucide-react";
 import { TradeTabs, type TradeTab } from "@/components/trade/TradeTabs";
 import { TradeProBracket } from "@/components/trade/TradeProBracket";
 import { TradeDca } from "@/components/trade/TradeDca";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
 // Pro is a container that hosts two flows:
@@ -15,6 +21,12 @@ const SUB_TABS: { id: ProMode; label: string }[] = [
   { id: "dca", label: "DCA" },
 ];
 
+const EXPIRY_PRESETS = [
+  { label: "1d", ms: 86_400_000 },
+  { label: "7d", ms: 7 * 86_400_000 },
+  { label: "30d", ms: 30 * 86_400_000 },
+] as const;
+
 interface Props {
   tab: TradeTab;
   onTabChange: (t: TradeTab) => void;
@@ -22,6 +34,7 @@ interface Props {
 
 export const TradePro = ({ tab, onTabChange }: Props) => {
   const [mode, setMode] = useState<ProMode>("tpsl");
+  const [expiryMs, setExpiryMs] = useState<number>(7 * 86_400_000);
 
   return (
     <div className="w-full max-w-[440px] space-y-4">
@@ -30,8 +43,8 @@ export const TradePro = ({ tab, onTabChange }: Props) => {
         <TradeTabs active={tab} onChange={onTabChange} />
       </div>
 
-      {/* Pro sub-tabs */}
-      <div className="flex items-center justify-center">
+      {/* Pro sub-tabs + settings cog on a single aligned row */}
+      <div className="relative flex items-center justify-center">
         <div className="flex items-center gap-0.5 rounded-full border border-border/60 bg-secondary/30 p-0.5">
           {SUB_TABS.map((t) => {
             const active = mode === t.id;
@@ -53,9 +66,54 @@ export const TradePro = ({ tab, onTabChange }: Props) => {
             );
           })}
         </div>
+
+        {mode === "tpsl" && (
+          <div className="absolute right-0 top-1/2 -translate-y-1/2">
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className="ease-vision flex h-9 w-9 items-center justify-center rounded-full border border-border/60 bg-secondary/40 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  aria-label="Order settings"
+                >
+                  <SettingsIcon className="h-4 w-4" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-72">
+                <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                  Order expiry
+                </p>
+                <div className="mt-3 grid grid-cols-3 gap-1.5">
+                  {EXPIRY_PRESETS.map((p) => (
+                    <button
+                      key={p.label}
+                      type="button"
+                      onClick={() => setExpiryMs(p.ms)}
+                      className={cn(
+                        "ease-vision rounded-md border px-2 py-1.5 font-mono text-[11px]",
+                        expiryMs === p.ms
+                          ? "border-primary/60 bg-primary/10 text-foreground"
+                          : "border-border/60 bg-secondary/40 text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
+                  Brackets auto-cancel after this period. Funds stay in your vault until withdrawn.
+                </p>
+              </PopoverContent>
+            </Popover>
+          </div>
+        )}
       </div>
 
-      {mode === "tpsl" ? <TradeProBracket /> : <TradeDca />}
+      {mode === "tpsl" ? (
+        <TradeProBracket expiryMs={expiryMs} />
+      ) : (
+        <TradeDca />
+      )}
     </div>
   );
 };
