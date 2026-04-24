@@ -686,7 +686,7 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
           </Button>
 
           <p className="text-center font-mono text-[9px] uppercase tracking-wider text-muted-foreground/60">
-            Powered by LI.FI · {chains.length} chains supported
+            Vision routing · {chains.length} chains supported
           </p>
         </div>
       </div>
