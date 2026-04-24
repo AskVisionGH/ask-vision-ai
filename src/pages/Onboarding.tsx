@@ -272,7 +272,7 @@ const Onboarding = () => {
                       htmlFor="display-name"
                       className="text-xs uppercase tracking-wider text-muted-foreground"
                     >
-                      What should I call you?
+                      What should I call you? <span className="text-primary">*</span>
                     </Label>
                     <Input
                       id="display-name"
@@ -280,7 +280,12 @@ const Onboarding = () => {
                       onChange={(e) => setName(e.target.value)}
                       placeholder="Your name"
                       maxLength={60}
+                      required
+                      aria-required="true"
                     />
+                    <p className="text-[11px] text-muted-foreground/70">
+                      Required — at least 2 characters.
+                    </p>
                   </div>
                 </div>
                 {savingAvatar && (
