@@ -281,6 +281,7 @@ const StatsTab = () => {
         messagesRes,
         walletsRes,
         txRes,
+        countersRes,
       ] = await Promise.all([
         supabase
           .from("profiles")
@@ -290,6 +291,8 @@ const StatsTab = () => {
         supabase.from("messages").select("id, user_id, created_at").limit(50000),
         supabase.from("wallet_links").select("user_id, wallet_address").limit(10000),
         supabase.from("tx_events").select("kind, value_usd, created_at").limit(50000),
+        // Lifetime counters survive deletes (DB triggers increment on insert).
+        supabase.from("app_counters").select("key, value"),
       ]);
 
       const profiles = (profilesRes.data ?? []) as Array<{
@@ -304,6 +307,18 @@ const StatsTab = () => {
       const messages = (messagesRes.data ?? []) as Array<{ user_id: string; created_at: string }>;
       const wallets = (walletsRes.data ?? []) as Array<{ user_id: string; wallet_address: string }>;
       const txs = (txRes.data ?? []) as Array<{ kind: string; value_usd: number | null; created_at: string }>;
+      const counters = Object.fromEntries(
+        ((countersRes.data ?? []) as Array<{ key: string; value: number }>).map((c) => [c.key, Number(c.value)]),
+      );
+      // Fall back to live counts if a counter is missing (e.g. backfill skipped).
+      const totalConversationsEver = Math.max(
+        counters.conversations_created_total ?? 0,
+        conversations.length,
+      );
+      const totalMessagesEver = Math.max(
+        counters.messages_created_total ?? 0,
+        messages.length,
+      );
 
       const now = Date.now();
       const day = 24 * 60 * 60 * 1000;
@@ -371,8 +386,10 @@ const StatsTab = () => {
         signupsLast7d,
         signupsLast30d,
         signupsByDay: dayBuckets,
-        totalConversations: conversations.length,
-        totalMessages: messages.length,
+        activeConversations: conversations.length,
+        totalConversationsEver,
+        activeMessages: messages.length,
+        totalMessagesEver,
         messagesLast7d,
         activeUsers7d: activeUserSet.size,
         totalWalletLinks: wallets.length,
