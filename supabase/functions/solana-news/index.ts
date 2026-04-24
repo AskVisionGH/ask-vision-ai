@@ -36,6 +36,7 @@ serve(async (req) => {
       fetchDecrypt(),
       fetchReddit(),
       fetchCoinGecko(),
+      fetchNitterSolana(),
     ]);
 
     const all: NewsItem[] = [];
