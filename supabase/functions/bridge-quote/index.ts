@@ -55,19 +55,32 @@ serve(async (req) => {
     const headers: Record<string, string> = { "Accept": "application/json" };
     if (apiKey) headers["x-lifi-api-key"] = apiKey;
 
-    const url = new URL("https://li.quest/v1/quote");
-    url.searchParams.set("fromChain", fromChain);
-    url.searchParams.set("toChain", toChain);
-    url.searchParams.set("fromToken", fromToken);
-    url.searchParams.set("toToken", toToken);
-    url.searchParams.set("fromAmount", fromAmount);
-    url.searchParams.set("fromAddress", fromAddress);
-    url.searchParams.set("toAddress", toAddress);
-    url.searchParams.set("slippage", String(slippageBps / 10_000));
-    url.searchParams.set("integrator", INTEGRATOR);
-    url.searchParams.set("fee", String(FEE_RATIO));
+    const buildUrl = (withFee: boolean) => {
+      const url = new URL("https://li.quest/v1/quote");
+      url.searchParams.set("fromChain", fromChain);
+      url.searchParams.set("toChain", toChain);
+      url.searchParams.set("fromToken", fromToken);
+      url.searchParams.set("toToken", toToken);
+      url.searchParams.set("fromAmount", fromAmount);
+      url.searchParams.set("fromAddress", fromAddress);
+      url.searchParams.set("toAddress", toAddress);
+      url.searchParams.set("slippage", String(slippageBps / 10_000));
+      url.searchParams.set("integrator", INTEGRATOR);
+      if (withFee) url.searchParams.set("fee", String(FEE_RATIO));
+      return url;
+    };
 
-    const resp = await fetch(url.toString(), { headers });
+    let resp = await fetch(buildUrl(FEES_ENABLED).toString(), { headers });
+    // If fees are enabled but the integrator isn't fully configured on the
+    // LI.FI portal yet, fall back to a fee-less quote so users can still
+    // bridge instead of seeing a blank screen.
+    if (!resp.ok && FEES_ENABLED) {
+      const peek = await resp.clone().text();
+      if (peek.toLowerCase().includes("not configured for collecting fees")) {
+        console.warn("LI.FI integrator fee not configured — retrying without fee");
+        resp = await fetch(buildUrl(false).toString(), { headers });
+      }
+    }
     if (!resp.ok) {
       const t = await resp.text();
       console.error("LI.FI quote error:", resp.status, t);
