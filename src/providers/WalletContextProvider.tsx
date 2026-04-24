@@ -6,9 +6,15 @@ import { SolflareWalletAdapter } from "@solana/wallet-adapter-solflare";
 import { BackpackWalletAdapter } from "@solana/wallet-adapter-backpack";
 import { CoinbaseWalletAdapter } from "@solana/wallet-adapter-coinbase";
 import { TrustWalletAdapter } from "@solana/wallet-adapter-trust";
+import {
+  SolanaMobileWalletAdapter,
+  createDefaultAuthorizationResultCache,
+  createDefaultWalletNotFoundHandler,
+} from "@solana-mobile/wallet-adapter-mobile";
 
 // Modal styles must be imported once at the app root.
 import "@solana/wallet-adapter-react-ui/styles.css";
+
 
 interface Props {
   children: ReactNode;
