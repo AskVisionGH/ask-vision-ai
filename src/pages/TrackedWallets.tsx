@@ -3,13 +3,11 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
   ArrowLeft,
-  ExternalLink,
   Menu,
   Plus,
   Search,
   Star,
   Trash2,
-  Twitter,
   Wallet,
   X,
 } from "lucide-react";
@@ -41,6 +39,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { useProfile } from "@/hooks/useProfile";
 import { useSmartWallets, type SmartWalletRow } from "@/hooks/useSmartWallets";
+import { WalletSocialLinks } from "@/components/WalletSocialLinks";
 import { cn } from "@/lib/utils";
 
 const truncate = (a: string) =>
@@ -261,26 +260,19 @@ const TrackedWallets = () => {
                           <span className="truncate text-sm font-medium text-foreground">
                             {w.label}
                           </span>
-                          {w.twitter_handle && (
-                            <a
-                              href={`https://x.com/${w.twitter_handle}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-muted-foreground hover:text-primary"
-                              aria-label={`@${w.twitter_handle} on X`}
-                            >
-                              <Twitter className="h-3 w-3" />
-                            </a>
-                          )}
+                          <WalletSocialLinks
+                            address={w.address}
+                            twitterHandle={w.twitter_handle}
+                            hideSolscan
+                          />
                         </div>
                         <a
                           href={`https://solscan.io/account/${w.address}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center gap-1 font-mono text-[10px] text-muted-foreground hover:text-primary"
+                          className="font-mono text-[10px] text-muted-foreground hover:text-primary"
                         >
                           {truncate(w.address)}
-                          <ExternalLink className="h-2.5 w-2.5 opacity-60" />
                         </a>
                         {w.notes && (
                           <p className="mt-0.5 truncate text-[11px] text-muted-foreground/80">
@@ -352,7 +344,7 @@ const TrackedWallets = () => {
                           {c.label.slice(0, 2).toUpperCase()}
                         </span>
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <span className="truncate text-sm font-medium text-foreground">
                               {c.label}
                             </span>
@@ -361,17 +353,19 @@ const TrackedWallets = () => {
                                 {c.category}
                               </span>
                             )}
-                            {c.twitter_handle && (
-                              <a
-                                href={`https://x.com/${c.twitter_handle}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-muted-foreground hover:text-primary"
-                                aria-label={`@${c.twitter_handle} on X`}
+                            {c.notes === "community" && (
+                              <span
+                                className="rounded-full border border-border/60 bg-secondary/40 px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-muted-foreground/80"
+                                title="Address widely circulated in the trading community but not personally confirmed by the wallet owner"
                               >
-                                <Twitter className="h-3 w-3" />
-                              </a>
+                                community
+                              </span>
                             )}
+                            <WalletSocialLinks
+                              address={c.address}
+                              twitterHandle={c.twitter_handle}
+                              hideSolscan
+                            />
                           </div>
                           <a
                             href={`https://solscan.io/account/${c.address}`}
