@@ -224,6 +224,36 @@ export type Database = {
         }
         Relationships: []
       }
+      helius_webhooks: {
+        Row: {
+          address_count: number
+          auth_header: string
+          created_at: string
+          id: string
+          last_synced_at: string
+          updated_at: string
+          webhook_id: string
+        }
+        Insert: {
+          address_count?: number
+          auth_header: string
+          created_at?: string
+          id?: string
+          last_synced_at?: string
+          updated_at?: string
+          webhook_id: string
+        }
+        Update: {
+          address_count?: number
+          auth_header?: string
+          created_at?: string
+          id?: string
+          last_synced_at?: string
+          updated_at?: string
+          webhook_id?: string
+        }
+        Relationships: []
+      }
       messages: {
         Row: {
           content: string
