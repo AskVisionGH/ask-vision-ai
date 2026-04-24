@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import {
+  createContext,
+  ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -30,15 +38,18 @@ export type ProfileUpdate = Partial<
   >
 >;
 
-/** Loads the current user's profile and exposes update + avatar-upload helpers. */
-export const useProfile = () => {
+interface ProfileContextValue {
+  profile: Profile | null;
+  loading: boolean;
+  refresh: () => Promise<void>;
+  updateProfile: (patch: ProfileUpdate) => Promise<boolean>;
+  uploadAvatar: (file: File) => Promise<string | null>;
+}
+
+const ProfileContext = createContext<ProfileContextValue | undefined>(undefined);
+
+const useProvideProfile = (): ProfileContextValue => {
   const { user } = useAuth();
-  // Depend on the stable user id, not the user object reference. Supabase fires
-  // TOKEN_REFRESHED periodically, which produces a new session/user *object*
-  // even though the underlying user is unchanged. Keying on `user.id` keeps
-  // `refresh` stable across those refreshes — otherwise every refresh would
-  // flip `loading` back to true, flashing FullScreenLoader and making the
-  // app feel like it's constantly reloading.
   const userId = user?.id ?? null;
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -49,29 +60,38 @@ export const useProfile = () => {
       setLoading(false);
       return;
     }
+
     const { data, error } = await supabase
       .from("profiles")
       .select("*")
       .eq("user_id", userId)
       .maybeSingle();
-    if (!error && data) setProfile(data as Profile);
+
+    if (error) {
+      setLoading(false);
+      return;
+    }
+
+    setProfile((data as Profile | null) ?? null);
     setLoading(false);
   }, [userId]);
 
   useEffect(() => {
     setLoading(true);
-    refresh();
+    void refresh();
   }, [refresh]);
 
   const updateProfile = useCallback(
     async (patch: ProfileUpdate): Promise<boolean> => {
       if (!userId) return false;
+
       const { data, error } = await supabase
         .from("profiles")
         .update(patch)
         .eq("user_id", userId)
         .select("*")
         .single();
+
       if (error || !data) return false;
       setProfile(data as Profile);
       return true;
@@ -79,7 +99,6 @@ export const useProfile = () => {
     [userId],
   );
 
-  /** Uploads to the `avatars` bucket under `{user_id}/avatar-{ts}.{ext}` and saves the public URL. */
   const uploadAvatar = useCallback(
     async (file: File): Promise<string | null> => {
       if (!userId) return null;
@@ -97,7 +116,22 @@ export const useProfile = () => {
     [userId, updateProfile],
   );
 
-  return { profile, loading, refresh, updateProfile, uploadAvatar };
+  return useMemo(
+    () => ({ profile, loading, refresh, updateProfile, uploadAvatar }),
+    [profile, loading, refresh, updateProfile, uploadAvatar],
+  );
+};
+
+export const ProfileProvider = ({ children }: { children: ReactNode }) => {
+  const value = useProvideProfile();
+  return <ProfileContext.Provider value={value}>{children}</ProfileContext.Provider>;
+};
+
+/** Loads the current user's profile and exposes update + avatar-upload helpers. */
+export const useProfile = () => {
+  const ctx = useContext(ProfileContext);
+  if (!ctx) throw new Error("useProfile must be used inside <ProfileProvider>");
+  return ctx;
 };
 
 /** Returns 1-2 letter initials from a name or email for the fallback avatar. */
