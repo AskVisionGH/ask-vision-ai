@@ -46,13 +46,20 @@ Deno.serve(async (req) => {
       auth: { persistSession: false },
     });
 
-    const { error } = await admin.from("siws_nonces").insert({
-      wallet_address: wallet,
-      nonce,
-      expires_at: expiresAt,
-    });
+    // Insert and read back the row so we can derive `Issued At` from the
+    // database-assigned `created_at`. The verify function reconstructs the
+    // signed message from the same `created_at`, so they must match exactly.
+    const { data: inserted, error } = await admin
+      .from("siws_nonces")
+      .insert({
+        wallet_address: wallet,
+        nonce,
+        expires_at: expiresAt,
+      })
+      .select("created_at")
+      .single();
 
-    if (error) {
+    if (error || !inserted) {
       console.error("[siws-issue-nonce] insert error", error);
       return new Response(JSON.stringify({ error: "Could not issue nonce" }), {
         status: 500,
@@ -61,8 +68,8 @@ Deno.serve(async (req) => {
     }
 
     // The exact message the wallet must sign. Keep this stable — verify uses
-    // the identical format.
-    const issuedAt = new Date().toISOString();
+    // the identical format and derives `issuedAt` from the same DB column.
+    const issuedAt = new Date(inserted.created_at).toISOString();
     const message =
       `Vision wants you to sign in with your Solana account:\n${wallet}\n\n` +
       `Sign in to Vision. This request will not trigger a blockchain ` +
