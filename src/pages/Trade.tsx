@@ -111,7 +111,10 @@ const Trade = () => {
               Back to chat
             </Link>
           </div>
-          <ConnectWalletButton size="default" />
+          <div className="flex items-center gap-1.5">
+            <NotificationBell />
+            <ConnectWalletButton size="default" />
+          </div>
         </header>
 
         {/* Body */}
