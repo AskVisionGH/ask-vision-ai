@@ -10,7 +10,6 @@ import {
   Repeat,
   Settings as SettingsIcon,
   Shield,
-  Sparkles,
   Users,
 } from "lucide-react";
 import { useEffect, useState } from "react";
