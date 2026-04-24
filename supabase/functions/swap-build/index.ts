@@ -1,4 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+// Hoisted to module scope so the (heavy) web3.js bundle loads once at cold
+// boot instead of inside the request handler. Loading it per-request was
+// tripping the edge function's CPU budget and killing the worker with
+// WORKER_RESOURCE_LIMIT before a response could be returned.
+import { PublicKey } from "https://esm.sh/@solana/web3.js@1.95.3";
+
+const REFERRAL_PROGRAM = new PublicKey("REFER4ZgmyYx9c6He5XfaTMiGfdLwRnkV4RPp9t9iF3");
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
