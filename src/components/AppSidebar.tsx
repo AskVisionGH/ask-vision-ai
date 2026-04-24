@@ -97,6 +97,12 @@ export const AppSidebar = ({
             active={activePath === "/tracked-wallets"}
           />
           <IconLink
+            to="/alerts"
+            icon={<Bell className="h-4 w-4" />}
+            label="Alerts"
+            active={activePath === "/alerts"}
+          />
+          <IconLink
             to="/contacts"
             icon={<Users className="h-4 w-4" />}
             label="Contacts"
@@ -210,23 +216,17 @@ export const AppSidebar = ({
           active={activePath === "/tracked-wallets"}
         />
         <NavRow
+          to="/alerts"
+          icon={<Bell className="h-3.5 w-3.5" />}
+          label="Alerts"
+          active={activePath === "/alerts"}
+        />
+        <NavRow
           to="/contacts"
           icon={<Users className="h-3.5 w-3.5" />}
           label="Contacts"
           active={activePath === "/contacts"}
         />
-        <button
-          type="button"
-          disabled
-          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-muted-foreground/50 ease-vision cursor-not-allowed"
-          aria-label="Alerts (coming soon)"
-        >
-          <Bell className="h-3.5 w-3.5" />
-          <span>Alerts</span>
-          <span className="ml-auto rounded-full border border-border/60 bg-secondary/40 px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
-            Soon
-          </span>
-        </button>
         {isAdmin && (
           <NavRow
             to="/admin"
