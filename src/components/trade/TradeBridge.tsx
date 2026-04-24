@@ -656,7 +656,7 @@ const PanelRow = ({
       >
         {token ? (
           <>
-            <TokenLogo symbol={token.symbol} src={token.logo} size={20} />
+            <TokenLogo symbol={token.symbol} logo={token.logo} size={20} />
             <span className="font-mono text-xs font-semibold text-foreground">{token.symbol}</span>
           </>
         ) : (
@@ -842,7 +842,7 @@ const BridgeTokenPickerDialog = ({
                 onClick={() => onPick(t)}
                 className="ease-vision flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left hover:bg-secondary"
               >
-                <TokenLogo symbol={t.symbol} src={t.logo} size={28} />
+                <TokenLogo symbol={t.symbol} logo={t.logo} size={28} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm font-medium text-foreground">{t.symbol}</span>
