@@ -79,7 +79,7 @@ export const AlertBell = () => {
             <br />
             Enable alerts in{" "}
             <Link
-              to="/settings#notifications"
+              to="/alerts"
               className="text-primary hover:underline"
             >
               settings
