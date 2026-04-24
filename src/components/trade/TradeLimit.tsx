@@ -86,16 +86,32 @@ const fmtAmount = (n: number) => {
 };
 const truncSig = (s: string) => `${s.slice(0, 4)}…${s.slice(-4)}`;
 
-const supaPost = async (fn: string, body: unknown) => {
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+const supaPost = async (fn: string, body: unknown, attempt = 0): Promise<any> => {
   const { data, error } = await supabase.functions.invoke(fn, { body });
   if (error) {
     const ctx = (error as any).context;
     let serverMsg: string | null = null;
-    if (ctx && typeof ctx.json === "function") {
-      try {
-        const parsed = await ctx.json();
-        if (parsed?.error) serverMsg = String(parsed.error);
-      } catch { /* ignore */ }
+    let status: number | undefined;
+    if (ctx) {
+      status = ctx.status;
+      if (typeof ctx.json === "function") {
+        try {
+          const parsed = await ctx.json();
+          if (parsed?.error) serverMsg = String(parsed.error);
+        } catch { /* ignore */ }
+      }
+    }
+    // Transparently retry transient cold-start / runtime failures
+    const transient =
+      status === 503 ||
+      status === 504 ||
+      (serverMsg ?? error.message ?? "").toLowerCase().includes("temporarily unavailable") ||
+      (serverMsg ?? error.message ?? "").toLowerCase().includes("runtime_error");
+    if (transient && attempt < 2) {
+      await sleep(400 * (attempt + 1));
+      return supaPost(fn, body, attempt + 1);
     }
     throw new Error(serverMsg ?? error.message ?? `${fn} failed`);
   }
