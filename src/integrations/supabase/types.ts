@@ -430,6 +430,60 @@ export type Database = {
         }
         Relationships: []
       }
+      treasury_fees: {
+        Row: {
+          amount: number
+          amount_usd: number | null
+          asset_address: string | null
+          asset_symbol: string | null
+          block_time: string
+          chain: string
+          created_at: string
+          from_address: string | null
+          id: string
+          metadata: Json | null
+          related_tx_event_id: string | null
+          related_user_id: string | null
+          signature: string
+          source_kind: string
+          treasury_address: string
+        }
+        Insert: {
+          amount?: number
+          amount_usd?: number | null
+          asset_address?: string | null
+          asset_symbol?: string | null
+          block_time: string
+          chain: string
+          created_at?: string
+          from_address?: string | null
+          id?: string
+          metadata?: Json | null
+          related_tx_event_id?: string | null
+          related_user_id?: string | null
+          signature: string
+          source_kind: string
+          treasury_address: string
+        }
+        Update: {
+          amount?: number
+          amount_usd?: number | null
+          asset_address?: string | null
+          asset_symbol?: string | null
+          block_time?: string
+          chain?: string
+          created_at?: string
+          from_address?: string | null
+          id?: string
+          metadata?: Json | null
+          related_tx_event_id?: string | null
+          related_user_id?: string | null
+          signature?: string
+          source_kind?: string
+          treasury_address?: string
+        }
+        Relationships: []
+      }
       tx_events: {
         Row: {
           created_at: string

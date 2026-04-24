@@ -41,6 +41,21 @@ type SweepRun = {
   error_message: string | null;
 };
 
+type TreasuryFee = {
+  id: string;
+  chain: "solana" | "ethereum";
+  treasury_address: string;
+  source_kind: "swap_fee" | "dca_fee" | "bridge_fee" | "sweep" | "limit_fee" | "transfer_fee" | "other";
+  asset_symbol: string | null;
+  asset_address: string | null;
+  amount: number;
+  amount_usd: number | null;
+  signature: string;
+  from_address: string | null;
+  block_time: string;
+  metadata: Record<string, unknown> | null;
+};
+
 // Full profile so the onboarding-answers dialog has everything it needs.
 type ProfileRow = {
   user_id: string;
@@ -144,7 +159,7 @@ const Admin = () => {
         <Tabs defaultValue="stats" className="space-y-4">
           <TabsList>
             <TabsTrigger value="stats">Stats</TabsTrigger>
-            <TabsTrigger value="sweeps">Fee sweeps</TabsTrigger>
+            <TabsTrigger value="treasury">Treasury</TabsTrigger>
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="roles">Roles</TabsTrigger>
           </TabsList>
@@ -152,8 +167,8 @@ const Admin = () => {
           <TabsContent value="stats">
             <StatsTab />
           </TabsContent>
-          <TabsContent value="sweeps">
-            <SweepsTab />
+          <TabsContent value="treasury">
+            <TreasuryTab />
           </TabsContent>
           <TabsContent value="users">
             <UsersTab />
@@ -577,99 +592,146 @@ const StatsTab = () => {
   );
 };
 
-/* ------------------------------- Sweeps tab ------------------------------- */
+/* ------------------------------ Treasury tab ------------------------------ */
 
-const SweepsTab = () => {
-  const [runs, setRuns] = useState<SweepRun[]>([]);
+const SOURCE_LABELS: Record<TreasuryFee["source_kind"], string> = {
+  swap_fee: "Swap fee",
+  limit_fee: "Limit fee",
+  dca_fee: "DCA fee",
+  bridge_fee: "Bridge fee",
+  sweep: "Sweep",
+  transfer_fee: "Transfer fee",
+  other: "Other",
+};
+
+const TreasuryTab = () => {
+  const [fees, setFees] = useState<TreasuryFee[]>([]);
   const [loading, setLoading] = useState(true);
-  const [running, setRunning] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [chainFilter, setChainFilter] = useState<"all" | "solana" | "ethereum">("all");
+  const [kindFilter, setKindFilter] = useState<"all" | TreasuryFee["source_kind"]>("all");
 
   const load = async () => {
     setLoading(true);
     const { data, error } = await supabase
-      .from("sweep_runs")
+      .from("treasury_fees")
       .select("*")
-      .order("started_at", { ascending: false })
-      .limit(50);
+      .order("block_time", { ascending: false })
+      .limit(500);
     if (error) {
-      toast({ title: "Failed to load sweeps", description: error.message, variant: "destructive" });
+      toast({ title: "Failed to load treasury", description: error.message, variant: "destructive" });
     } else {
-      setRuns((data ?? []) as SweepRun[]);
+      setFees((data ?? []) as TreasuryFee[]);
     }
     setLoading(false);
   };
 
-  useEffect(() => {
-    load();
-  }, []);
+  useEffect(() => { load(); }, []);
 
-  const totals = useMemo(() => {
-    const success = runs.filter((r) => r.status === "success");
-    return {
-      runs: runs.length,
-      claimed: success.reduce((sum, r) => sum + (r.total_value_usd ?? 0), 0),
-      lastRun: runs[0]?.started_at ?? null,
-    };
-  }, [runs]);
-
-  const triggerSweep = async () => {
-    setRunning(true);
+  const triggerSync = async () => {
+    setSyncing(true);
     try {
-      const { data, error } = await supabase.functions.invoke("sweep-fees", {
+      const { data, error } = await supabase.functions.invoke("treasury-fees-sync", {
         body: { trigger: "manual" },
       });
       if (error) throw error;
-      toast({ title: "Sweep triggered", description: JSON.stringify(data).slice(0, 140) });
+      const summary = (data as { summary?: { swap_sweeps?: number; dca_fees?: number; bridge_fees?: number } })?.summary;
+      toast({
+        title: "Sync complete",
+        description: summary
+          ? `Sweeps: ${summary.swap_sweeps ?? 0} · DCA: ${summary.dca_fees ?? 0} · Bridge: ${summary.bridge_fees ?? 0}`
+          : "Indexed.",
+      });
       await load();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Unknown error";
-      toast({ title: "Sweep failed", description: msg, variant: "destructive" });
+      toast({ title: "Sync failed", description: e instanceof Error ? e.message : "Unknown error", variant: "destructive" });
     } finally {
-      setRunning(false);
+      setSyncing(false);
     }
   };
 
+  const filtered = useMemo(() => {
+    return fees.filter((f) => {
+      if (chainFilter !== "all" && f.chain !== chainFilter) return false;
+      if (kindFilter !== "all" && f.source_kind !== kindFilter) return false;
+      return true;
+    });
+  }, [fees, chainFilter, kindFilter]);
+
+  const totals = useMemo(() => {
+    const sum = (rows: TreasuryFee[]) => rows.reduce((acc, r) => acc + (r.amount_usd ?? 0), 0);
+    return {
+      all: sum(fees),
+      sol: sum(fees.filter((f) => f.chain === "solana")),
+      eth: sum(fees.filter((f) => f.chain === "ethereum")),
+      bridge: sum(fees.filter((f) => f.source_kind === "bridge_fee")),
+      count: fees.length,
+    };
+  }, [fees]);
+
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium text-muted-foreground">
-              Total runs
-            </CardTitle>
+            <CardTitle className="text-xs font-medium text-muted-foreground">Total revenue</CardTitle>
           </CardHeader>
-          <CardContent className="pt-0 text-2xl font-semibold">{totals.runs}</CardContent>
+          <CardContent className="pt-0 text-2xl font-semibold">{formatUsd(totals.all)}</CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium text-muted-foreground">
-              Total claimed
-            </CardTitle>
+            <CardTitle className="text-xs font-medium text-muted-foreground">Solana</CardTitle>
           </CardHeader>
-          <CardContent className="pt-0 text-2xl font-semibold">{formatUsd(totals.claimed)}</CardContent>
+          <CardContent className="pt-0 text-2xl font-semibold">{formatUsd(totals.sol)}</CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-medium text-muted-foreground">
-              Last run
-            </CardTitle>
+            <CardTitle className="text-xs font-medium text-muted-foreground">Ethereum</CardTitle>
           </CardHeader>
-          <CardContent className="pt-0 text-sm">
-            {totals.lastRun ? format(new Date(totals.lastRun), "PPp") : "Never"}
-          </CardContent>
+          <CardContent className="pt-0 text-2xl font-semibold">{formatUsd(totals.eth)}</CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-medium text-muted-foreground">Entries</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0 text-2xl font-semibold">{totals.count}</CardContent>
         </Card>
       </div>
 
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-medium text-muted-foreground">Recent runs</h2>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-1">
+          {(["all", "solana", "ethereum"] as const).map((c) => (
+            <Button
+              key={c}
+              size="sm"
+              variant={chainFilter === c ? "default" : "outline"}
+              onClick={() => setChainFilter(c)}
+              className="h-7 text-xs capitalize"
+            >
+              {c}
+            </Button>
+          ))}
+          <span className="mx-2 h-7 w-px bg-border" />
+          {(["all", "swap_fee", "limit_fee", "dca_fee", "bridge_fee", "sweep"] as const).map((k) => (
+            <Button
+              key={k}
+              size="sm"
+              variant={kindFilter === k ? "default" : "outline"}
+              onClick={() => setKindFilter(k)}
+              className="h-7 text-xs"
+            >
+              {k === "all" ? "All kinds" : SOURCE_LABELS[k]}
+            </Button>
+          ))}
+        </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={load} disabled={loading}>
             <RefreshCw className={`mr-1 h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
-          <Button size="sm" onClick={triggerSweep} disabled={running}>
-            {running ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
-            Sweep now
+          <Button size="sm" onClick={triggerSync} disabled={syncing}>
+            {syncing ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+            Sync now
           </Button>
         </div>
       </div>
@@ -679,58 +741,49 @@ const SweepsTab = () => {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Started</TableHead>
-                <TableHead>Trigger</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Scanned</TableHead>
-                <TableHead className="text-right">Claimed</TableHead>
-                <TableHead className="text-right">Value</TableHead>
+                <TableHead>When</TableHead>
+                <TableHead>Chain</TableHead>
+                <TableHead>Source</TableHead>
+                <TableHead>Asset</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
+                <TableHead className="text-right">USD</TableHead>
                 <TableHead>Tx</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {runs.length === 0 && !loading ? (
+              {filtered.length === 0 && !loading ? (
                 <TableRow>
                   <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
-                    No sweep runs yet. They appear after the cron fires or you press "Sweep now".
+                    No fees recorded yet. Press "Sync now" to backfill from sweeps and the ETH treasury.
                   </TableCell>
                 </TableRow>
               ) : null}
-              {runs.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell className="text-xs">
-                    {format(new Date(r.started_at), "MMM d HH:mm")}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="text-xs">{r.trigger}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={r.status === "success" ? "default" : r.status === "running" ? "secondary" : "destructive"}
-                      className="text-xs"
-                    >
-                      {r.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{r.accounts_scanned}</TableCell>
-                  <TableCell className="text-right tabular-nums">{r.accounts_claimed}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatUsd(r.total_value_usd)}</TableCell>
-                  <TableCell className="text-xs">
-                    {r.signatures?.[0] ? (
-                      <a
-                        href={`https://solscan.io/tx/${r.signatures[0]}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-primary hover:underline"
-                      >
-                        {r.signatures[0].slice(0, 6)}…
+              {filtered.map((f) => {
+                const explorer = f.chain === "solana"
+                  ? `https://solscan.io/tx/${f.signature}`
+                  : `https://etherscan.io/tx/${f.signature}`;
+                return (
+                  <TableRow key={f.id}>
+                    <TableCell className="text-xs">{format(new Date(f.block_time), "MMM d HH:mm")}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs capitalize">{f.chain}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary" className="text-xs">{SOURCE_LABELS[f.source_kind]}</Badge>
+                    </TableCell>
+                    <TableCell className="text-xs font-medium">{f.asset_symbol ?? (f.chain === "solana" ? "SOL" : "ETH")}</TableCell>
+                    <TableCell className="text-right text-xs tabular-nums">
+                      {f.amount > 0 ? f.amount.toLocaleString("en-US", { maximumFractionDigits: 6 }) : "—"}
+                    </TableCell>
+                    <TableCell className="text-right text-xs tabular-nums">{formatUsd(f.amount_usd)}</TableCell>
+                    <TableCell className="text-xs">
+                      <a href={explorer} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                        {f.signature.slice(0, 6)}…
                       </a>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </CardContent>
