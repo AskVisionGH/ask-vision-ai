@@ -652,7 +652,20 @@ export const TradeDca = () => {
               }
             />
             <StatsRow
-              label="Protocol fee"
+              label="Platform fee"
+              value={
+                <span className="font-mono text-[12px] text-foreground">
+                  1% upfront
+                  {totalUsd != null && totalUsd > 0 && (
+                    <span className="ml-1 text-muted-foreground">
+                      (≈ {fmtUsd(totalUsd * 0.01)})
+                    </span>
+                  )}
+                </span>
+              }
+            />
+            <StatsRow
+              label="Jupiter fee"
               value={
                 <span className="font-mono text-[12px] text-muted-foreground">
                   0.1% per fill
