@@ -1,26 +1,12 @@
 import { Link, useLocation } from "react-router-dom";
-import {
-  ArrowLeft,
-  ArrowLeftRight,
-  Bell,
-  LogOut,
-  MessageSquare,
-  MessageSquarePlus,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Radar,
-  Repeat,
-  Settings as SettingsIcon,
-  Shield,
-  Users,
-} from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Menu } from "lucide-react";
+import { AppSidebar } from "@/components/AppSidebar";
 import { ConnectWalletButton } from "@/components/ConnectWalletButton";
 import { VisionLogo } from "@/components/VisionLogo";
-import { UserAvatar } from "@/components/UserAvatar";
 import { TradeSwap } from "@/components/trade/TradeSwap";
 import { TradeLimit } from "@/components/trade/TradeLimit";
 import { TradePro } from "@/components/trade/TradePro";
