@@ -33,7 +33,8 @@ serve(async (req) => {
     const headers: Record<string, string> = { "Accept": "application/json" };
     if (apiKey) headers["x-lifi-api-key"] = apiKey;
 
-    const resp = await fetch("https://li.quest/v1/chains", { headers });
+    // LI.FI defaults to EVM-only — explicitly request SVM (Solana) too.
+    const resp = await fetch("https://li.quest/v1/chains?chainTypes=SVM,EVM", { headers });
     if (!resp.ok) {
       const t = await resp.text();
       console.error("LI.FI chains error:", resp.status, t);
