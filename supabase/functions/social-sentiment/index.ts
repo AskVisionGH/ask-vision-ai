@@ -548,6 +548,181 @@ async function fetchTwitterPosts(resolved: ResolvedToken, bearer: string): Promi
     .filter((p: SocialPost | null): p is SocialPost => !!p && p.postedAt > 0);
 }
 
+// ─── Source: Nitter (free X/Twitter via public RSS instances) ────────────────
+// No API key. We round-robin a list of public Nitter instances and fall back
+// when one is down. We pull both:
+//  1) keyword search for the token symbol/address
+//  2) timelines from a curated list of high-signal Crypto Twitter accounts
+//     (broad market voices + Solana-native voices)
+// All posts get sentiment-classified by classifyText() like other sources.
+const NITTER_INSTANCES = [
+  "https://nitter.net",
+  "https://nitter.privacydev.net",
+  "https://nitter.poast.org",
+  "https://nitter.kavin.rocks",
+  "https://nitter.cz",
+  "https://nitter.mint.lgbt",
+];
+
+const CRYPTO_TWITTER_HANDLES = [
+  // Broad market voices
+  "cz_binance", "VitalikButerin", "saylor", "elonmusk", "APompliano",
+  // Solana ecosystem
+  "solana", "aeyakovenko", "rajgokal", "JupiterExchange", "MagicEden",
+  "blknoiz06", "MustStopMurad", "0xMert_", "weremeow", "ansemf",
+];
+
+async function fetchNitterPosts(resolved: ResolvedToken): Promise<SocialPost[]> {
+  const queries: string[] = [];
+  // Keyword search
+  if (resolved.address) {
+    queries.push(`/search/rss?f=tweets&q=${encodeURIComponent(resolved.address)}`);
+  }
+  const symQuery = resolved.symbol.length >= 3
+    ? `$${resolved.symbol}`
+    : `${resolved.name}`;
+  queries.push(`/search/rss?f=tweets&q=${encodeURIComponent(symQuery)}`);
+
+  // Influencer timelines — only if we're talking about a major asset where
+  // these accounts are likely to be discussing it. For long-tail tokens,
+  // skip influencer timelines to avoid noise (they won't mention them).
+  const isMajor = ["BTC","ETH","SOL","XRP","DOGE","BNB","ADA","JUP","BONK","WIF"]
+    .includes(resolved.symbol.toUpperCase());
+  if (isMajor) {
+    for (const handle of CRYPTO_TWITTER_HANDLES) {
+      queries.push(`/${handle}/rss`);
+    }
+  }
+
+  // Round-robin instances per query and limit total parallel fetches.
+  const tasks = queries.slice(0, 18).map((path, i) =>
+    fetchNitterRss(NITTER_INSTANCES[i % NITTER_INSTANCES.length], path, resolved)
+      .catch((e) => {
+        console.warn("nitter rss failed:", e);
+        return [] as SocialPost[];
+      }),
+  );
+
+  const results = await Promise.all(tasks);
+  const all = results.flat();
+
+  // Dedupe by tweet id
+  const seen = new Set<string>();
+  const out: SocialPost[] = [];
+  for (const p of all) {
+    if (seen.has(p.id)) continue;
+    seen.add(p.id);
+    out.push(p);
+  }
+  return out;
+}
+
+async function fetchNitterRss(
+  instance: string,
+  path: string,
+  resolved: ResolvedToken,
+): Promise<SocialPost[]> {
+  const url = `${instance}${path}`;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 5000);
+  let resp: Response;
+  try {
+    resp = await fetch(url, {
+      signal: ctrl.signal,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; VisionBot/1.0)",
+        Accept: "application/rss+xml,application/xml,text/xml,*/*",
+      },
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!resp.ok) {
+    return [];
+  }
+  const xml = await resp.text();
+  return parseNitterRss(xml, resolved);
+}
+
+function parseNitterRss(xml: string, resolved: ResolvedToken): SocialPost[] {
+  const items: SocialPost[] = [];
+  const itemRe = /<item[\s\S]*?<\/item>/gi;
+  const matches = xml.match(itemRe) ?? [];
+  const symLower = resolved.symbol.toLowerCase();
+  const nameLower = resolved.name.toLowerCase();
+  const addrLower = resolved.address?.toLowerCase() ?? "";
+
+  for (const block of matches.slice(0, 30)) {
+    const title = decodeXmlEntities(extractTag(block, "title"));
+    const link = extractTag(block, "link");
+    const desc = decodeXmlEntities(extractTag(block, "description"));
+    const pubDate = extractTag(block, "pubDate");
+    const creator = extractTag(block, "dc:creator") || extractTag(block, "creator");
+    if (!title || !link) continue;
+
+    // Only keep tweets that actually mention the token (relevant for influencer
+    // timelines — keyword-search RSS is already filtered server-side).
+    const combinedLower = `${title} ${desc}`.toLowerCase();
+    const mentionsToken =
+      combinedLower.includes(symLower) ||
+      combinedLower.includes(nameLower) ||
+      (addrLower && combinedLower.includes(addrLower)) ||
+      combinedLower.includes(`$${symLower}`);
+    if (!mentionsToken) continue;
+
+    const ts = pubDate ? Math.floor(Date.parse(pubDate) / 1000) : 0;
+    if (!ts || !Number.isFinite(ts)) continue;
+
+    // Strip HTML from description for cleaner text
+    const cleanText = stripHtmlTags(desc || title).slice(0, 240);
+    // Convert nitter URL back to x.com so users land on the real tweet
+    const xUrl = link
+      .replace(/^https?:\/\/[^/]+\//, "https://x.com/")
+      .replace(/#m$/, "");
+    // Tweet id from URL for dedupe
+    const idMatch = xUrl.match(/\/status\/(\d+)/);
+    const tweetId = idMatch ? idMatch[1] : `${ts}-${Math.random()}`;
+
+    items.push({
+      id: `nitter-${tweetId}`,
+      network: "twitter",
+      url: xUrl,
+      title: cleanText,
+      creatorName: creator ? (creator.startsWith("@") ? creator : `@${creator.replace(/^.*\//, "")}`) : null,
+      creatorAvatar: null,
+      // Nitter RSS doesn't include engagement metrics. Use a small base so
+      // these still rank against zero-engagement Reddit posts but don't
+      // dominate truly viral content from other sources.
+      interactions24h: 1,
+      sentiment: classifyText(cleanText),
+      postedAt: ts,
+    });
+  }
+  return items;
+}
+
+function extractTag(block: string, tag: string): string {
+  const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i");
+  const m = block.match(re);
+  if (!m) return "";
+  return m[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").trim();
+}
+
+function stripHtmlTags(s: string): string {
+  return s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function decodeXmlEntities(s: string): string {
+  return s
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+}
+
 // ─── LunarCrush (kept as primary if key works) ───────────────────────────────
 
 async function tryLunarCrush(resolved: ResolvedToken, apiKey: string): Promise<SocialSentimentData | null> {
