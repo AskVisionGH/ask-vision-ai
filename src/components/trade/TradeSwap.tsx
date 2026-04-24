@@ -117,8 +117,12 @@ const supaPost = async (fn: string, body: unknown) => {
   return data;
 };
 
-export const TradeSwap = () => {
-  const [tab, setTab] = useState<TradeTab>("trade");
+interface TradeSwapProps {
+  tab: TradeTab;
+  onTabChange: (t: TradeTab) => void;
+}
+
+export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
   const [inputToken, setInputToken] = useState<TokenMeta>(SOL_TOKEN);
   const [outputToken, setOutputToken] = useState<TokenMeta | null>(null);
   const [amount, setAmount] = useState("");
@@ -482,7 +486,7 @@ export const TradeSwap = () => {
       <div className="w-full max-w-[440px] space-y-4">
         {/* Tabs row — tabs centered over card, gear floats to the right */}
         <div className="relative flex items-center justify-center">
-          <TradeTabs active={tab} onChange={setTab} />
+          <TradeTabs active={tab} onChange={onTabChange} />
           <Popover>
             <PopoverTrigger asChild>
               <button

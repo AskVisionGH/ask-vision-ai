@@ -20,6 +20,8 @@ import { ConnectWalletButton } from "@/components/ConnectWalletButton";
 import { VisionLogo } from "@/components/VisionLogo";
 import { UserAvatar } from "@/components/UserAvatar";
 import { TradeSwap } from "@/components/trade/TradeSwap";
+import { TradeLimit } from "@/components/trade/TradeLimit";
+import type { TradeTab } from "@/components/trade/TradeTabs";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
@@ -31,6 +33,7 @@ const Trade = () => {
   const { isAdmin } = useIsAdmin();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [tab, setTab] = useState<TradeTab>("trade");
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
@@ -112,10 +115,16 @@ const Trade = () => {
                 <VisionLogo size={56} className="text-foreground drop-shadow-[0_0_18px_hsl(var(--primary)/0.7)]" />
               </div>
               <p className="mt-4 text-xs text-muted-foreground">
-                Swap any Solana token at the best on-chain price.
+                {tab === "limit"
+                  ? "Set a price. We'll fill automatically when the market hits it."
+                  : "Swap any Solana token at the best on-chain price."}
               </p>
             </div>
-            <TradeSwap />
+            {tab === "limit" ? (
+              <TradeLimit tab={tab} onTabChange={setTab} />
+            ) : (
+              <TradeSwap tab={tab} onTabChange={setTab} />
+            )}
           </div>
         </div>
       </div>
