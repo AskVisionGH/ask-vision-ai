@@ -196,9 +196,10 @@ const Chat = () => {
     return true;
   };
 
-  const handleUnshare = async () => {
-    if (!shareTarget) return;
-    await toggleShare(shareTarget.id, false);
+  const handleUnshare = async (c?: ConversationRow) => {
+    const target = c ?? shareTarget;
+    if (!target) return;
+    await toggleShare(target.id, false);
     toast.success("Sharing disabled");
   };
 
