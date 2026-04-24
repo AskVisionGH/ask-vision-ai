@@ -441,14 +441,13 @@ export const TradeProBracket = () => {
   return (
     <TooltipProvider delayDuration={150}>
       <div className="w-full max-w-[440px] space-y-4">
-        {/* Tabs row + settings gear */}
-        <div className="relative flex items-center justify-center">
-          <TradeTabs active={tab} onChange={onTabChange} />
+        {/* Settings gear (sub-tabs are owned by the Pro container) */}
+        <div className="relative flex items-center justify-end">
           <Popover>
             <PopoverTrigger asChild>
               <button
                 type="button"
-                className="ease-vision absolute right-0 flex h-9 w-9 items-center justify-center rounded-full border border-border/60 bg-secondary/40 text-muted-foreground hover:bg-secondary hover:text-foreground sm:-right-12"
+                className="ease-vision flex h-9 w-9 items-center justify-center rounded-full border border-border/60 bg-secondary/40 text-muted-foreground hover:bg-secondary hover:text-foreground"
                 aria-label="Order settings"
               >
                 <SettingsIcon className="h-4 w-4" />
