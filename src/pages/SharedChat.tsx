@@ -1,23 +1,30 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { ArrowRight } from "lucide-react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { ArrowRight, Download, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { ChatBubble } from "@/components/ChatBubble";
 import { VisionLogo } from "@/components/VisionLogo";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/useAuth";
 import type { ChatMessage, ToolEvent } from "@/lib/chat-stream";
+import type { ShareMode } from "@/hooks/useConversations";
 
 interface SharedConversation {
   id: string;
   title: string;
+  share_mode: ShareMode;
   updated_at: string;
 }
 
 const SharedChat = () => {
   const { shareId } = useParams<{ shareId: string }>();
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [convo, setConvo] = useState<SharedConversation | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "missing">("loading");
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -30,7 +37,7 @@ const SharedChat = () => {
       // 1. Look up the conversation by its public share id.
       const { data: conversation, error: convoErr } = await supabase
         .from("conversations")
-        .select("id, title, updated_at")
+        .select("id, title, share_mode, updated_at")
         .eq("share_id", shareId)
         .maybeSingle();
 
@@ -66,6 +73,53 @@ const SharedChat = () => {
       cancelled = true;
     };
   }, [shareId]);
+
+  /**
+   * Copies the shared conversation (and all its messages) into the viewer's
+   * own account, then navigates them to the new chat. Only enabled when the
+   * owner set the share mode to `importable`.
+   */
+  const handleImport = async () => {
+    if (!convo) return;
+    if (!user) {
+      navigate(`/auth?redirect=${encodeURIComponent(`/shared/${shareId}`)}`);
+      return;
+    }
+    setImporting(true);
+    try {
+      const { data: newConvo, error: convoErr } = await supabase
+        .from("conversations")
+        .insert({
+          user_id: user.id,
+          title: convo.title,
+        })
+        .select("id")
+        .single();
+      if (convoErr || !newConvo) {
+        toast.error("Couldn't import conversation");
+        return;
+      }
+
+      if (messages.length > 0) {
+        const rows = messages.map((m) => ({
+          conversation_id: newConvo.id,
+          user_id: user.id,
+          role: m.role,
+          content: m.content,
+          tool_events: (m.toolEvents ?? null) as never,
+        }));
+        const { error: msgErr } = await supabase.from("messages").insert(rows);
+        if (msgErr) {
+          toast.error("Imported chat but messages failed to copy");
+        }
+      }
+
+      toast.success("Conversation imported");
+      navigate(`/chat?c=${newConvo.id}`);
+    } finally {
+      setImporting(false);
+    }
+  };
 
   return (
     <div className="relative flex min-h-screen flex-col bg-background text-foreground">
@@ -119,13 +173,30 @@ const SharedChat = () => {
 
           {status === "ready" && convo && (
             <>
-              <div className="mb-8 border-b border-border/60 pb-6">
-                <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">
-                  Shared conversation
-                </p>
-                <h1 className="mt-2 text-2xl font-light tracking-tight">
-                  {convo.title}
-                </h1>
+              <div className="mb-8 flex flex-col gap-4 border-b border-border/60 pb-6 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">
+                    Shared conversation · {convo.share_mode === "importable" ? "Importable" : "Read-only"}
+                  </p>
+                  <h1 className="mt-2 text-2xl font-light tracking-tight">
+                    {convo.title}
+                  </h1>
+                </div>
+                {convo.share_mode === "importable" && (
+                  <Button
+                    onClick={handleImport}
+                    disabled={importing}
+                    className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
+                    size="sm"
+                  >
+                    {importing ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Download className="mr-1.5 h-3.5 w-3.5" />
+                    )}
+                    {user ? "Import to my chats" : "Sign in to import"}
+                  </Button>
+                )}
               </div>
 
               <div className="flex flex-col gap-5">

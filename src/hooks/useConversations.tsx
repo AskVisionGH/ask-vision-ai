@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import type { ChatMessage, ToolEvent } from "@/lib/chat-stream";
 
+export type ShareMode = "read_only" | "importable";
+
 export interface ConversationRow {
   id: string;
   title: string;
@@ -10,6 +12,7 @@ export interface ConversationRow {
   pinned: boolean;
   pin_order: number;
   share_id: string | null;
+  share_mode: ShareMode;
   created_at: string;
   updated_at: string;
 }
@@ -24,7 +27,7 @@ export interface MessageRow {
 }
 
 const CONVO_COLS =
-  "id, title, wallet_address, pinned, pin_order, share_id, created_at, updated_at";
+  "id, title, wallet_address, pinned, pin_order, share_id, share_mode, created_at, updated_at";
 
 /** Subscribes to the user's conversations, sorted newest first. */
 export const useConversations = () => {
@@ -137,18 +140,27 @@ export const useConversations = () => {
   }, []);
 
   /**
-   * Toggles a public read-only share link for the conversation.
-   * Sharing assigns a fresh uuid; unsharing clears it (existing links stop working).
+   * Toggles a public share link for the conversation. When enabling, callers
+   * pick `mode`: `read_only` (view only) or `importable` (viewer can copy it
+   * into their own account). Unsharing clears the id; existing links stop
+   * working.
    */
   const toggleShare = useCallback(
-    async (id: string, share: boolean): Promise<string | null> => {
+    async (
+      id: string,
+      share: boolean,
+      mode: ShareMode = "read_only",
+    ): Promise<string | null> => {
       const newShareId = share ? crypto.randomUUID() : null;
+      const newMode: ShareMode = share ? mode : "read_only";
       setConversations((prev) =>
-        prev.map((c) => (c.id === id ? { ...c, share_id: newShareId } : c)),
+        prev.map((c) =>
+          c.id === id ? { ...c, share_id: newShareId, share_mode: newMode } : c,
+        ),
       );
       const { error } = await supabase
         .from("conversations")
-        .update({ share_id: newShareId } as never)
+        .update({ share_id: newShareId, share_mode: newMode } as never)
         .eq("id", id);
       if (error) {
         // Roll back optimistic update on failure.

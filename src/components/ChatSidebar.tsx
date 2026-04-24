@@ -226,21 +226,14 @@ const ConversationRowItem = ({
               Rename
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            {isShared ? (
-              <>
-                <DropdownMenuItem onClick={() => onShare(c)}>
-                  <Link2 className="mr-2 h-3.5 w-3.5" />
-                  Copy share link
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onUnshare(c)}>
-                  <Link2Off className="mr-2 h-3.5 w-3.5" />
-                  Stop sharing
-                </DropdownMenuItem>
-              </>
-            ) : (
-              <DropdownMenuItem onClick={() => onShare(c)}>
-                <Link2 className="mr-2 h-3.5 w-3.5" />
-                Share link
+            <DropdownMenuItem onClick={() => onShare(c)}>
+              <Link2 className="mr-2 h-3.5 w-3.5" />
+              {isShared ? "Manage share…" : "Share…"}
+            </DropdownMenuItem>
+            {isShared && (
+              <DropdownMenuItem onClick={() => onUnshare(c)}>
+                <Link2Off className="mr-2 h-3.5 w-3.5" />
+                Stop sharing
               </DropdownMenuItem>
             )}
             <DropdownMenuSeparator />
