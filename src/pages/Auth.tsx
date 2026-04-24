@@ -37,6 +37,10 @@ const Auth = () => {
   const [submitting, setSubmitting] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<"google" | "apple" | null>(null);
   const [walletSigning, setWalletSigning] = useState(false);
+  // When the user clicks the single "Sign in with wallet" pill while
+  // disconnected, we open the modal and remember the intent so we can
+  // auto-trigger signing the moment a wallet connects.
+  const [pendingSign, setPendingSign] = useState(false);
 
   useEffect(() => {
     if (!loading && session) navigate("/chat", { replace: true });
@@ -82,11 +86,8 @@ const Auth = () => {
     }
   };
 
-  const signWithWallet = async () => {
-    if (!connected || !publicKey || !signMessage) {
-      setVisible(true);
-      return;
-    }
+  const runWalletSignature = async () => {
+    if (!publicKey || !signMessage) return;
     setWalletSigning(true);
     try {
       const result = await signInWithSolana({
@@ -105,6 +106,27 @@ const Auth = () => {
       setWalletSigning(false);
     }
   };
+
+  const signWithWallet = () => {
+    if (!connected || !publicKey || !signMessage) {
+      // Open the wallet picker, then auto-sign once a wallet connects.
+      setPendingSign(true);
+      setVisible(true);
+      return;
+    }
+    void runWalletSignature();
+  };
+
+  // Once the wallet finishes connecting after the user clicked the pill,
+  // immediately ask for a signature so it's a single-click flow end-to-end.
+  useEffect(() => {
+    if (pendingSign && connected && publicKey && signMessage) {
+      setPendingSign(false);
+      void runWalletSignature();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingSign, connected, publicKey, signMessage]);
+
 
   return (
     <main className="relative grid min-h-screen grid-cols-1 overflow-hidden bg-background text-foreground lg:grid-cols-2">
