@@ -48,6 +48,33 @@ const sweepFn = inngest.createFunction(
   },
 );
 
+// Indexes the `treasury_fees` ledger every 15 minutes:
+//   - Mirrors successful sweeps into the unified ledger
+//   - Mirrors DCA upfront-fee transfers
+//   - Scans the ETH treasury via Etherscan for incoming bridge-fee payouts
+const indexFeesFn = inngest.createFunction(
+  { id: "index-treasury-fees", name: "Index treasury fee ledger", retries: 1 },
+  { cron: "*/15 * * * *" },
+  async ({ step }) => {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    if (!supabaseUrl) throw new Error("SUPABASE_URL not configured");
+    const result = await step.run("invoke-treasury-fees-sync", async () => {
+      try {
+        const resp = await fetch(`${supabaseUrl}/functions/v1/treasury-fees-sync`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ trigger: "cron" }),
+        });
+        const data = await resp.json().catch(() => ({}));
+        return { ok: resp.ok, status: resp.status, data };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+    return { ok: true, result };
+  },
+);
+
 // Supabase Edge Functions rewrite the request path — `servePath` must match
 // the deployed function URL exactly so Inngest's introspection works.
 Deno.serve(
