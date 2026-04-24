@@ -54,22 +54,34 @@ const impactBucket = (pct: number | null) => {
   return { label: "high", color: "text-down", dot: "bg-down" };
 };
 
-const supaPost = async (fn: string, body: unknown) => {
-  // Use supabase.functions.invoke so the user's session JWT is forwarded —
-  // tx-submit relies on the JWT to identify the caller and log tx_events.
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+const supaPost = async (fn: string, body: unknown, attempt = 0): Promise<any> => {
   const { data, error } = await supabase.functions.invoke(fn, { body });
   if (error) {
-    // The functions client wraps the underlying response; pull a friendly
-    // error string out of the FunctionsHttpError body when possible.
     const ctx = (error as any).context;
     let serverMsg: string | null = null;
-    if (ctx && typeof ctx.json === "function") {
-      try {
-        const parsed = await ctx.json();
-        if (parsed?.error) serverMsg = String(parsed.error);
-      } catch { /* body wasn't JSON */ }
+    let status: number | undefined;
+    if (ctx) {
+      status = ctx.status;
+      if (typeof ctx.json === "function") {
+        try {
+          const parsed = await ctx.json();
+          if (parsed?.error) serverMsg = String(parsed.error);
+        } catch { /* body wasn't JSON */ }
+      }
     }
-    throw new Error(serverMsg ?? error.message ?? `${fn} failed`);
+    const message = serverMsg ?? error.message ?? `${fn} failed`;
+    const transient =
+      status === 503 ||
+      status === 504 ||
+      message.toLowerCase().includes("temporarily unavailable") ||
+      message.toLowerCase().includes("runtime_error");
+    if (transient && attempt < 2) {
+      await sleep(400 * (attempt + 1));
+      return supaPost(fn, body, attempt + 1);
+    }
+    throw new Error(message);
   }
   if (data && typeof data === "object" && "error" in (data as any) && (data as any).error) {
     throw new Error((data as any).error);
