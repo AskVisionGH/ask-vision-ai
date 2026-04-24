@@ -256,6 +256,34 @@ const Settings = () => {
               </div>
             </section>
 
+            {/* Language */}
+            <section className="rounded-2xl border border-border bg-card/40 p-6 backdrop-blur-md">
+              <h2 className="mb-1.5 flex items-center gap-2 text-sm font-medium text-foreground">
+                <Languages className="h-3.5 w-3.5 text-muted-foreground" />
+                Language
+              </h2>
+              <p className="mb-4 text-xs text-muted-foreground">
+                Vision will reply in this language and use it as a hint when transcribing voice messages.
+              </p>
+              <Select value={language} onValueChange={(v) => setLanguage(v as LanguageCode)}>
+                <SelectTrigger className="w-full sm:w-72">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {LANGUAGE_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      <span className="flex items-center gap-2">
+                        <span>{opt.label}</span>
+                        {opt.value !== "auto" && (
+                          <span className="text-xs text-muted-foreground">— {opt.native}</span>
+                        )}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </section>
+
             <div className="flex justify-end pt-2">
               <Button
                 onClick={save}
