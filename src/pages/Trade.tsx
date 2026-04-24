@@ -103,11 +103,15 @@ const Trade = () => {
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-4 py-8 sm:px-6 sm:py-12">
           <div className="mx-auto flex w-full max-w-[520px] flex-col items-center">
-            <div className="mb-8 text-center">
-              <h1 className="text-2xl font-light tracking-tight text-foreground">
-                Trade
-              </h1>
-              <p className="mt-1 text-xs text-muted-foreground">
+            <div className="mb-8 flex flex-col items-center text-center">
+              <div className="relative">
+                <div
+                  className="pointer-events-none absolute inset-0 -z-10 rounded-full bg-primary/40 blur-2xl animate-pulse-glow"
+                  aria-hidden
+                />
+                <VisionLogo size={56} className="text-foreground drop-shadow-[0_0_18px_hsl(var(--primary)/0.7)]" />
+              </div>
+              <p className="mt-4 text-xs text-muted-foreground">
                 Swap any Solana token at the best on-chain price.
               </p>
             </div>
