@@ -63,7 +63,6 @@ const EXPIRY_PRESETS = [
 const MARKET_REFRESH_MS = 20_000;
 
 type EntryMode = "market" | "limit";
-type AdvancedMode = "tpsl" | "oco";
 
 type Phase =
   | { name: "idle" }
@@ -131,7 +130,6 @@ export const TradePro = ({ tab, onTabChange }: Props) => {
   const [inputToken, setInputToken] = useState<TokenMeta>(USDC_TOKEN);
   const [outputToken, setOutputToken] = useState<TokenMeta>(SOL_TOKEN);
   const [sellAmount, setSellAmount] = useState("");
-  const [advancedMode, setAdvancedMode] = useState<AdvancedMode>("tpsl");
   const [entryMode, setEntryMode] = useState<EntryMode>("market");
 
   // TP/SL prices in USD (against the OUTPUT token's USD price)
@@ -246,17 +244,13 @@ export const TradePro = ({ tab, onTabChange }: Props) => {
 
     if (entryMode === "limit") {
       if (numericEntry <= 0) return "Set an entry price";
-      if (advancedMode === "oco") return null; // OTOCO uses entry as parent + TP/SL on output
-      // tpsl + limit-entry => OTOCO with TP > SL required
     }
 
-    if (advancedMode === "tpsl" || advancedMode === "oco") {
-      if (numericTp <= 0) return "Set a take-profit price";
-      if (numericSl <= 0) return "Set a stop-loss price";
-      if (numericTp <= numericSl) return "Take-profit must be > stop-loss";
-    }
+    if (numericTp <= 0) return "Set a take-profit price";
+    if (numericSl <= 0) return "Set a stop-loss price";
+    if (numericTp <= numericSl) return "Take-profit must be > stop-loss";
     return null;
-  }, [numericSell, sellUsd, entryMode, numericEntry, advancedMode, numericTp, numericSl]);
+  }, [numericSell, sellUsd, entryMode, numericEntry, numericTp, numericSl]);
 
   // For market entry + TP/SL, the trigger token is the output token (we hold
   // it post-entry and want to sell it at TP or SL). The orderType is OCO.
@@ -415,7 +409,7 @@ export const TradePro = ({ tab, onTabChange }: Props) => {
     jwtSigning;
 
   const busyLabel =
-    phase.name === "authing" || jwtSigning ? "Sign in to Jupiter…"
+    phase.name === "authing" || jwtSigning ? "Sign in to continue…"
     : phase.name === "preparing" ? "Building order…"
     : phase.name === "awaiting_signature" ? "Approve deposit in wallet…"
     : phase.name === "submitting" ? "Submitting…"
@@ -483,25 +477,12 @@ export const TradePro = ({ tab, onTabChange }: Props) => {
                 ))}
               </div>
               <p className="mt-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
-                Brackets auto-cancel after this period. Funds stay in your Jupiter vault until withdrawn.
+                Brackets auto-cancel after this period. Funds stay in your vault until withdrawn.
               </p>
             </PopoverContent>
           </Popover>
         </div>
 
-        {/* Mode switcher: TP/SL preset vs Advanced OCO */}
-        <div className="flex items-center gap-1 rounded-full border border-border/60 bg-secondary/30 p-1">
-          <ModeChip
-            active={advancedMode === "tpsl"}
-            onClick={() => setAdvancedMode("tpsl")}
-            label="TP / SL"
-          />
-          <ModeChip
-            active={advancedMode === "oco"}
-            onClick={() => setAdvancedMode("oco")}
-            label="Advanced OCO"
-          />
-        </div>
 
         {/* Card */}
         <div className="overflow-hidden rounded-2xl border border-border bg-card/60 backdrop-blur-sm shadow-soft">
@@ -658,7 +639,7 @@ export const TradePro = ({ tab, onTabChange }: Props) => {
                       className="max-w-[220px]"
                     >
                       <p className="font-mono text-[11px] leading-relaxed">
-                        Jupiter v2 enforces a $10 minimum per bracket.
+                        Pro brackets enforce a $10 minimum per order.
                       </p>
                     </TooltipContent>
                   </Tooltip>
@@ -701,8 +682,8 @@ export const TradePro = ({ tab, onTabChange }: Props) => {
         </div>
 
         <p className="px-1 text-center font-mono text-[10px] leading-relaxed text-muted-foreground">
-          Pro brackets use Jupiter v2 vaults. You'll sign once to authenticate, then once per
-          deposit. Funds stay custodied by Privy until your bracket fills or you withdraw.
+          Pro brackets use a managed vault. You'll sign once to authenticate, then once per
+          deposit. Funds stay custodied until your bracket fills or you withdraw.
         </p>
 
         {/* Token picker */}
@@ -720,21 +701,6 @@ export const TradePro = ({ tab, onTabChange }: Props) => {
 };
 
 // ---------- subcomponents ----------
-
-const ModeChip = ({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    className={cn(
-      "ease-vision flex-1 rounded-full px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider transition-colors",
-      active
-        ? "bg-secondary text-foreground shadow-soft"
-        : "text-muted-foreground hover:text-foreground",
-    )}
-  >
-    {label}
-  </button>
-);
 
 const EntryChip = ({
   active, onClick, label, hint,
