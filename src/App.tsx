@@ -5,7 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { WalletContextProvider } from "@/providers/WalletContextProvider";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
-import { useProfile } from "@/hooks/useProfile";
+import { ProfileProvider, useProfile } from "@/hooks/useProfile";
 import { useWalletAutoLink } from "@/hooks/useWalletAutoLink";
 import { WalletMergePrompt } from "@/components/WalletMergePrompt";
 import Index from "./pages/Index.tsx";
@@ -121,15 +121,17 @@ const AppRoutes = () => {
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
-      <WalletContextProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <AppRoutes />
-          </BrowserRouter>
-        </TooltipProvider>
-      </WalletContextProvider>
+      <ProfileProvider>
+        <WalletContextProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <AppRoutes />
+            </BrowserRouter>
+          </TooltipProvider>
+        </WalletContextProvider>
+      </ProfileProvider>
     </AuthProvider>
   </QueryClientProvider>
 );
