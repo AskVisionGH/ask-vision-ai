@@ -377,6 +377,102 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "prepare_limit_order",
+      description: "Preview a limit order. NEVER executes — user signs in the rendered card.",
+      parameters: {
+        type: "object",
+        properties: {
+          inputToken: { type: "string", description: "Ticker or mint of the token to sell." },
+          outputToken: { type: "string", description: "Ticker or mint of the token to receive." },
+          sellAmount: { type: "number", description: "Decimal amount of inputToken to sell." },
+          limitPrice: { type: "number", description: "Output tokens per 1 input token." },
+          expirySeconds: { type: "number", description: "Optional expiry in seconds. Omit for GTC." },
+        },
+        required: ["inputToken", "outputToken", "sellAmount", "limitPrice"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "prepare_dca",
+      description: "Preview a DCA (recurring) order. NEVER executes — user signs in the card.",
+      parameters: {
+        type: "object",
+        properties: {
+          inputToken: { type: "string" },
+          outputToken: { type: "string" },
+          totalAmount: { type: "number", description: "Total decimal amount of inputToken to spend across all cycles." },
+          numberOfOrders: { type: "number", description: "Number of cycles, 2-1000." },
+          intervalSeconds: { type: "number", description: "Seconds between cycles, ≥ 60." },
+          minPriceUsd: { type: "number" },
+          maxPriceUsd: { type: "number" },
+        },
+        required: ["inputToken", "outputToken", "totalAmount", "numberOfOrders", "intervalSeconds"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "prepare_bracket_order",
+      description: "Preview a TP+SL bracket order. Final signing happens in /trade (vault required).",
+      parameters: {
+        type: "object",
+        properties: {
+          inputToken: { type: "string" },
+          outputToken: { type: "string" },
+          sellAmount: { type: "number" },
+          tpPriceUsd: { type: "number", description: "Take-profit price for the OUTPUT token in USD." },
+          slPriceUsd: { type: "number", description: "Stop-loss price for the OUTPUT token in USD." },
+          entryMode: { type: "string", enum: ["market", "limit"] },
+          entryPriceUsd: { type: "number" },
+        },
+        required: ["inputToken", "outputToken", "sellAmount", "tpPriceUsd", "slPriceUsd"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "prepare_ladder",
+      description: "Preview a ladder of limit orders. Final signing happens in /trade.",
+      parameters: {
+        type: "object",
+        properties: {
+          side: { type: "string", enum: ["buy", "sell"] },
+          asset: { type: "string", description: "Ticker or mint of the asset being traded." },
+          quote: { type: "string", description: "Ticker or mint of the funding token. Default USDC." },
+          totalAmount: { type: "number" },
+          rungCount: { type: "number", description: "2-20 rungs." },
+          minPriceUsd: { type: "number" },
+          maxPriceUsd: { type: "number" },
+        },
+        required: ["side", "asset", "totalAmount", "rungCount", "minPriceUsd", "maxPriceUsd"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_open_orders",
+      description: "List the connected wallet's active limit + DCA orders. Optional address to inspect another wallet.",
+      parameters: {
+        type: "object",
+        properties: {
+          address: { type: "string" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 serve(async (req) => {
