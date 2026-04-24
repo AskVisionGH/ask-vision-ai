@@ -1,14 +1,18 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-// Lists or cancels Jupiter v2 trigger orders for the authed user.
+// Lists, cancels, and confirms-cancel for v2 trigger orders.
 //
 // Actions:
-//   { action: "list", jwt, status?: "open" | "history" }
+//   { action: "list", jwt, state?: "active" | "past", limit?, offset? }
 //   { action: "cancel", jwt, orderId }
+//      -> returns { id, transaction (b64 unsigned), requestId }
+//   { action: "confirm-cancel", jwt, orderId, signedTransaction (b64), cancelRequestId }
+//      -> returns { id, txSignature }
 //
-// Note: Jupiter v2 cancel is a two-step withdrawal flow. This wrapper only
-// performs step 1 (initiate cancel). Funds remain in the vault until the
-// user signs a withdrawal transaction (separate flow, future work).
+// Endpoints used (from upstream docs):
+//   GET  /trigger/v2/orders/history?state=active|past
+//   POST /trigger/v2/orders/price/cancel/:orderId
+//   POST /trigger/v2/orders/price/confirm-cancel/:orderId
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -35,31 +39,58 @@ serve(async (req) => {
     };
 
     if (action === "list") {
-      const status: string = body.status === "history" ? "history" : "open";
-      const url = new URL(`${BASE}/orders`);
-      url.searchParams.set("status", status);
+      const state: string = body.state === "past" ? "past" : "active";
+      const limit = Number(body.limit) > 0 ? Number(body.limit) : 50;
+      const offset = Number(body.offset) >= 0 ? Number(body.offset) : 0;
+      const url = new URL(`${BASE}/orders/history`);
+      url.searchParams.set("state", state);
+      url.searchParams.set("limit", String(limit));
+      url.searchParams.set("offset", String(offset));
       const r = await fetch(url.toString(), { headers });
       if (!r.ok) {
         const t = await r.text();
         console.error("v2 list orders error:", r.status, t);
         return json({ error: "Couldn't fetch orders" }, 502);
       }
-      const data = await r.json();
-      return json(data);
+      return json(await r.json());
     }
 
     if (action === "cancel") {
       const orderId: string = body.orderId ?? "";
       if (!orderId) return json({ error: "orderId required" }, 400);
 
-      const r = await fetch(`${BASE}/orders/${encodeURIComponent(orderId)}/cancel`, {
-        method: "POST",
-        headers: { ...headers, "Content-Type": "application/json" },
-      });
+      const r = await fetch(
+        `${BASE}/orders/price/cancel/${encodeURIComponent(orderId)}`,
+        { method: "POST", headers },
+      );
       if (!r.ok) {
         const t = await r.text();
         console.error("v2 cancel order error:", r.status, t);
-        return json({ error: "Couldn't cancel order" }, 502);
+        return json({ error: parseError(t) ?? "Couldn't cancel order" }, 502);
+      }
+      return json(await r.json());
+    }
+
+    if (action === "confirm-cancel") {
+      const orderId: string = body.orderId ?? "";
+      const signedTransaction: string = body.signedTransaction ?? "";
+      const cancelRequestId: string = body.cancelRequestId ?? "";
+      if (!orderId) return json({ error: "orderId required" }, 400);
+      if (!signedTransaction) return json({ error: "signedTransaction required" }, 400);
+      if (!cancelRequestId) return json({ error: "cancelRequestId required" }, 400);
+
+      const r = await fetch(
+        `${BASE}/orders/price/confirm-cancel/${encodeURIComponent(orderId)}`,
+        {
+          method: "POST",
+          headers: { ...headers, "Content-Type": "application/json" },
+          body: JSON.stringify({ signedTransaction, cancelRequestId }),
+        },
+      );
+      if (!r.ok) {
+        const t = await r.text();
+        console.error("v2 confirm-cancel error:", r.status, t);
+        return json({ error: parseError(t) ?? "Couldn't confirm withdrawal" }, 502);
       }
       return json(await r.json());
     }
@@ -70,6 +101,15 @@ serve(async (req) => {
     return json({ error: e instanceof Error ? e.message : "Unknown error" }, 500);
   }
 });
+
+function parseError(t: string): string | null {
+  try {
+    const p = JSON.parse(t);
+    return p?.error ?? p?.message ?? p?.cause ?? null;
+  } catch {
+    return null;
+  }
+}
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
