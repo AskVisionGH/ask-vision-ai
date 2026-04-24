@@ -266,14 +266,17 @@ async function syncSolBridgeFees(supabase: any): Promise<number> {
   if (!events || events.length === 0) return 0;
 
   // Skip signatures we've already indexed (cheap pre-filter).
-  const sigs = events.map((e) => e.signature as string);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sigs = (events as any[]).map((e: any) => e.signature as string);
   const { data: existing } = await supabase
     .from("treasury_fees")
     .select("signature")
     .eq("chain", "solana")
     .in("signature", sigs);
-  const seen = new Set((existing ?? []).map((r) => r.signature as string));
-  const todo = events.filter((e) => !seen.has(e.signature as string));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const seen = new Set(((existing ?? []) as any[]).map((r: any) => r.signature as string));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const todo = (events as any[]).filter((e: any) => !seen.has(e.signature as string));
   if (todo.length === 0) return 0;
 
   const heliusUrl = `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`;
@@ -514,7 +517,8 @@ async function fetchEthUsdPrice(): Promise<number | null> {
 // ---------------- Upsert helper ----------------
 
 async function upsertFees(
-  supabase: ReturnType<typeof createClient>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
   rows: FeeRow[],
 ): Promise<number> {
   if (rows.length === 0) return 0;
