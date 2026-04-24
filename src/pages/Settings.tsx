@@ -29,6 +29,8 @@ import {
 } from "@/components/ui/select";
 import { UserAvatar } from "@/components/UserAvatar";
 import { DeleteAccountDialog } from "@/components/DeleteAccountDialog";
+import { Switch } from "@/components/ui/switch";
+import { useNotificationPreferences } from "@/hooks/useNotificationPreferences";
 import { Link } from "react-router-dom";
 import {
   Accordion,
@@ -42,6 +44,7 @@ const Settings = () => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const { profile, loading, updateProfile, uploadAvatar } = useProfile();
+  const { prefs, update: updatePrefs } = useNotificationPreferences();
   const [deleteDialog, setDeleteDialog] = useState<null | "wipe" | "full">(null);
 
   const [name, setName] = useState("");
@@ -272,19 +275,31 @@ const Settings = () => {
                 </AccordionContent>
               </AccordionItem>
 
-              <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card/40 p-5 backdrop-blur-md sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0 flex items-start gap-2">
-                  <Bell className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" />
-                  <div>
-                    <h2 className="text-sm font-medium text-foreground">Alerts</h2>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      Manage triggers, devices, and preferences on the Alerts page.
-                    </p>
+              <div className="flex flex-col gap-4 rounded-2xl border border-border bg-card/40 p-5 backdrop-blur-md">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0 flex items-start gap-2">
+                    <Bell className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" />
+                    <div>
+                      <h2 className="text-sm font-medium text-foreground">Alerts</h2>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Master switch — overrides every channel, category, and custom rule.
+                      </p>
+                    </div>
                   </div>
+                  <Switch
+                    checked={prefs.master_enabled}
+                    onCheckedChange={(v) => void updatePrefs({ master_enabled: v })}
+                    aria-label="Master alerts toggle"
+                  />
                 </div>
-                <Button asChild variant="outline" size="sm" className="shrink-0">
-                  <Link to="/alerts">Manage alerts</Link>
-                </Button>
+                <div className="flex flex-col gap-2 border-t border-border/60 pt-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs text-muted-foreground">
+                    Manage triggers, devices, and preferences on the Alerts page.
+                  </p>
+                  <Button asChild variant="outline" size="sm" className="shrink-0">
+                    <Link to="/alerts">Manage alerts</Link>
+                  </Button>
+                </div>
               </div>
 
               <AccordionItem
