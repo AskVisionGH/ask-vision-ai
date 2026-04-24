@@ -725,13 +725,13 @@ const TreasuryTab = () => {
           ))}
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={load} disabled={loading}>
-            <RefreshCw className={`mr-1 h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+          <Button size="sm" onClick={triggerSync} disabled={syncing || loading}>
+            {syncing || loading ? (
+              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-1 h-3.5 w-3.5" />
+            )}
             Refresh
-          </Button>
-          <Button size="sm" onClick={triggerSync} disabled={syncing}>
-            {syncing ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
-            Sync now
           </Button>
         </div>
       </div>
@@ -754,7 +754,7 @@ const TreasuryTab = () => {
               {filtered.length === 0 && !loading ? (
                 <TableRow>
                   <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
-                    No fees recorded yet. Press "Sync now" to backfill from sweeps and the ETH treasury.
+                    No fees recorded yet. Press "Refresh" to backfill from sweeps and the ETH treasury.
                   </TableCell>
                 </TableRow>
               ) : null}
