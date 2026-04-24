@@ -25,16 +25,15 @@ export const NotificationsSettings = () => {
   const { prefs, loading, update } = useNotificationPreferences();
   const push = useWebPush();
   const [savingQuiet, setSavingQuiet] = useState(false);
-  const [quietStart, setQuietStart] = useState<string>("");
-  const [quietEnd, setQuietEnd] = useState<string>("");
+  const [quietStart, setQuietStart] = useState<string>("22:00");
+  const [quietEnd, setQuietEnd] = useState<string>("08:00");
 
-  // Hydrate local quiet-hours inputs from prefs on first load.
-  const hydrated = useState(() => false);
-  if (prefs && !hydrated[0]) {
-    setQuietStart(prefs.quiet_start ?? "22:00");
-    setQuietEnd(prefs.quiet_end ?? "08:00");
-    hydrated[1](true);
-  }
+  // Hydrate quiet-hours inputs from prefs the first time they arrive.
+  useEffect(() => {
+    if (!prefs) return;
+    if (prefs.quiet_start) setQuietStart(prefs.quiet_start.slice(0, 5));
+    if (prefs.quiet_end) setQuietEnd(prefs.quiet_end.slice(0, 5));
+  }, [prefs]);
 
   if (loading || !prefs) {
     return <p className="text-xs text-muted-foreground/70">Loading…</p>;
