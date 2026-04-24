@@ -22,8 +22,13 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const INTEGRATOR = "vision-ai";   // <-- registered at https://li.fi/integrator-portal
+const INTEGRATOR = "vision-ai";   // <-- registered at https://portal.li.fi/
 const FEE_RATIO = 0.01;            // 1% — LI.FI accepts 0..0.03 as a decimal
+// Until the integrator + fee wallet are configured on the LI.FI portal, set
+// the LIFI_FEES_ENABLED secret to "true" to start charging the 1% cut.
+// Without this flag we still send the integrator name (for analytics) but
+// omit the fee param so quotes don't 502.
+const FEES_ENABLED = (Deno.env.get("LIFI_FEES_ENABLED") ?? "").toLowerCase() === "true";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
