@@ -130,7 +130,6 @@ export const TradePro = ({ tab, onTabChange }: Props) => {
   const [inputToken, setInputToken] = useState<TokenMeta>(USDC_TOKEN);
   const [outputToken, setOutputToken] = useState<TokenMeta>(SOL_TOKEN);
   const [sellAmount, setSellAmount] = useState("");
-  const [advancedMode, setAdvancedMode] = useState<AdvancedMode>("tpsl");
   const [entryMode, setEntryMode] = useState<EntryMode>("market");
 
   // TP/SL prices in USD (against the OUTPUT token's USD price)
