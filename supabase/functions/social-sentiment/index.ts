@@ -198,7 +198,7 @@ async function buildFreeSentiment(resolved: ResolvedToken): Promise<SocialSentim
       headline: `No social chatter found for $${resolved.symbol} in the last 48h`,
       series: [],
       topPosts: [],
-      sources: ["Pump.fun", "Reddit", neynarKey ? "Farcaster" : null].filter(Boolean) as string[],
+      sources: ["Pump.fun", "Reddit", "Hacker News", neynarKey ? "Farcaster" : null].filter(Boolean) as string[],
       reportUrl: null,
       error: `No reliable social data for $${resolved.symbol} yet — too new or too quiet.`,
     };
