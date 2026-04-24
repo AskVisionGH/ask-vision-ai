@@ -632,8 +632,9 @@ serve(async (req) => {
               eventType = silent ? null : "wallet_balance";
             } else if (name === "get_token_info") {
               const args = safeJson(tc.function?.arguments);
+              const silent = args.silent === true;
               result = await invokeFn("token-info", { query: args.query ?? "" }, req);
-              eventType = "token_info";
+              eventType = silent ? null : "token_info";
             } else if (name === "get_trending") {
               result = await invokeFn("trending-tokens", {}, req);
               eventType = "trending";
