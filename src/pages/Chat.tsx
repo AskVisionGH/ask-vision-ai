@@ -30,9 +30,9 @@ import { streamChat, type ChatMessage, type ToolEvent } from "@/lib/chat-stream"
 import { cn } from "@/lib/utils";
 
 const SUGGESTIONS = [
+  "Swap 1 SOL into USDC",
+  "Bridge 0.5 SOL to ETH on Ethereum",
   "Find smart money buying memecoins right now",
-  "Scan this contract for honeypot risk",
-  "What are whales accumulating today?",
   "Show me the hottest tokens trending on Solana",
 ];
 
