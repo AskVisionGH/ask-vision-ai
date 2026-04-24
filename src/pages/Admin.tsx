@@ -41,6 +41,21 @@ type SweepRun = {
   error_message: string | null;
 };
 
+type TreasuryFee = {
+  id: string;
+  chain: "solana" | "ethereum";
+  treasury_address: string;
+  source_kind: "swap_fee" | "dca_fee" | "bridge_fee" | "sweep" | "limit_fee" | "transfer_fee" | "other";
+  asset_symbol: string | null;
+  asset_address: string | null;
+  amount: number;
+  amount_usd: number | null;
+  signature: string;
+  from_address: string | null;
+  block_time: string;
+  metadata: Record<string, unknown> | null;
+};
+
 // Full profile so the onboarding-answers dialog has everything it needs.
 type ProfileRow = {
   user_id: string;
