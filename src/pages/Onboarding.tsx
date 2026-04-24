@@ -238,7 +238,7 @@ const Onboarding = () => {
                     Welcome to <span className="font-serif-italic text-primary">Vision</span>
                   </h1>
                   <p className="mt-2 text-sm text-muted-foreground">
-                    A few quick questions so I know how to talk with you. All optional, takes under a minute.
+                    A few quick questions so I know how to talk with you. Just your name is required — the rest is optional.
                   </p>
                 </div>
 
