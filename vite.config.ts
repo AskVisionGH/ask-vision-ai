@@ -3,7 +3,6 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 import { nodePolyfills } from "vite-plugin-node-polyfills";
-import legacy from "@vitejs/plugin-legacy";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -14,11 +13,14 @@ export default defineConfig(({ mode }) => ({
       overlay: false,
     },
   },
-  // Vite's default build.target is `es2020`, which iOS Safari < 14 (and many
-  // mobile in-app browsers like Instagram/X/Discord on older devices) cannot
-  // parse — they silently fail with a permanent white screen. Lower the
-  // baseline and use @vitejs/plugin-legacy to ship a transpiled fallback bundle
-  // for those older WebKits.
+  // Vite's default build.target is `es2020`. Several iOS in-app browsers
+  // (Instagram/X/Discord WebViews on older iPhones) and any iOS Safari < 14
+  // silently fail to parse es2020 syntax → permanent white screen with no
+  // visible error. Lowering to es2019 keeps modern syntax for everyone on
+  // iOS 14+ while widening compatibility with embedded WebKit.
+  // (We don't ship a legacy fallback bundle: @solana/web3.js & bs58 use
+  // BigInt literals, which iOS < 14 can't parse at all — those devices
+  // can't run the wallet stack regardless of transpilation.)
   build: {
     target: "es2019",
   },
@@ -32,24 +34,6 @@ export default defineConfig(({ mode }) => ({
       globals: { Buffer: true, process: true, global: true },
       protocolImports: true,
     }),
-    // Production-only: emit a second bundle that runs on older iOS WebKit and
-    // older Android WebViews / in-app browsers. Modern browsers still get the
-    // fast ES2019 bundle via <script type="module">; legacy browsers fall back
-    // to a transpiled chunk via the SystemJS loader.
-    // We deliberately do NOT enable `modernPolyfills` because the Solana libs
-    // use BigInt literals (`0n`) which esbuild can't transpile — the legacy
-    // bundle handles old browsers and the modern bundle stays at ES2019.
-    mode !== "development" &&
-      legacy({
-        targets: [
-          "iOS >= 14",
-          "Safari >= 14",
-          "Chrome >= 64",
-          "Firefox >= 67",
-          "Edge >= 79",
-        ],
-        renderLegacyChunks: true,
-      }),
     mode === "development" && componentTagger(),
   ].filter(Boolean),
   resolve: {
