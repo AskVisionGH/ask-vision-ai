@@ -75,14 +75,14 @@ export const AlertBell = () => {
 
         {items.length === 0 ? (
           <div className="px-3 py-8 text-center text-xs text-muted-foreground/70">
-            No notifications yet.
+            No alerts yet.
             <br />
-            Enable alerts in{" "}
+            Set up triggers on the{" "}
             <Link
               to="/alerts"
               className="text-primary hover:underline"
             >
-              settings
+              Alerts page
             </Link>
             .
           </div>
