@@ -240,6 +240,127 @@ async function syncDcaFees(supabase: ReturnType<typeof createClient>): Promise<n
   return await upsertFees(supabase, rows);
 }
 
+// ---------------- Solana bridge fees ----------------
+
+// For each bridge tx_event we recorded, look up the on-chain transaction on
+// Helius and find the SOL/SPL transfer that landed in the SOL treasury. That
+// transfer IS the LI.FI integrator fee (paid inline on the source-chain
+// swap, no claim step needed). We only consider events from the last 90 days
+// and skip anything we already indexed.
+async function syncSolBridgeFees(supabase: ReturnType<typeof createClient>): Promise<number> {
+  const heliusKey = Deno.env.get("HELIUS_API_KEY");
+  if (!heliusKey) throw new Error("HELIUS_API_KEY not configured");
+
+  const since = new Date(Date.now() - 90 * 86400_000).toISOString();
+  const { data: events, error } = await supabase
+    .from("tx_events")
+    .select("id, signature, value_usd, user_id, created_at, metadata")
+    .eq("kind", "bridge")
+    .gte("created_at", since)
+    .order("created_at", { ascending: false })
+    .limit(500);
+  if (error) throw error;
+  if (!events || events.length === 0) return 0;
+
+  // Skip signatures we've already indexed (cheap pre-filter).
+  const sigs = events.map((e) => e.signature as string);
+  const { data: existing } = await supabase
+    .from("treasury_fees")
+    .select("signature")
+    .eq("chain", "solana")
+    .in("signature", sigs);
+  const seen = new Set((existing ?? []).map((r) => r.signature as string));
+  const todo = events.filter((e) => !seen.has(e.signature as string));
+  if (todo.length === 0) return 0;
+
+  const heliusUrl = `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`;
+  const rows: FeeRow[] = [];
+
+  // Spot SOL price for USD valuation.
+  const solUsd = await fetchSolUsdPrice();
+
+  for (const ev of todo) {
+    try {
+      const sig = ev.signature as string;
+      const resp = await fetch(heliusUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "getTransaction",
+          params: [sig, { encoding: "jsonParsed", maxSupportedTransactionVersion: 0 }],
+        }),
+      });
+      const data = await resp.json();
+      const tx = data?.result;
+      if (!tx) continue;
+      const blockTime = tx.blockTime
+        ? new Date(tx.blockTime * 1000).toISOString()
+        : (ev.created_at as string);
+
+      // Walk every parsed instruction (top-level + inner) for a System
+      // Program transfer whose destination is our treasury.
+      const allInstructions: any[] = [];
+      const top = tx.transaction?.message?.instructions ?? [];
+      for (const ix of top) allInstructions.push(ix);
+      for (const inner of tx.meta?.innerInstructions ?? []) {
+        for (const ix of inner.instructions ?? []) allInstructions.push(ix);
+      }
+
+      let lamports = 0;
+      let from: string | null = null;
+      for (const ix of allInstructions) {
+        const info = ix?.parsed?.info;
+        if (!info) continue;
+        if (
+          ix.program === "system" &&
+          ix.parsed?.type === "transfer" &&
+          info.destination === SOL_TREASURY
+        ) {
+          lamports += Number(info.lamports ?? 0);
+          from = info.source ?? from;
+        }
+      }
+      if (lamports === 0) continue;
+      const amount = lamports / 1e9;
+      rows.push({
+        chain: "solana",
+        treasury_address: SOL_TREASURY,
+        source_kind: "bridge_fee",
+        asset_symbol: "SOL",
+        asset_address: null,
+        amount,
+        amount_usd: solUsd != null ? amount * solUsd : null,
+        signature: sig,
+        from_address: from,
+        block_time: blockTime,
+        related_user_id: ev.user_id as string,
+        related_tx_event_id: ev.id as string,
+        metadata: { source: "helius", lamports, sol_usd: solUsd },
+      });
+    } catch (e) {
+      console.warn("syncSolBridgeFees: skipping", ev.signature, e);
+    }
+  }
+
+  return await upsertFees(supabase, rows);
+}
+
+async function fetchSolUsdPrice(): Promise<number | null> {
+  try {
+    const resp = await fetch(
+      "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd",
+    );
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const price = data?.solana?.usd;
+    return typeof price === "number" ? price : null;
+  } catch {
+    return null;
+  }
+}
+
 // ---------------- ETH bridge fees ----------------
 
 interface EtherscanTx {
