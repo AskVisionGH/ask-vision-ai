@@ -409,7 +409,7 @@ export const TradeSwap = () => {
             onClick={resetSwap}
             className="ease-vision mt-2 w-full font-mono text-[11px] uppercase tracking-wider"
           >
-            Swap again
+            New swap
           </Button>
         </div>
       </div>
