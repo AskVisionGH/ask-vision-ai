@@ -65,12 +65,12 @@ export const useAlertRules = () => {
       return;
     }
     setLoading(true);
-    const { data } = await supabase
-      .from("alert_rules")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
-    setRules((data as AlertRule[] | null) ?? []);
+      const { data } = await supabase
+        .from("alert_rules")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+    setRules((data as unknown as AlertRule[] | null) ?? []);
     setLoading(false);
   }, [user]);
 
