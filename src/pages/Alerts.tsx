@@ -30,7 +30,7 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { VisionLogo } from "@/components/VisionLogo";
 import { AlertBell } from "@/components/AlertBell";
 import { ConnectWalletButton } from "@/components/ConnectWalletButton";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Menu } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
@@ -113,17 +113,15 @@ const Alerts = () => {
       <div className="relative z-10 flex flex-1 flex-col">
         <header className="flex shrink-0 items-center justify-between border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
           <div className="flex items-center gap-2">
-            <SheetTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9 text-muted-foreground md:hidden"
-                onClick={() => setMobileOpen(true)}
-                aria-label="Open sidebar"
-              >
-                <Menu className="h-4 w-4" />
-              </Button>
-            </SheetTrigger>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 text-muted-foreground md:hidden"
+              onClick={() => setMobileOpen(true)}
+              aria-label="Open sidebar"
+            >
+              <Menu className="h-4 w-4" />
+            </Button>
             <div className="flex items-center gap-2 md:hidden">
               <VisionLogo size={20} />
               <span className="font-mono text-xs tracking-widest uppercase text-muted-foreground">
