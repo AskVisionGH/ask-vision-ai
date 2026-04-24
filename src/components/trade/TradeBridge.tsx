@@ -179,6 +179,9 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
   const [toToken, setToToken] = useState<BridgeToken | null>(null);
   const [amount, setAmount] = useState("");
   const [slippageBps] = useState(50);
+  // Required when destination is on a different chain family (e.g. SOL→EVM).
+  // For same-family bridges (rare in v1) we default to the source address.
+  const [destAddress, setDestAddress] = useState("");
 
   const [quote, setQuote] = useState<QuoteData | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
