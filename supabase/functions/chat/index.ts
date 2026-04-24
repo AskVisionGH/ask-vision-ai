@@ -20,7 +20,7 @@ Tools (call them whenever relevant — don't ask permission, don't pretend you c
 - \`get_wallet_balance\` — fetches a Solana wallet's holdings. Defaults to the connected user's wallet if no \`address\` is given. If the user includes ANY base58 wallet address in their message (e.g., "holdings 8xELsrJN..." or "what does CjkG...U1eh hold"), pass that exact address as the \`address\` argument — do NOT default to the connected wallet.
 - \`get_token_info\` — fetches live price, market cap, volume, and 24h change for a single token. Works for Solana SPL tokens AND major-cap coins on any chain (BTC, ETH, XRP, BNB, ADA, DOGE, SUI, AVAX, etc — anything in the CoinGecko top-250). Use whenever the user names a token ($SOL, JUP, BONK, BTC, ETH) or pastes a mint address. Argument: \`query\` (ticker like "BTC" or full mint address).
 - \`get_trending\` — fetches the top trending Solana tokens by 24h volume. ALWAYS call this for any question about what's trending, hot, popular, top tokens, or what's moving on Solana — never answer from memory.
-- \`prepare_swap\` — fetches a live Jupiter quote for swapping one token into another. Call this whenever the user wants to swap, trade, exchange, or convert tokens (e.g. "swap 0.1 SOL for USDC", "trade 100 BONK to SOL"). Arguments: \`inputToken\`, \`outputToken\` (tickers or mint addresses), \`amount\` (decimal of inputToken), and optional \`slippageBps\` (default 50 = 0.5%). NEVER execute — this only quotes. PROACTIVE BALANCE LOOKUP: if the user says "all my X", "100% of my X", "half my X", "max", "everything", "dump my X", or any percentage/fraction of a holding, you MUST first silently call \`get_wallet_balance\` to read their actual balance, compute the amount yourself (for SOL leave ~0.01 SOL as buffer for fees; for SPL tokens use the full balance for "all/100%"), then call \`prepare_swap\` with that exact decimal amount. Do NOT ask the user "how much" when they already said "all" or gave a percentage — just look it up. Same rule for \`prepare_transfer\`.
+- \`prepare_swap\` — fetches a live Jupiter quote for swapping one token into another. Call this whenever the user wants to swap, trade, exchange, or convert tokens (e.g. "swap 0.1 SOL for USDC", "trade 100 BONK to SOL"). Arguments: \`inputToken\`, \`outputToken\` (tickers or mint addresses), \`amount\` (decimal of inputToken), and optional \`slippageBps\` (default 50 = 0.5%). NEVER execute — this only quotes. PROACTIVE BALANCE LOOKUP: if the user says "all my X", "100% of my X", "half my X", "max", "everything", "dump my X", or any percentage/fraction of a holding, you MUST first call \`get_wallet_balance\` with \`silent: true\` to read their actual balance (this fetches the data WITHOUT showing the portfolio card), then compute the amount yourself (for SOL leave ~0.01 SOL as buffer for fees; for SPL tokens use the full balance for "all/100%"), then call \`prepare_swap\` with that exact decimal amount. Do NOT ask the user "how much" when they already said "all" or gave a percentage — just look it up silently. Same rule for \`prepare_transfer\`.
 - \`prepare_transfer\` — prepares a transfer of SOL or any SPL token to another wallet, by address, .sol name, or saved contact name. Use whenever the user wants to send, transfer, or pay tokens (e.g. "send 0.05 SOL to toly.sol", "send 10 USDC to Mom"). Arguments: \`token\` (ticker or mint), \`amount\` (decimal), \`recipient\` (wallet address, .sol name, or contact nickname). NEVER execute — the user signs in the card.
 - \`list_contacts\` — returns the user's saved address book (names + wallets). Call when they ask "who are my contacts", "who have I saved", or want to pick a recipient.
 - \`save_contact\` — saves a wallet under a friendly name. Call when the user says "save this as Mom", "add 7xKX... to my contacts as Cold wallet", etc.
@@ -58,13 +58,17 @@ const TOOLS = [
     function: {
       name: "get_wallet_balance",
       description:
-        "Fetch Solana wallet holdings (SOL + SPL tokens, USD values, total portfolio value). Defaults to the connected user's wallet. If the user pastes or mentions any other wallet address (base58, ~32-44 chars), pass it as the `address` argument so we look up THAT wallet, not the connected one.",
+        "Fetch Solana wallet holdings (SOL + SPL tokens, USD values, total portfolio value). Defaults to the connected user's wallet. If the user pastes or mentions any other wallet address (base58, ~32-44 chars), pass it as the `address` argument so we look up THAT wallet, not the connected one. Set `silent: true` ONLY when you're looking up the balance internally to compute an amount for a swap/transfer (e.g. user said 'all my USDC') — that suppresses the portfolio card so the user just sees the swap/transfer preview.",
       parameters: {
         type: "object",
         properties: {
           address: {
             type: "string",
             description: "Optional Solana wallet address to look up. Omit to use the connected user's wallet.",
+          },
+          silent: {
+            type: "boolean",
+            description: "If true, fetch the balance but DO NOT show the portfolio card to the user. Use only for internal balance lookups when computing 'all my X' / percentage amounts for a follow-up swap or transfer.",
           },
         },
         additionalProperties: false,
@@ -611,12 +615,16 @@ serve(async (req) => {
             if (name === "get_wallet_balance") {
               const args = safeJson(tc.function?.arguments);
               const target = (args.address ?? "").trim() || walletAddress;
+              const silent = args.silent === true;
               if (!target) {
                 result = { error: "No wallet connected" };
               } else {
                 result = await invokeFn("wallet-balance", { address: target }, req);
               }
-              eventType = "wallet_balance";
+              // When the model used silent mode (internal lookup for a swap/
+              // transfer "all my X" amount), suppress the portfolio card so
+              // the user only sees the swap/transfer preview that follows.
+              eventType = silent ? null : "wallet_balance";
             } else if (name === "get_token_info") {
               const args = safeJson(tc.function?.arguments);
               result = await invokeFn("token-info", { query: args.query ?? "" }, req);
