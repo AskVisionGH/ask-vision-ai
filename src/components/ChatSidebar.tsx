@@ -358,6 +358,14 @@ export const ChatSidebar = ({
           <PanelLeftOpen className="h-4 w-4" />
         </Button>
         <div className="mt-3 flex flex-col items-center gap-1.5">
+          <Link
+            to="/chat"
+            className="flex h-8 w-8 items-center justify-center rounded-md bg-secondary text-foreground hover:bg-secondary/80"
+            aria-label="Chat"
+            title="Chat"
+          >
+            <MessageSquare className="h-4 w-4" />
+          </Link>
           <Button
             variant="ghost"
             size="icon"
@@ -369,12 +377,12 @@ export const ChatSidebar = ({
             <MessageSquarePlus className="h-4 w-4" />
           </Button>
           <Link
-            to="/contacts"
+            to="/trade"
             className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
-            aria-label="Contacts"
-            title="Contacts"
+            aria-label="Trade"
+            title="Trade"
           >
-            <Users className="h-4 w-4" />
+            <Repeat className="h-4 w-4" />
           </Link>
           <Link
             to="/tracked-wallets"
@@ -385,12 +393,12 @@ export const ChatSidebar = ({
             <Radar className="h-4 w-4" />
           </Link>
           <Link
-            to="/trade"
+            to="/contacts"
             className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
-            aria-label="Trade"
-            title="Trade"
+            aria-label="Contacts"
+            title="Contacts"
           >
-            <Repeat className="h-4 w-4" />
+            <Users className="h-4 w-4" />
           </Link>
         </div>
         {isAdmin && (
