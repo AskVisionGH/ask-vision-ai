@@ -124,8 +124,19 @@ const Onboarding = () => {
   const [skipping, setSkipping] = useState(false);
   const skipAll = async () => {
     if (skipping || finishing) return;
+    // Display name is the only required field — require it even when skipping
+    // the rest of onboarding so every account has something to show.
+    if (!isNameValid) {
+      toast.error("Pick a display name first", {
+        description: "It's the only thing we need before you head in.",
+      });
+      return;
+    }
     setSkipping(true);
-    const ok = await updateProfile({ onboarding_completed: true });
+    const ok = await updateProfile({
+      display_name: trimmedName,
+      onboarding_completed: true,
+    });
     if (!ok) {
       setSkipping(false);
       toast.error("Couldn't skip", {
