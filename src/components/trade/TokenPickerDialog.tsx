@@ -1,0 +1,218 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Search, Loader2, X } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { TokenLogo } from "@/components/TokenLogo";
+import { cn } from "@/lib/utils";
+
+export interface TokenMeta {
+  symbol: string;
+  name: string;
+  address: string;
+  decimals: number;
+  logo: string | null;
+  priceUsd: number | null;
+}
+
+interface Props {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  onSelect: (t: TokenMeta) => void;
+  excludeAddress?: string;
+}
+
+const POPULAR: TokenMeta[] = [
+  { symbol: "SOL", name: "Solana", address: "So11111111111111111111111111111111111111112", decimals: 9, logo: "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png", priceUsd: null },
+  { symbol: "USDC", name: "USD Coin", address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", decimals: 6, logo: "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/logo.png", priceUsd: 1 },
+  { symbol: "USDT", name: "Tether", address: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", decimals: 6, logo: "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB/logo.svg", priceUsd: 1 },
+  { symbol: "JUP", name: "Jupiter", address: "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN", decimals: 6, logo: null, priceUsd: null },
+  { symbol: "BONK", name: "Bonk", address: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", decimals: 5, logo: null, priceUsd: null },
+  { symbol: "WIF", name: "dogwifhat", address: "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm", decimals: 6, logo: null, priceUsd: null },
+  { symbol: "JTO", name: "Jito", address: "jtojtomepa8beP8AuQc6eXt5FriJwfFMwQx2v2f9mCL", decimals: 9, logo: null, priceUsd: null },
+];
+
+const RECENT_KEY = "vision:recent-tokens";
+
+const getRecent = (): TokenMeta[] => {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(RECENT_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+};
+
+export const pushRecentToken = (t: TokenMeta) => {
+  if (typeof window === "undefined") return;
+  try {
+    const cur = getRecent();
+    const next = [t, ...cur.filter((c) => c.address !== t.address)].slice(0, 6);
+    window.localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+  } catch { /* ignore */ }
+};
+
+const fmtPrice = (n: number | null) => {
+  if (n == null) return "";
+  if (n < 0.01 && n > 0) return `$${n.toExponential(2)}`;
+  return `$${n.toLocaleString("en-US", { maximumFractionDigits: n < 1 ? 6 : 2 })}`;
+};
+
+export const TokenPickerDialog = ({ open, onOpenChange, onSelect, excludeAddress }: Props) => {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<TokenMeta[]>([]);
+  const [searching, setSearching] = useState(false);
+  const recent = useMemo(() => (open ? getRecent() : []), [open]);
+  const debounceRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setQuery("");
+      setResults([]);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    const q = query.trim();
+    if (!q) {
+      setResults([]);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    debounceRef.current = window.setTimeout(async () => {
+      try {
+        const r = await fetch(`https://lite-api.jup.ag/tokens/v2/search?query=${encodeURIComponent(q)}`);
+        if (!r.ok) {
+          setResults([]);
+          return;
+        }
+        const arr = await r.json();
+        const tokens: TokenMeta[] = (Array.isArray(arr) ? arr : [])
+          .slice(0, 30)
+          .map((t: any) => ({
+            symbol: t.symbol ?? "?",
+            name: t.name ?? "Unknown",
+            address: t.id ?? t.address ?? "",
+            decimals: t.decimals ?? 9,
+            logo: t.icon ?? t.logoURI ?? null,
+            priceUsd: typeof t.usdPrice === "number" ? t.usdPrice : (typeof t.price === "number" ? t.price : null),
+          }))
+          .filter((t) => t.address);
+        setResults(tokens);
+      } catch {
+        setResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 220);
+    return () => {
+      if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    };
+  }, [query]);
+
+  const filtered = (list: TokenMeta[]) =>
+    excludeAddress ? list.filter((t) => t.address !== excludeAddress) : list;
+
+  const showResults = query.trim().length > 0;
+
+  const pick = (t: TokenMeta) => {
+    pushRecentToken(t);
+    onSelect(t);
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md gap-0 p-0">
+        <DialogHeader className="border-b border-border/60 px-5 pb-3 pt-5">
+          <DialogTitle className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+            Select a token
+          </DialogTitle>
+        </DialogHeader>
+        <div className="border-b border-border/60 px-5 py-3">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
+            <Input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search name, symbol or paste mint…"
+              className="h-9 border-border/60 bg-secondary/40 pl-8 pr-8 text-sm placeholder:text-muted-foreground/50"
+            />
+            {query && (
+              <button
+                onClick={() => setQuery("")}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label="Clear"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="max-h-[420px] overflow-y-auto">
+          {showResults ? (
+            <div className="px-2 py-2">
+              {searching && results.length === 0 ? (
+                <div className="flex items-center justify-center py-8 text-muted-foreground/60">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                </div>
+              ) : filtered(results).length === 0 ? (
+                <div className="px-3 py-8 text-center text-xs text-muted-foreground/60">
+                  No tokens found.
+                </div>
+              ) : (
+                filtered(results).map((t) => <TokenRow key={t.address} token={t} onSelect={pick} />)
+              )}
+            </div>
+          ) : (
+            <>
+              {recent.length > 0 && (
+                <div className="px-2 py-2">
+                  <SectionLabel>Recent</SectionLabel>
+                  {filtered(recent).map((t) => (
+                    <TokenRow key={`r-${t.address}`} token={t} onSelect={pick} />
+                  ))}
+                </div>
+              )}
+              <div className="px-2 py-2">
+                <SectionLabel>Popular</SectionLabel>
+                {filtered(POPULAR).map((t) => (
+                  <TokenRow key={`p-${t.address}`} token={t} onSelect={pick} />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+const SectionLabel = ({ children }: { children: React.ReactNode }) => (
+  <div className="px-3 pb-1 pt-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/60">
+    {children}
+  </div>
+);
+
+const TokenRow = ({ token, onSelect }: { token: TokenMeta; onSelect: (t: TokenMeta) => void }) => (
+  <button
+    type="button"
+    onClick={() => onSelect(token)}
+    className={cn(
+      "ease-vision flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left",
+      "hover:bg-secondary/60",
+    )}
+  >
+    <TokenLogo logo={token.logo} symbol={token.symbol} size={32} />
+    <div className="min-w-0 flex-1">
+      <p className="truncate text-sm font-medium text-foreground">{token.symbol}</p>
+      <p className="truncate text-[11px] text-muted-foreground">{token.name}</p>
+    </div>
+    {token.priceUsd != null && (
+      <span className="font-mono text-[11px] text-muted-foreground">{fmtPrice(token.priceUsd)}</span>
+    )}
+  </button>
+);
