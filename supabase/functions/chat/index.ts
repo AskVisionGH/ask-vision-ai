@@ -520,6 +520,10 @@ serve(async (req) => {
               if (!delta) continue;
 
               if (typeof delta.content === "string" && delta.content.length > 0) {
+                // First text token of this iteration — flush any buffered
+                // tool cards from the previous iteration so the UI shows the
+                // text first and then the card lands beneath it smoothly.
+                if (pendingCards.length > 0) flushPendingCards();
                 assistantText += delta.content;
                 send("delta", { text: delta.content });
               }
