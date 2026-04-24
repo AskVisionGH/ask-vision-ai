@@ -143,6 +143,7 @@ export const AlertPreferences = () => {
           checked={prefs.cat_price}
           onChange={(v) => void flip("cat_price", v)}
           disabled={disabled}
+          comingSoon
         />
         <ToggleRow
           label="Wallet activity"
@@ -150,6 +151,7 @@ export const AlertPreferences = () => {
           checked={prefs.cat_wallet_activity}
           onChange={(v) => void flip("cat_wallet_activity", v)}
           disabled={disabled}
+          comingSoon
         />
         <ToggleRow
           label="Order fills"
@@ -164,6 +166,7 @@ export const AlertPreferences = () => {
           checked={prefs.cat_news_sentiment}
           onChange={(v) => void flip("cat_news_sentiment", v)}
           disabled={disabled}
+          comingSoon
         />
       </section>
 
