@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
-import { VersionedTransaction } from "@solana/web3.js";
+import { Transaction, VersionedTransaction } from "@solana/web3.js";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -68,6 +68,8 @@ type Phase =
   | { name: "idle" }
   | { name: "authing" }
   | { name: "preparing" }
+  | { name: "awaiting_fee_signature" }
+  | { name: "submitting_fee" }
   | { name: "awaiting_signature" }
   | { name: "submitting" }
   | { name: "success"; orderId: string; signature: string | null; orderType: string }
@@ -269,13 +271,49 @@ export const TradeProBracket = ({ expiryMs }: TradeProBracketProps) => {
 
       setPhase({ name: "preparing" });
 
-      // Step 1: ensure vault exists
-      await supaPost("trigger-v2-vault", { jwt });
-
-      // Step 2: craft deposit
       const inputAmountAtomic = Math.floor(numericSell * Math.pow(10, inputToken.decimals));
       if (inputAmountAtomic <= 0) throw new Error("Amount too small");
 
+      // ---- Step 1: Collect 1% upfront platform fee ----
+      const feeBuilt = await supaPost("dca-fee-build", {
+        user: publicKey.toBase58(),
+        inputMint: inputToken.address,
+        totalAmountAtomic: String(inputAmountAtomic),
+        decimals: inputToken.decimals,
+      });
+      const feeTxB64: string = feeBuilt?.transaction;
+      if (!feeTxB64) throw new Error("Fee build failed");
+
+      setPhase({ name: "awaiting_fee_signature" });
+      const feeBytes = Uint8Array.from(atob(feeTxB64), (c) => c.charCodeAt(0));
+      const feeTx = Transaction.from(feeBytes);
+      let signedFee: Transaction;
+      try {
+        signedFee = await signTransaction(feeTx);
+      } catch {
+        if (mounted.current) setPhase({ name: "error", message: "Cancelled — try again." });
+        return;
+      }
+      const signedFeeB64 = btoa(
+        String.fromCharCode(...signedFee.serialize({ requireAllSignatures: true })),
+      );
+
+      setPhase({ name: "submitting_fee" });
+      await supaPost("tx-submit", {
+        signedTransaction: signedFeeB64,
+        kind: "transfer",
+        inputMint: inputToken.address,
+        recipient: "treasury",
+        walletAddress: publicKey.toBase58(),
+        metadata: { source: "pro_bracket_platform_fee" },
+      });
+
+      setPhase({ name: "preparing" });
+
+      // Step 2: ensure vault exists
+      await supaPost("trigger-v2-vault", { jwt });
+
+      // Step 3: craft deposit
       const deposit = await supaPost("trigger-v2-deposit-craft", {
         jwt,
         inputMint: inputToken.address,
@@ -287,7 +325,7 @@ export const TradeProBracket = ({ expiryMs }: TradeProBracketProps) => {
       const depositRequestId: string = deposit.requestId;
       if (!depositTxB64 || !depositRequestId) throw new Error("Deposit failed");
 
-      // Step 3: sign deposit
+      // Step 4: sign deposit
       setPhase({ name: "awaiting_signature" });
       const txBytes = Uint8Array.from(atob(depositTxB64), (c) => c.charCodeAt(0));
       const tx = VersionedTransaction.deserialize(txBytes);
@@ -405,12 +443,16 @@ export const TradeProBracket = ({ expiryMs }: TradeProBracketProps) => {
   const isBusy =
     phase.name === "authing" ||
     phase.name === "preparing" ||
+    phase.name === "awaiting_fee_signature" ||
+    phase.name === "submitting_fee" ||
     phase.name === "awaiting_signature" ||
     phase.name === "submitting" ||
     jwtSigning;
 
   const busyLabel =
     phase.name === "authing" || jwtSigning ? "Sign in to continue…"
+    : phase.name === "awaiting_fee_signature" ? "Approve 1% platform fee…"
+    : phase.name === "submitting_fee" ? "Collecting fee…"
     : phase.name === "preparing" ? "Building order…"
     : phase.name === "awaiting_signature" ? "Approve deposit in wallet…"
     : phase.name === "submitting" ? "Submitting…"
@@ -581,6 +623,45 @@ export const TradeProBracket = ({ expiryMs }: TradeProBracketProps) => {
             <StatsRow
               label={
                 <span className="flex items-center gap-1">
+                  Platform fee
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        className="inline-flex items-center justify-center text-muted-foreground/60 hover:text-foreground focus:outline-none"
+                        aria-label="Platform fee info"
+                      >
+                        <Info className="h-3 w-3" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="top"
+                      align="start"
+                      sideOffset={6}
+                      collisionPadding={12}
+                      className="max-w-[240px]"
+                    >
+                      <p className="font-mono text-[11px] leading-relaxed">
+                        1% of your spend, collected upfront in a separate signature before the deposit.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </span>
+              }
+              value={
+                <span className="font-mono text-[12px] text-foreground">
+                  1% upfront
+                  {sellUsd != null && sellUsd > 0 && (
+                    <span className="ml-1 text-muted-foreground">
+                      (≈ {fmtUsd(sellUsd * 0.01)})
+                    </span>
+                  )}
+                </span>
+              }
+            />
+            <StatsRow
+              label={
+                <span className="flex items-center gap-1">
                   Min order
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -643,8 +724,9 @@ export const TradeProBracket = ({ expiryMs }: TradeProBracketProps) => {
         </div>
 
         <p className="px-1 text-center font-mono text-[10px] leading-relaxed text-muted-foreground">
-          Pro brackets use a managed vault. You'll sign once to authenticate, then once per
-          deposit. Funds stay custodied until your bracket fills or you withdraw.
+          Pro brackets use a managed vault. You'll sign once to authenticate, once for the 1%
+          platform fee, then once to deposit. Funds stay custodied until your bracket fills or
+          you withdraw.
         </p>
 
         {/* Open brackets */}
