@@ -81,20 +81,23 @@ export const useAlertRules = () => {
   const create = useCallback(
     async (rule: NewAlertRule): Promise<AlertRule | null> => {
       if (!user) return null;
+      const insertRow = {
+        user_id: user.id,
+        kind: rule.kind,
+        label: rule.label,
+        enabled: rule.enabled ?? true,
+        // Supabase JSON columns accept any shape — our typed union guards input.
+        config: rule.config as unknown as Record<string, unknown>,
+      };
       const { data, error } = await supabase
         .from("alert_rules")
-        .insert({
-          user_id: user.id,
-          kind: rule.kind,
-          label: rule.label,
-          enabled: rule.enabled ?? true,
-          // Supabase JSON columns accept any shape — our typed union guards input.
-          config: rule.config as unknown as Record<string, unknown>,
-        })
+        // Cast: generated types require literal shape on insert, but our
+        // payload is structurally valid and our union-typed config gates input.
+        .insert(insertRow as never)
         .select("*")
         .single();
       if (error || !data) return null;
-      const row = data as AlertRule;
+      const row = data as unknown as AlertRule;
       setRules((cur) => [row, ...cur]);
       return row;
     },
