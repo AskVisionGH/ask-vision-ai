@@ -139,17 +139,72 @@ const TrackedWallets = () => {
   };
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-background px-4 py-8 text-foreground sm:px-6">
+    <div className="relative flex h-screen bg-background text-foreground">
       <div className="pointer-events-none absolute inset-0 bg-aurora" aria-hidden />
 
-      <div className="relative z-10 mx-auto max-w-3xl">
-        <button
-          onClick={() => navigate("/chat")}
-          className="mb-6 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground ease-vision"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Back to chat
-        </button>
+      {/* Desktop sidebar */}
+      <div
+        className={cn(
+          "relative z-10 hidden h-full shrink-0 transition-[width] duration-200 ease-vision md:flex",
+          sidebarCollapsed ? "w-14" : "w-64",
+        )}
+      >
+        <AppSidebar
+          collapsed={sidebarCollapsed}
+          onToggleCollapsed={() => setSidebarCollapsed((v) => !v)}
+          activePath={location.pathname}
+          isAdmin={isAdmin}
+          user={user}
+          profile={profile}
+          onSignOut={signOut}
+        />
+      </div>
+
+      {/* Main column */}
+      <div className="relative z-10 flex h-full min-w-0 flex-1 flex-col overflow-hidden">
+        {/* Mobile header */}
+        <header className="flex shrink-0 items-center justify-between border-b border-border/60 bg-background/60 px-4 py-3 backdrop-blur-md md:hidden">
+          <div className="flex items-center gap-2">
+            <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+              <SheetTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground"
+                  aria-label="Open menu"
+                >
+                  <Menu className="h-4 w-4" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-72 p-0 [&>button.absolute]:hidden">
+                <AppSidebar
+                  collapsed={false}
+                  activePath={location.pathname}
+                  isAdmin={isAdmin}
+                  user={user}
+                  profile={profile}
+                  onSignOut={signOut}
+                />
+              </SheetContent>
+            </Sheet>
+            <div className="flex items-center gap-2">
+              <VisionLogo size={20} />
+              <span className="font-mono text-xs tracking-widest uppercase text-muted-foreground">
+                Vision
+              </span>
+            </div>
+          </div>
+        </header>
+
+        <main className="flex-1 overflow-y-auto px-4 py-8 sm:px-6">
+          <div className="mx-auto max-w-3xl">
+            <button
+              onClick={() => navigate("/chat")}
+              className="mb-6 hidden md:flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground ease-vision"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Back to chat
+            </button>
 
         <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
           <div>
