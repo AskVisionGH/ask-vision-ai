@@ -80,10 +80,16 @@ const Onboarding = () => {
     }, 150);
   };
 
+  // Display name is required to start using the app — enforce minimum 2 chars
+  // after trimming so we don't accept whitespace-only or single-char inputs.
+  const trimmedName = name.trim();
+  const isNameValid = trimmedName.length >= 2 && trimmedName.length <= 60;
+
   const goNext = async () => {
     // Persist the per-step value so partial onboarding still saves.
     if (step === "welcome") {
-      await updateProfile({ display_name: name.trim() || null });
+      if (!isNameValid) return; // guard — button is also disabled
+      await updateProfile({ display_name: trimmedName });
     } else if (step === "experience") {
       await updateProfile({ experience });
     } else if (step === "interests") {
@@ -118,8 +124,19 @@ const Onboarding = () => {
   const [skipping, setSkipping] = useState(false);
   const skipAll = async () => {
     if (skipping || finishing) return;
+    // Display name is the only required field — require it even when skipping
+    // the rest of onboarding so every account has something to show.
+    if (!isNameValid) {
+      toast.error("Pick a display name first", {
+        description: "It's the only thing we need before you head in.",
+      });
+      return;
+    }
     setSkipping(true);
-    const ok = await updateProfile({ onboarding_completed: true });
+    const ok = await updateProfile({
+      display_name: trimmedName,
+      onboarding_completed: true,
+    });
     if (!ok) {
       setSkipping(false);
       toast.error("Couldn't skip", {
@@ -157,6 +174,7 @@ const Onboarding = () => {
   // Disable Continue when the current step requires a choice but none made.
   const canContinue = (() => {
     if (transitioning || finishing || savingAvatar) return false;
+    if (step === "welcome") return isNameValid;
     if (step === "experience") return experience !== null;
     if (step === "risk") return risk !== null;
     return true;
@@ -220,7 +238,7 @@ const Onboarding = () => {
                     Welcome to <span className="font-serif-italic text-primary">Vision</span>
                   </h1>
                   <p className="mt-2 text-sm text-muted-foreground">
-                    A few quick questions so I know how to talk with you. All optional, takes under a minute.
+                    A few quick questions so I know how to talk with you. Just your name is required — the rest is optional.
                   </p>
                 </div>
 
@@ -254,7 +272,7 @@ const Onboarding = () => {
                       htmlFor="display-name"
                       className="text-xs uppercase tracking-wider text-muted-foreground"
                     >
-                      What should I call you?
+                      What should I call you? <span className="text-primary">*</span>
                     </Label>
                     <Input
                       id="display-name"
@@ -262,7 +280,12 @@ const Onboarding = () => {
                       onChange={(e) => setName(e.target.value)}
                       placeholder="Your name"
                       maxLength={60}
+                      required
+                      aria-required="true"
                     />
+                    <p className="text-[11px] text-muted-foreground/70">
+                      Required — at least 2 characters.
+                    </p>
                   </div>
                 </div>
                 {savingAvatar && (
