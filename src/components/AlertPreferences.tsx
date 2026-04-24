@@ -146,19 +146,17 @@ export const AlertPreferences = () => {
         />
         <ToggleRow
           label="Price movements"
-          description="Sharp pumps, dumps, or level breaks on watched tokens."
+          description="Custom price rules you create in the Rules tab."
           checked={prefs.cat_price}
           onChange={(v) => void flip("cat_price", v)}
           disabled={disabled}
-          comingSoon
         />
         <ToggleRow
           label="Wallet activity"
-          description="Tracked wallets swapping, bridging, or moving funds."
+          description="Tracked wallets making moves above your set threshold."
           checked={prefs.cat_wallet_activity}
           onChange={(v) => void flip("cat_wallet_activity", v)}
           disabled={disabled}
-          comingSoon
         />
         <ToggleRow
           label="News & sentiment"
