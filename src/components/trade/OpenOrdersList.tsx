@@ -80,23 +80,42 @@ const fmtCountdown = (expiredAt: number | null) => {
 };
 
 const normalize = (o: RawOrder): NormalizedOrder | null => {
-  const a = o.account ?? o;
+  // Jupiter returns fields at the top level OR under .account depending on
+  // status endpoint. Merge both so either shape works.
+  const a: any = { ...(o.account ?? {}), ...o };
   const key = o.orderKey ?? o.publicKey ?? "";
-  const inputMint = a.inputMint ?? "";
-  const outputMint = a.outputMint ?? "";
+  const inputMint: string = a.inputMint ?? "";
+  const outputMint: string = a.outputMint ?? "";
   if (!key || !inputMint || !outputMint) return null;
-  const inDec = a.inputMintInfo?.decimals ?? 9;
-  const outDec = a.outputMintInfo?.decimals ?? 9;
-  const makingAtomic = Number(a.makingAmount ?? 0);
-  const takingAtomic = Number(a.takingAmount ?? 0);
-  const inAmount = makingAtomic / Math.pow(10, inDec);
-  const outAmount = takingAtomic / Math.pow(10, outDec);
+
+  const inDec: number = a.inputMintInfo?.decimals ?? 9;
+  const outDec: number = a.outputMintInfo?.decimals ?? 9;
+
+  // Jupiter Trigger v1: `makingAmount`/`takingAmount` are already UI units
+  // (e.g. "0.2"). The atomic versions live under `rawMakingAmount` /
+  // `rawTakingAmount`. Prefer UI fields when present, fall back to raw.
+  let inAmount = Number(a.makingAmount);
+  if (!Number.isFinite(inAmount) || inAmount === 0) {
+    inAmount = Number(a.rawMakingAmount ?? 0) / Math.pow(10, inDec);
+  }
+  let outAmount = Number(a.takingAmount);
+  if (!Number.isFinite(outAmount) || outAmount === 0) {
+    outAmount = Number(a.rawTakingAmount ?? 0) / Math.pow(10, outDec);
+  }
+
+  // expiredAt may be: ISO string, unix-seconds string/number, "0", or null.
   const expiredAtRaw = a.expiredAt;
   let expiredAt: number | null = null;
   if (expiredAtRaw != null && expiredAtRaw !== "" && expiredAtRaw !== "0") {
-    const n = Number(expiredAtRaw);
-    if (Number.isFinite(n) && n > 0) expiredAt = n;
+    if (typeof expiredAtRaw === "string" && /[A-Z]/.test(expiredAtRaw)) {
+      const ms = Date.parse(expiredAtRaw);
+      if (Number.isFinite(ms) && ms > 0) expiredAt = Math.floor(ms / 1000);
+    } else {
+      const n = Number(expiredAtRaw);
+      if (Number.isFinite(n) && n > 0) expiredAt = n;
+    }
   }
+
   return {
     key,
     inputMint,
