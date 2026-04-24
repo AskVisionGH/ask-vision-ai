@@ -273,6 +273,22 @@ const Settings = () => {
               </AccordionItem>
 
               <AccordionItem
+                id="notifications"
+                value="notifications"
+                className="rounded-2xl border border-border bg-card/40 px-6 backdrop-blur-md"
+              >
+                <AccordionTrigger className="py-4 text-sm font-medium text-foreground hover:no-underline [&[data-state=open]]:pb-3">
+                  <span className="flex items-center gap-2">
+                    <Bell className="h-3.5 w-3.5 text-muted-foreground" />
+                    Notifications
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className="pb-5">
+                  <NotificationsSettings />
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem
                 value="security"
                 className="rounded-2xl border border-border bg-card/40 px-6 backdrop-blur-md"
               >
