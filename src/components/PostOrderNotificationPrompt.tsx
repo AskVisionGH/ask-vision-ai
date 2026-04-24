@@ -27,17 +27,39 @@ import { useWebPush } from "@/hooks/useWebPush";
  * Render this once near the app root (inside AuthProvider).
  */
 export const PostOrderNotificationPrompt = () => {
+  const { user } = useAuth();
   const { prefs, update } = useNotificationPreferences();
   const push = useWebPush();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  // Subscribe to the user's own tx_events. The first INSERT we see, if they
+  // haven't already dismissed the prompt, opens the dialog.
   useEffect(() => {
-    if (!trigger) return;
+    if (!user) return;
     if (!prefs) return;
     if (prefs.post_order_prompt_seen) return;
-    setOpen(true);
-  }, [trigger, prefs]);
+
+    const channel = supabase
+      .channel(`post-order-prompt:${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "tx_events",
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          setOpen(true);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, prefs?.post_order_prompt_seen]);
 
   const markSeen = async () => {
     await update({ post_order_prompt_seen: true });
@@ -46,7 +68,6 @@ export const PostOrderNotificationPrompt = () => {
   const handleClose = async () => {
     await markSeen();
     setOpen(false);
-    onDismissed?.();
   };
 
   const enableAll = async () => {
