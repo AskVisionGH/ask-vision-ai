@@ -702,21 +702,6 @@ export const TradePro = ({ tab, onTabChange }: Props) => {
 
 // ---------- subcomponents ----------
 
-const ModeChip = ({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    className={cn(
-      "ease-vision flex-1 rounded-full px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider transition-colors",
-      active
-        ? "bg-secondary text-foreground shadow-soft"
-        : "text-muted-foreground hover:text-foreground",
-    )}
-  >
-    {label}
-  </button>
-);
-
 const EntryChip = ({
   active, onClick, label, hint,
 }: { active: boolean; onClick: () => void; label: string; hint: string }) => (
