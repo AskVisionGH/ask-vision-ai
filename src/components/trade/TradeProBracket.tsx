@@ -623,6 +623,45 @@ export const TradeProBracket = ({ expiryMs }: TradeProBracketProps) => {
             <StatsRow
               label={
                 <span className="flex items-center gap-1">
+                  Platform fee
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        className="inline-flex items-center justify-center text-muted-foreground/60 hover:text-foreground focus:outline-none"
+                        aria-label="Platform fee info"
+                      >
+                        <Info className="h-3 w-3" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="top"
+                      align="start"
+                      sideOffset={6}
+                      collisionPadding={12}
+                      className="max-w-[240px]"
+                    >
+                      <p className="font-mono text-[11px] leading-relaxed">
+                        1% of your spend, collected upfront in a separate signature before the deposit.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </span>
+              }
+              value={
+                <span className="font-mono text-[12px] text-foreground">
+                  1% upfront
+                  {sellUsd != null && sellUsd > 0 && (
+                    <span className="ml-1 text-muted-foreground">
+                      (≈ {fmtUsd(sellUsd * 0.01)})
+                    </span>
+                  )}
+                </span>
+              }
+            />
+            <StatsRow
+              label={
+                <span className="flex items-center gap-1">
                   Min order
                   <Tooltip>
                     <TooltipTrigger asChild>
