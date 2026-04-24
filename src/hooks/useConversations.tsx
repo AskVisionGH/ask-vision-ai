@@ -41,9 +41,12 @@ export const useConversations = () => {
       setLoading(false);
       return;
     }
+    // Filter explicitly by user_id — the "anyone can view shared conversations"
+    // RLS policy would otherwise leak every shared chat into every user's sidebar.
     const { data, error } = await supabase
       .from("conversations")
       .select(CONVO_COLS)
+      .eq("user_id", user.id)
       .order("pinned", { ascending: false })
       .order("pin_order", { ascending: true })
       .order("updated_at", { ascending: false });
