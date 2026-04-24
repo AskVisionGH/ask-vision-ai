@@ -3,6 +3,8 @@ import { cn } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { useProfile } from "@/hooks/useProfile";
+import { getLanguageOption } from "@/lib/languages";
 
 interface Props {
   value: string;
@@ -22,6 +24,7 @@ export const ChatComposer = ({
   placeholder = "Ask Vision anything…",
 }: Props) => {
   const ref = useRef<HTMLTextAreaElement>(null);
+  const { profile } = useProfile();
   const [recState, setRecState] = useState<RecState>("idle");
   const [elapsedMs, setElapsedMs] = useState(0);
 
