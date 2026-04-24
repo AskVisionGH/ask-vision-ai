@@ -14,6 +14,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_counters: {
+        Row: {
+          key: string
+          updated_at: string
+          value: number
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          value?: number
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          value?: number
+        }
+        Relationships: []
+      }
       contacts: {
         Row: {
           address: string
@@ -397,6 +415,7 @@ export type Database = {
           user_id: string
         }[]
       }
+      bump_counter: { Args: { _key: string }; Returns: undefined }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
