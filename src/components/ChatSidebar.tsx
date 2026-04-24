@@ -7,6 +7,7 @@ import {
   Link2,
   Link2Off,
   LogOut,
+  MessageSquare,
   MessageSquarePlus,
   MoreHorizontal,
   PanelLeftClose,
