@@ -387,7 +387,64 @@ async function fetchRedditPosts(resolved: ResolvedToken): Promise<SocialPost[]> 
     });
 }
 
-// ─── Source: Farcaster casts via Neynar ──────────────────────────────────────
+// ─── Source: Hacker News (Algolia) — fully open, no auth ─────────────────────
+// Algolia HN search returns stories + comments mentioning the query. We pull
+// the last week and let the 48h filter downstream do its job.
+async function fetchHackerNewsPosts(resolved: ResolvedToken): Promise<SocialPost[]> {
+  // Build a query that matches symbol or full name. Algolia treats space as AND
+  // so we use the API's `query` param which does keyword search.
+  const term = resolved.symbol.length >= 3
+    ? `${resolved.symbol} ${resolved.name}`
+    : resolved.name;
+  const since = NOW() - 7 * DAY;
+  const url =
+    `https://hn.algolia.com/api/v1/search_by_date?query=${encodeURIComponent(term)}` +
+    `&tags=(story,comment)&numericFilters=created_at_i>${since}&hitsPerPage=50`;
+
+  const resp = await fetch(url, {
+    headers: { Accept: "application/json", "User-Agent": "VisionBot/1.0" },
+  });
+  if (!resp.ok) {
+    console.warn("hn non-OK", resp.status);
+    return [];
+  }
+  const json = await resp.json();
+  const hits = (json?.hits ?? []) as any[];
+
+  const symLower = resolved.symbol.toLowerCase();
+  const nameLower = resolved.name.toLowerCase();
+
+  return hits
+    .map((h: any, idx: number) => {
+      const title = String(h.title ?? h.story_title ?? "").trim();
+      const text = String(h.comment_text ?? h.story_text ?? "")
+        .replace(/<[^>]+>/g, " ")
+        .trim();
+      const combined = [title, text].filter(Boolean).join(" — ");
+      if (!combined) return null;
+      // Loose relevance gate — require either the symbol or the name to appear
+      // in the combined text. Algolia's keyword search isn't strict enough on
+      // its own (e.g. "BTC" can match unrelated acronyms).
+      const lower = combined.toLowerCase();
+      if (!lower.includes(symLower) && !lower.includes(nameLower)) return null;
+      const postedAt = Number(h.created_at_i ?? 0);
+      const objId = h.objectID ?? `${idx}`;
+      return {
+        id: `hn-${objId}`,
+        network: "hackernews",
+        url: `https://news.ycombinator.com/item?id=${objId}`,
+        title: combined.slice(0, 240),
+        creatorName: h.author ? `@${h.author}` : null,
+        creatorAvatar: null,
+        interactions24h: Number(h.points ?? 0) + Number(h.num_comments ?? 0),
+        sentiment: classifyText(combined),
+        postedAt,
+      } satisfies SocialPost;
+    })
+    .filter((p: SocialPost | null): p is SocialPost => !!p && p.postedAt > 0);
+}
+
+
 async function fetchFarcasterCasts(resolved: ResolvedToken, apiKey: string): Promise<SocialPost[]> {
   const term = resolved.address ?? resolved.symbol;
   const url =
