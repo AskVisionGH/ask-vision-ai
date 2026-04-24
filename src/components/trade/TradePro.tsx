@@ -642,9 +642,21 @@ export const TradePro = ({ tab, onTabChange }: Props) => {
                   Min order
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Info className="h-3 w-3 text-muted-foreground/60 hover:text-foreground" />
+                      <button
+                        type="button"
+                        className="inline-flex items-center justify-center text-muted-foreground/60 hover:text-foreground focus:outline-none"
+                        aria-label="Min order info"
+                      >
+                        <Info className="h-3 w-3" />
+                      </button>
                     </TooltipTrigger>
-                    <TooltipContent side="top" className="max-w-[240px]">
+                    <TooltipContent
+                      side="top"
+                      align="start"
+                      sideOffset={6}
+                      collisionPadding={12}
+                      className="max-w-[220px]"
+                    >
                       <p className="font-mono text-[11px] leading-relaxed">
                         Jupiter v2 enforces a $10 minimum per bracket.
                       </p>
