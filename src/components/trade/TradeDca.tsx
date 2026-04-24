@@ -253,6 +253,41 @@ export const TradeDca = () => {
       const inAmountAtomic = Math.floor(numericTotal * Math.pow(10, inputToken.decimals));
       if (inAmountAtomic <= 0) throw new Error("Amount too small");
 
+      // ---- Step 1: Collect 1% upfront platform fee ----
+      const feeBuilt = await supaPost("dca-fee-build", {
+        user: publicKey.toBase58(),
+        inputMint: inputToken.address,
+        totalAmountAtomic: String(inAmountAtomic),
+        decimals: inputToken.decimals,
+      });
+      const feeTxB64: string = feeBuilt?.transaction;
+      if (!feeTxB64) throw new Error("Fee build failed");
+
+      setPhase({ name: "awaiting_fee_signature" });
+      const feeBytes = Uint8Array.from(atob(feeTxB64), (c) => c.charCodeAt(0));
+      const feeTx = Transaction.from(feeBytes);
+      let signedFee: Transaction;
+      try {
+        signedFee = await signTransaction(feeTx);
+      } catch {
+        if (mounted.current) setPhase({ name: "error", message: "Cancelled — try again." });
+        return;
+      }
+      const signedFeeB64 = btoa(
+        String.fromCharCode(...signedFee.serialize({ requireAllSignatures: true })),
+      );
+
+      setPhase({ name: "submitting_fee" });
+      await supaPost("tx-submit", {
+        signedTransaction: signedFeeB64,
+        kind: "transfer",
+        inputMint: inputToken.address,
+        recipient: "treasury",
+        walletAddress: publicKey.toBase58(),
+        metadata: { source: "dca_platform_fee" },
+      });
+
+      // ---- Step 2: Build the Jupiter recurring create transaction ----
       const created = await supaPost("recurring-create", {
         user: publicKey.toBase58(),
         inputMint: inputToken.address,
