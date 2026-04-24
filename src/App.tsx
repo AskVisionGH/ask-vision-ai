@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { WalletContextProvider } from "@/providers/WalletContextProvider";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
+import { useWalletAutoLink } from "@/hooks/useWalletAutoLink";
 import Index from "./pages/Index.tsx";
 import Auth from "./pages/Auth.tsx";
 import Chat from "./pages/Chat.tsx";
@@ -45,6 +46,68 @@ const ProtectedRoute = ({
   return children;
 };
 
+const AppRoutes = () => {
+  // Persist (user, wallet) link any time a wallet is connected while signed in.
+  useWalletAutoLink();
+  return (
+    <Routes>
+      <Route path="/" element={<Index />} />
+      <Route path="/auth" element={<Auth />} />
+      <Route path="/shared/:shareId" element={<SharedChat />} />
+      <Route
+        path="/onboarding"
+        element={
+          <ProtectedRoute requireOnboarding={false}>
+            <Onboarding />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/chat"
+        element={
+          <ProtectedRoute>
+            <Chat />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <ProtectedRoute requireOnboarding={false}>
+            <Settings />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/contacts"
+        element={
+          <ProtectedRoute>
+            <Contacts />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/tracked-wallets"
+        element={
+          <ProtectedRoute>
+            <TrackedWallets />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin"
+        element={
+          <ProtectedRoute requireOnboarding={false}>
+            <Admin />
+          </ProtectedRoute>
+        }
+      />
+      {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+  );
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
@@ -53,61 +116,7 @@ const App = () => (
           <Toaster />
           <Sonner />
           <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/auth" element={<Auth />} />
-              <Route path="/shared/:shareId" element={<SharedChat />} />
-              <Route
-                path="/onboarding"
-                element={
-                  <ProtectedRoute requireOnboarding={false}>
-                    <Onboarding />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/chat"
-                element={
-                  <ProtectedRoute>
-                    <Chat />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/settings"
-                element={
-                  <ProtectedRoute requireOnboarding={false}>
-                    <Settings />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/contacts"
-                element={
-                  <ProtectedRoute>
-                    <Contacts />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/tracked-wallets"
-                element={
-                  <ProtectedRoute>
-                    <TrackedWallets />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin"
-                element={
-                  <ProtectedRoute requireOnboarding={false}>
-                    <Admin />
-                  </ProtectedRoute>
-                }
-              />
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+            <AppRoutes />
           </BrowserRouter>
         </TooltipProvider>
       </WalletContextProvider>
