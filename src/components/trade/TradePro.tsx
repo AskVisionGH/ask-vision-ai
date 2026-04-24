@@ -339,6 +339,7 @@ export const TradePro = ({ tab, onTabChange }: Props) => {
 
       if (!mounted.current) return;
       setPhase({ name: "success", orderId, signature: txSignature, orderType });
+      setOrdersRefreshKey((x) => x + 1);
     } catch (e) {
       if (!mounted.current) return;
       setPhase({ name: "error", message: e instanceof Error ? e.message : "Something went wrong." });
@@ -355,6 +356,7 @@ export const TradePro = ({ tab, onTabChange }: Props) => {
     setSlPrice("");
     setEntryPrice("");
     setPhase({ name: "idle" });
+    setOrdersRefreshKey((x) => x + 1);
   };
 
   // ---- Success view ----
