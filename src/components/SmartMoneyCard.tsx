@@ -1,10 +1,11 @@
-import { useMemo } from "react";
-import { ExternalLink, LineChart, TrendingUp, Twitter, Wallet, Zap } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ChevronDown, ChevronRight, ExternalLink, LineChart, TrendingDown, TrendingUp, Twitter, Zap } from "lucide-react";
 import type {
   EarlyBuyersData,
   EarlyBuyer,
   SmartMoneyActivityData,
-  SmartMoneyTrade,
+  SmartMoneyTokenActivity,
+  SmartMoneyWalletSummary,
 } from "@/lib/chat-stream";
 import { TokenLogo } from "@/components/TokenLogo";
 import { cn } from "@/lib/utils";
