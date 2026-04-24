@@ -23,13 +23,42 @@ const RPC_ENDPOINT = `${SUPABASE_URL}/functions/v1/rpc-url`;
 
 // Inject the Supabase anon key on every JSON-RPC request the wallet adapter
 // sends to our edge function — the gateway requires `apikey`/`Authorization`.
-const rpcFetch: typeof fetch = (input, init) => {
+// Retry transient 5xx / runtime errors so a single cold-boot 503 doesn't crash
+// the wallet adapter (which surfaces as a blank screen).
+const rpcFetch: typeof fetch = async (input, init) => {
   const headers = new Headers(init?.headers ?? {});
   headers.set("apikey", SUPABASE_ANON_KEY);
   if (!headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${SUPABASE_ANON_KEY}`);
   }
-  return fetch(input, { ...(init ?? {}), headers });
+  const opts = { ...(init ?? {}), headers };
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const res = await fetch(input, opts);
+      if ((res.status === 503 || res.status === 504) && attempt < maxAttempts) {
+        await new Promise((r) => setTimeout(r, 250 * attempt));
+        continue;
+      }
+      if (res.status === 503 || res.status === 504) {
+        // Final attempt: return a JSON-RPC error envelope so web3.js throws
+        // a recoverable error instead of crashing the React tree.
+        return new Response(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            error: { code: -32000, message: "RPC temporarily unavailable" },
+            id: null,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return res;
+    } catch (e) {
+      if (attempt >= maxAttempts) throw e;
+      await new Promise((r) => setTimeout(r, 250 * attempt));
+    }
+  }
+  return fetch(input, opts);
 };
 
 export const WalletContextProvider = ({ children }: Props) => {
