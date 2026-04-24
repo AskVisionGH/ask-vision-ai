@@ -49,20 +49,25 @@ serve(async (req) => {
       }
 
       const metaMap: Record<string, { symbol: string; decimals: number; logo: string | null }> = {};
-      await Promise.all(
-        Array.from(mints).map(async (mint) => {
-          try {
-            const r = await fetch(`https://lite-api.jup.ag/tokens/v1/token/${mint}`);
-            if (!r.ok) return;
-            const t = await r.json();
-            metaMap[mint] = {
-              symbol: t.symbol ?? mint.slice(0, 4),
-              decimals: typeof t.decimals === "number" ? t.decimals : 9,
-              logo: t.logoURI ?? null,
-            };
-          } catch (_e) { /* ignore */ }
-        }),
-      );
+      if (mints.size > 0) {
+        try {
+          const q = Array.from(mints).join(",");
+          const r = await fetch(`https://api.jup.ag/tokens/v2/search?query=${q}`);
+          if (r.ok) {
+            const arr: any[] = await r.json();
+            for (const t of arr) {
+              if (!t?.id) continue;
+              metaMap[t.id] = {
+                symbol: t.symbol ?? String(t.id).slice(0, 4),
+                decimals: typeof t.decimals === "number" ? t.decimals : 9,
+                logo: t.icon ?? null,
+              };
+            }
+          }
+        } catch (e) {
+          console.error("token enrichment failed:", e);
+        }
+      }
 
       // Inject enriched metadata into each order so the client can render
       // symbols + properly scaled amounts without extra round-trips.
