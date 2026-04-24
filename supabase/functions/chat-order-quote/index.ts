@@ -66,6 +66,7 @@ async function fetchMeta(mint: string, dexPair?: any): Promise<TokenMeta | null>
   let symbol = "?";
   let name = "Unknown";
   let logo: string | null = null;
+  let priceUsd: number | null = null;
 
   try {
     const r = await fetch(`https://lite-api.jup.ag/tokens/v2/search?query=${mint}`);
@@ -77,27 +78,39 @@ async function fetchMeta(mint: string, dexPair?: any): Promise<TokenMeta | null>
         symbol = tok.symbol ?? symbol;
         name = tok.name ?? name;
         logo = tok.icon ?? null;
+        // Jupiter's usdPrice is the trusted source — it handles stables
+        // correctly (USDT/USDC = ~$1) whereas DexScreener picks the
+        // highest-liquidity pair which, for stables, is often a volatile
+        // asset pool where the stable is the *quote* token (returning
+        // e.g. the ETH price for USDT).
+        if (typeof tok.usdPrice === "number" && Number.isFinite(tok.usdPrice)) {
+          priceUsd = tok.usdPrice;
+        }
       }
     }
   } catch (_) { /* ignore */ }
 
-  let priceUsd: number | null = null;
-  try {
-    const pair = dexPair ?? await (async () => {
-      const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
-      if (!r.ok) return null;
-      const d = await r.json();
-      const ps = ((d.pairs ?? []) as any[]).filter((p) => p.chainId === "solana");
-      ps.sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0));
-      return ps[0] ?? null;
-    })();
-    if (pair) {
-      priceUsd = pair.priceUsd ? Number(pair.priceUsd) : null;
-      if (!logo) logo = pair.info?.imageUrl ?? null;
-      if (symbol === "?") symbol = pair.baseToken?.symbol ?? symbol;
-      if (name === "Unknown") name = pair.baseToken?.name ?? name;
-    }
-  } catch (_) { /* ignore */ }
+  // Fallback to DexScreener only if Jupiter didn't give us a price.
+  if (priceUsd == null) {
+    try {
+      const pair = dexPair ?? await (async () => {
+        const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
+        if (!r.ok) return null;
+        const d = await r.json();
+        const ps = ((d.pairs ?? []) as any[]).filter(
+          (p) => p.chainId === "solana" && p.baseToken?.address === mint,
+        );
+        ps.sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0));
+        return ps[0] ?? null;
+      })();
+      if (pair) {
+        priceUsd = pair.priceUsd ? Number(pair.priceUsd) : null;
+        if (!logo) logo = pair.info?.imageUrl ?? null;
+        if (symbol === "?") symbol = pair.baseToken?.symbol ?? symbol;
+        if (name === "Unknown") name = pair.baseToken?.name ?? name;
+      }
+    } catch (_) { /* ignore */ }
+  }
 
   return { symbol, name, address: mint, decimals, logo, priceUsd };
 }
