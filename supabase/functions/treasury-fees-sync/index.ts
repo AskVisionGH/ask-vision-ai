@@ -272,9 +272,10 @@ async function syncEthBridgeFees(
     return Array.isArray(data.result) ? (data.result as EtherscanTx[]) : [];
   };
 
-  const [nativeTxs, tokenTxs] = await Promise.all([
+  const [nativeTxs, tokenTxs, ethUsd] = await Promise.all([
     fetchPaged("txlist"),
     fetchPaged("tokentx"),
+    fetchEthUsdPrice(),
   ]);
 
   const rows: FeeRow[] = [];
@@ -295,11 +296,11 @@ async function syncEthBridgeFees(
       asset_symbol: "ETH",
       asset_address: null,
       amount,
-      amount_usd: null, // backfilled by separate price job; can be added later
+      amount_usd: ethUsd != null ? amount * ethUsd : null,
       signature: tx.hash,
       from_address: tx.from,
       block_time: new Date(Number(tx.timeStamp) * 1000).toISOString(),
-      metadata: { source: "etherscan", block: tx.blockNumber },
+      metadata: { source: "etherscan", block: tx.blockNumber, eth_usd: ethUsd },
     });
   }
 
