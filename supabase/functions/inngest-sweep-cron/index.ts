@@ -20,21 +20,26 @@ const sweepFn = inngest.createFunction(
     if (!supabaseUrl) throw new Error("SUPABASE_URL not configured");
     if (!sweepSecret) throw new Error("INNGEST_EVENT_TRIGGER_SECRET not configured");
 
-    // step.run gives us automatic retries with backoff if the sweep crashes.
+    // We intentionally do NOT throw on a non-2xx response. The sweep is
+    // best-effort and already records its own failures into `sweep_runs`.
+    // Throwing would cause Inngest's `step.run` to retry with backoff, which
+    // produced 5 runs per hour (top of hour + ~1m, ~3m, ~5m). Keeping this
+    // resolved means exactly one run per hourly tick.
     const result = await step.run("invoke-sweep-fees", async () => {
-      const resp = await fetch(`${supabaseUrl}/functions/v1/sweep-fees`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Sweep-Secret": sweepSecret,
-        },
-        body: JSON.stringify({ trigger: "cron" }),
-      });
-      const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) {
-        throw new Error(`sweep-fees ${resp.status}: ${JSON.stringify(data)}`);
+      try {
+        const resp = await fetch(`${supabaseUrl}/functions/v1/sweep-fees`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Sweep-Secret": sweepSecret,
+          },
+          body: JSON.stringify({ trigger: "cron" }),
+        });
+        const data = await resp.json().catch(() => ({}));
+        return { ok: resp.ok, status: resp.status, data };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
       }
-      return data;
     });
 
     return { ok: true, result };
