@@ -143,6 +143,7 @@ export const AlertPreferences = () => {
           checked={prefs.cat_price}
           onChange={(v) => void flip("cat_price", v)}
           disabled={disabled}
+          comingSoon
         />
         <ToggleRow
           label="Wallet activity"
@@ -150,6 +151,7 @@ export const AlertPreferences = () => {
           checked={prefs.cat_wallet_activity}
           onChange={(v) => void flip("cat_wallet_activity", v)}
           disabled={disabled}
+          comingSoon
         />
         <ToggleRow
           label="Order fills"
@@ -164,6 +166,7 @@ export const AlertPreferences = () => {
           checked={prefs.cat_news_sentiment}
           onChange={(v) => void flip("cat_news_sentiment", v)}
           disabled={disabled}
+          comingSoon
         />
       </section>
 
@@ -238,6 +241,7 @@ const ToggleRow = ({
   checked,
   onChange,
   disabled,
+  comingSoon,
 }: {
   icon?: React.ReactNode;
   label: string;
@@ -245,19 +249,27 @@ const ToggleRow = ({
   checked: boolean;
   onChange: (v: boolean) => void;
   disabled?: boolean;
+  comingSoon?: boolean;
 }) => (
   <div className="flex items-start justify-between gap-4 rounded-xl border border-border bg-card/40 p-3.5">
     <div className="flex min-w-0 items-start gap-2.5">
       {icon}
       <div className="min-w-0">
-        <p className="text-sm text-foreground">{label}</p>
+        <div className="flex items-center gap-2">
+          <p className="text-sm text-foreground">{label}</p>
+          {comingSoon && (
+            <span className="rounded-full border border-border/60 bg-secondary/40 px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
+              Soon
+            </span>
+          )}
+        </div>
         <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
       </div>
     </div>
     <Switch
       checked={checked}
       onCheckedChange={onChange}
-      disabled={disabled}
+      disabled={disabled || comingSoon}
       aria-label={label}
     />
   </div>

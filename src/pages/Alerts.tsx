@@ -299,6 +299,16 @@ const AlertsRules = () => {
 
   return (
     <div className="space-y-4">
+      <div className="rounded-xl border border-border/60 bg-secondary/30 p-3">
+        <p className="text-[11px] uppercase tracking-wider text-muted-foreground/80">
+          Heads up
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Rule evaluation (price pollers, wallet watchers, PnL cron) isn't
+          live yet — rules you save here are stored but won't fire alerts
+          until the background workers ship.
+        </p>
+      </div>
       <div className="flex items-center justify-between">
         <p className="text-xs text-muted-foreground">
           Custom triggers that fire an alert when conditions match.
