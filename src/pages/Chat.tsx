@@ -174,32 +174,31 @@ const Chat = () => {
     }
   };
 
-  const handleShare = async (c: ConversationRow) => {
-    let shareId = c.share_id;
-    // First-time share — generate a fresh id.
-    if (!shareId) {
-      shareId = await toggleShare(c.id, true);
-      if (!shareId) {
-        toast.error("Couldn't create share link");
-        return;
-      }
-    }
-    const url = `${window.location.origin}/shared/${shareId}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      toast.success("Share link copied", { description: url });
-    } catch {
-      // Clipboard can fail in some browser/permission combos — still surface the link.
-      toast.success("Share link ready", { description: url });
-    }
+  // Opens the share dialog. Used both for first-time sharing and for managing
+  // an existing share link.
+  const handleShare = (c: ConversationRow) => setShareTarget(c);
+
+  const handleEnableShare = async (mode: ShareMode): Promise<string | null> => {
+    if (!shareTarget) return null;
+    return await toggleShare(shareTarget.id, true, mode);
   };
 
-  const handleUnshare = async (c: ConversationRow) => {
-    const ok = await toggleShare(c.id, false);
-    if (ok === null && c.share_id) {
-      // toggleShare returns null when share=false succeeds OR fails. We only
-      // know it failed if share_id is still set after refresh.
-    }
+  const handleChangeShareMode = async (mode: ShareMode): Promise<boolean> => {
+    if (!shareTarget?.share_id) return false;
+    // Reuse toggleShare with share=true to update the mode without rotating
+    // the share id — but we don't want a new id. Update directly instead.
+    const { error } = await supabase
+      .from("conversations")
+      .update({ share_mode: mode } as never)
+      .eq("id", shareTarget.id);
+    if (error) return false;
+    setShareTarget((prev) => (prev ? { ...prev, share_mode: mode } : prev));
+    return true;
+  };
+
+  const handleUnshare = async () => {
+    if (!shareTarget) return;
+    await toggleShare(shareTarget.id, false);
     toast.success("Sharing disabled");
   };
 
