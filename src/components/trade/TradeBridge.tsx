@@ -428,7 +428,7 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
           continue;
         }
       }
-      throw new Error("Bridge is taking longer than expected. Track it on LI.FI Explorer.");
+      throw new Error("Bridge is taking longer than expected. You can keep tracking it from the source transaction.");
     } catch (e) {
       if (!mounted.current) return;
       setPhase({ name: "error", message: e instanceof Error ? e.message : "Something went wrong." });
