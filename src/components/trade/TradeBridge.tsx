@@ -232,11 +232,31 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
     return Number.isFinite(n) && n > 0 ? n : 0;
   }, [amount]);
 
+  // Cross-family bridges (SOL→EVM, EVM→SOL) need a destination address on
+  // the receiving chain — the source wallet won't work. Same-family bridges
+  // (SOL→SOL, EVM→EVM) reuse the source address.
+  const sameFamily = !!(fromChain && toChain && fromChain.chainType === toChain.chainType);
+  const destAddressValid = useMemo(() => {
+    if (sameFamily) return true;
+    if (!toChain) return false;
+    const addr = destAddress.trim();
+    if (toChain.chainType === "EVM") return /^0x[a-fA-F0-9]{40}$/.test(addr);
+    if (toChain.chainType === "SVM") return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(addr);
+    return addr.length > 0;
+  }, [sameFamily, destAddress, toChain]);
+
+  // Reset destination address whenever the destination chain changes.
+  useEffect(() => { setDestAddress(""); }, [toChain?.id]);
+
   // ---------- Quote (debounced) ----------
   useEffect(() => {
     setQuote(null);
     setQuoteError(null);
-    if (!fromChain || !toChain || !fromToken || !toToken || numericAmount <= 0 || !publicKey) {
+    if (
+      !fromChain || !toChain || !fromToken || !toToken ||
+      numericAmount <= 0 || !publicKey ||
+      (!sameFamily && !destAddressValid)
+    ) {
       setQuoteLoading(false);
       return;
     }
@@ -252,6 +272,7 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
           toToken: toToken.address,
           fromAmount: atomic.toString(),
           fromAddress: publicKey.toBase58(),
+          toAddress: sameFamily ? publicKey.toBase58() : destAddress.trim(),
           slippageBps,
         });
         if (!mounted.current) return;
@@ -274,6 +295,9 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
     numericAmount,
     slippageBps,
     publicKey,
+    sameFamily,
+    destAddress,
+    destAddressValid,
   ]);
 
   const handleAmountChange = (v: string) => {
