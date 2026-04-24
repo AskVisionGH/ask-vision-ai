@@ -180,6 +180,35 @@ const Settings = () => {
               </Select>
             </section>
 
+            {/* Re-run onboarding */}
+            <section className="rounded-2xl border border-border bg-card/40 p-6 backdrop-blur-md">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <h2 className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <RotateCcw className="h-3.5 w-3.5 text-muted-foreground" />
+                    Re-run onboarding
+                  </h2>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Walk through the intro flow again to reset your preferences.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    // Onboarding redirects to /chat if already completed, so we
+                    // have to flip the flag back off before navigating.
+                    await updateProfile({ onboarding_completed: false });
+                    navigate("/onboarding");
+                  }}
+                  className="shrink-0"
+                >
+                  Re-run
+                </Button>
+              </div>
+            </section>
+
             <div className="flex justify-end pt-2">
               <Button
                 onClick={save}
@@ -190,43 +219,8 @@ const Settings = () => {
               </Button>
             </div>
 
-            {/* Collapsible: account actions + danger zone */}
+            {/* Danger zone */}
             <Accordion type="multiple" className="space-y-3">
-              <AccordionItem
-                value="onboarding"
-                className="rounded-2xl border border-border bg-card/40 px-6 backdrop-blur-md"
-              >
-                <AccordionTrigger className="py-4 text-sm font-medium text-foreground hover:no-underline [&[data-state=open]]:pb-3">
-                  <span className="flex items-center gap-2">
-                    <RotateCcw className="h-3.5 w-3.5 text-muted-foreground" />
-                    Account actions
-                  </span>
-                </AccordionTrigger>
-                <AccordionContent className="pb-5">
-                  <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium text-foreground">Re-run onboarding</div>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Walk through the intro flow again to reset your preferences.
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={async () => {
-                        // Onboarding redirects to /chat if already completed, so we
-                        // have to flip the flag back off before navigating.
-                        await updateProfile({ onboarding_completed: false });
-                        navigate("/onboarding");
-                      }}
-                      className="shrink-0"
-                    >
-                      Re-run
-                    </Button>
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
 
               <AccordionItem
                 value="danger"
