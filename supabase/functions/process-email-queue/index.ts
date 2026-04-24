@@ -53,8 +53,11 @@ function parseJwtClaims(token: string): Record<string, unknown> | null {
 }
 
 // Move a message to the dead letter queue and log the reason.
+// Typed as `any` because Supabase's regenerated generic types are too strict
+// for dynamic table/rpc names in helper functions — runtime behavior is unchanged.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function moveToDlq(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   queue: string,
   msg: { msg_id: number; message: Record<string, unknown> },
   reason: string
@@ -155,13 +158,13 @@ Deno.serve(async (req) => {
     // messages not attempted when a 429 stops processing early.
     const messageIds = Array.from(
       new Set(
-        messages
+        (messages as Array<{ message?: { message_id?: unknown } }>)
           .map((msg) =>
             msg?.message?.message_id && typeof msg.message.message_id === 'string'
               ? msg.message.message_id
               : null
           )
-          .filter((id): id is string => Boolean(id))
+          .filter((id: string | null): id is string => Boolean(id))
       )
     )
     const failedAttemptsByMessageId = new Map<string, number>()
