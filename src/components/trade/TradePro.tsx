@@ -34,6 +34,7 @@ import {
   type TokenMeta,
 } from "@/components/trade/TokenPickerDialog";
 import { useJupiterV2Auth } from "@/hooks/useJupiterV2Auth";
+import { ProOpenOrders } from "@/components/trade/ProOpenOrders";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -149,6 +150,7 @@ export const TradePro = ({ tab, onTabChange }: Props) => {
 
   const [pickerSide, setPickerSide] = useState<"in" | "out" | null>(null);
   const [phase, setPhase] = useState<Phase>({ name: "idle" });
+  const [ordersRefreshKey, setOrdersRefreshKey] = useState(0);
 
   const { publicKey, connected, signTransaction } = useWallet();
   const { setVisible } = useWalletModal();
