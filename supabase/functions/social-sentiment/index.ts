@@ -368,7 +368,12 @@ async function fetchRedditPosts(resolved: ResolvedToken): Promise<SocialPost[]> 
         postedAt,
       } satisfies SocialPost;
     })
-    .filter((p: SocialPost | null): p is SocialPost => !!p && p.postedAt > 0);
+    .filter((p: SocialPost | null): p is SocialPost => {
+      if (!p || p.postedAt <= 0) return false;
+      if (seen.has(p.id)) return false;
+      seen.add(p.id);
+      return true;
+    });
 }
 
 // ─── Source: Farcaster casts via Neynar ──────────────────────────────────────
