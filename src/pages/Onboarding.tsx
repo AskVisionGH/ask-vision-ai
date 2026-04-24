@@ -174,6 +174,7 @@ const Onboarding = () => {
   // Disable Continue when the current step requires a choice but none made.
   const canContinue = (() => {
     if (transitioning || finishing || savingAvatar) return false;
+    if (step === "welcome") return isNameValid;
     if (step === "experience") return experience !== null;
     if (step === "risk") return risk !== null;
     return true;
