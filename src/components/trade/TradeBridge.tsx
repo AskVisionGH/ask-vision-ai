@@ -510,12 +510,32 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
     phase.name === "submitting" ||
     phase.name === "bridging";
 
-  const busyLabel =
-    phase.name === "building" ? "Building transaction…"
-    : phase.name === "awaiting_signature" ? "Approve in wallet…"
-    : phase.name === "submitting" ? "Submitting…"
-    : phase.name === "bridging" ? "Bridging across chains…"
-    : "";
+  const fmtMMSS = (totalSec: number) => {
+    const s = Math.max(0, Math.floor(totalSec));
+    const m = Math.floor(s / 60);
+    const r = s % 60;
+    return `${m}:${r.toString().padStart(2, "0")}`;
+  };
+
+  let busyLabel = "";
+  if (phase.name === "building") busyLabel = "Building transaction…";
+  else if (phase.name === "awaiting_signature") busyLabel = "Approve in wallet…";
+  else if (phase.name === "submitting") busyLabel = "Submitting…";
+  else if (phase.name === "bridging") {
+    const elapsedSec = Math.max(0, (nowTick - phase.startedAt) / 1000);
+    const est = phase.estimatedSec;
+    if (est && est > 0) {
+      const remaining = est - elapsedSec;
+      if (remaining > 0) {
+        busyLabel = `Bridging across chains · ~${fmtMMSS(remaining)} remaining`;
+      } else {
+        const over = elapsedSec - est;
+        busyLabel = `Finalizing — taking a bit longer · +${fmtMMSS(over)}`;
+      }
+    } else {
+      busyLabel = `Bridging across chains · ${fmtMMSS(elapsedSec)} elapsed`;
+    }
+  }
 
   let ctaLabel = "Bridge";
   let ctaDisabled = false;
