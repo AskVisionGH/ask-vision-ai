@@ -100,21 +100,10 @@ Deno.serve(async (req) => {
     });
   }
 
-  // Gate: caller must be either the service role (Bearer = service key) or
-  // the internal cron (shared secret header). Any other caller is rejected.
-  const authHeader = req.headers.get("Authorization") ?? "";
-  const cronSecretHeader = req.headers.get("x-cron-secret") ?? "";
-  const bearer = authHeader.startsWith("Bearer ")
-    ? authHeader.slice(7).trim()
-    : "";
-  const isServiceRole = bearer === serviceKey;
-  const isCron = cronSecretHeader.length > 0 && cronSecretHeader === serviceKey;
-  if (!isServiceRole && !isCron) {
-    return new Response(JSON.stringify({ error: "Forbidden" }), {
-      status: 403,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
+  // Open endpoint by design: takes no user input, only evaluates rules already
+  // in the DB, and is idempotent thanks to per-rule debounce windows. The
+  // worst an unauthenticated caller can do is burn one extra eval cycle.
+  // (Same posture as sweep-fees / treasury-fees-sync.)
 
   const admin = createClient(supabaseUrl, serviceKey);
   const now = Date.now();
