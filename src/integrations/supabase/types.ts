@@ -69,6 +69,7 @@ export type Database = {
           pin_order: number
           pinned: boolean
           share_id: string | null
+          share_mode: Database["public"]["Enums"]["share_mode"]
           title: string
           updated_at: string
           user_id: string
@@ -80,6 +81,7 @@ export type Database = {
           pin_order?: number
           pinned?: boolean
           share_id?: string | null
+          share_mode?: Database["public"]["Enums"]["share_mode"]
           title?: string
           updated_at?: string
           user_id: string
@@ -91,6 +93,7 @@ export type Database = {
           pin_order?: number
           pinned?: boolean
           share_id?: string | null
+          share_mode?: Database["public"]["Enums"]["share_mode"]
           title?: string
           updated_at?: string
           user_id?: string
@@ -567,6 +570,7 @@ export type Database = {
       app_role: "admin" | "user"
       crypto_experience: "new" | "intermediate" | "advanced"
       risk_tolerance: "cautious" | "balanced" | "aggressive"
+      share_mode: "read_only" | "importable"
       tx_event_kind: "swap" | "transfer" | "bridge"
     }
     CompositeTypes: {
@@ -698,6 +702,7 @@ export const Constants = {
       app_role: ["admin", "user"],
       crypto_experience: ["new", "intermediate", "advanced"],
       risk_tolerance: ["cautious", "balanced", "aggressive"],
+      share_mode: ["read_only", "importable"],
       tx_event_kind: ["swap", "transfer", "bridge"],
     },
   },
