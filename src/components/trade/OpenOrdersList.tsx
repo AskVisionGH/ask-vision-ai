@@ -257,10 +257,8 @@ export const OpenOrdersList = ({ refreshKey = 0 }: Props) => {
                       <span className="text-muted-foreground">Sell</span> {fmtAmount(o.inAmount)} {o.inSymbol}{" "}
                       <span className="text-muted-foreground">→</span> {fmtAmount(o.outAmount)} {o.outSymbol}
                     </p>
-                    <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
-                      @ {fmtRate(o.rate)} {o.outSymbol}/{o.inSymbol}
-                      <span className="mx-1.5 text-muted-foreground/40">·</span>
-                      <Clock className="-mt-0.5 mr-0.5 inline h-2.5 w-2.5" />
+                    <p className="mt-0.5 flex items-center gap-1 font-mono text-[10px] text-muted-foreground">
+                      <Clock className="h-2.5 w-2.5" />
                       <span className={cn(expired && "text-down")}>{expiry}</span>
                     </p>
                   </div>
