@@ -653,7 +653,7 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
                         <Info className="h-2.5 w-2.5 cursor-help" />
                       </TooltipTrigger>
                       <TooltipContent side="top">
-                        Deducted from the input amount and routed via LI.FI's integrator program.
+                        Deducted from the input amount to support Vision's cross-chain routing.
                       </TooltipContent>
                     </Tooltip>
                   </span>
