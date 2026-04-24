@@ -551,8 +551,8 @@ export const TradeSwap = () => {
             amount={amount}
             onAmountChange={handleAmountChange}
             usd={inUsd}
-            balance={inputToken.address === SOL_TOKEN.address ? solBalance : null}
-            onMax={inputToken.address === SOL_TOKEN.address ? handleMax : undefined}
+            balance={inputBalance}
+            onMax={inputBalance != null && inputBalance > 0 ? handleMax : undefined}
             onPickToken={() => setPickerSide("in")}
             readOnly={false}
           />
