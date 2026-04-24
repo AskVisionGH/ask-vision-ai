@@ -44,13 +44,21 @@
         </p>
       </div>
       <script>
-        // If React hasn't mounted within 6s, reveal the compatibility hint.
-        // React replaces #root's children on mount, so this timer is harmless
-        // on healthy devices — the script element gets removed before firing.
+        // Show the compatibility hint only if React truly failed to mount.
+        // We check after 10s (covers slow networks / dev rebuilds) and verify
+        // that #root is still empty — React replaces children on mount, so a
+        // populated root means the app is alive even if our timer survived.
         setTimeout(function () {
-          var el = document.getElementById('boot-fallback');
-          if (el) el.style.display = 'block';
-        }, 6000);
+          var root = document.getElementById('root');
+          var fallback = document.getElementById('boot-fallback');
+          if (!fallback || !root) return;
+          // If #root has any children other than the fallback itself, React mounted.
+          var mounted = false;
+          for (var i = 0; i < root.children.length; i++) {
+            if (root.children[i].id !== 'boot-fallback') { mounted = true; break; }
+          }
+          if (!mounted) fallback.style.display = 'block';
+        }, 10000);
       </script>
     </div>
     <script type="module" src="/src/main.tsx"></script>
