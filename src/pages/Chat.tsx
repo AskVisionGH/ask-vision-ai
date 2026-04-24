@@ -24,6 +24,7 @@ import {
   searchConversationsByContent,
   useConversations,
   type ConversationRow,
+  type ShareMode,
 } from "@/hooks/useConversations";
 import { streamChat, type ChatMessage, type ToolEvent } from "@/lib/chat-stream";
 import { cn } from "@/lib/utils";
