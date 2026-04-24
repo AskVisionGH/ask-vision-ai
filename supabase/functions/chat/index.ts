@@ -892,6 +892,81 @@ serve(async (req) => {
                 );
               }
               eventType = "token_pnl";
+            } else if (name === "prepare_limit_order") {
+              const args = safeJson(tc.function?.arguments);
+              result = await invokeFn(
+                "chat-order-quote",
+                {
+                  kind: "limit",
+                  inputToken: args.inputToken ?? "",
+                  outputToken: args.outputToken ?? "",
+                  sellAmount: args.sellAmount,
+                  limitPrice: args.limitPrice,
+                  expirySeconds: args.expirySeconds ?? null,
+                },
+                req,
+              );
+              eventType = "limit_quote";
+            } else if (name === "prepare_dca") {
+              const args = safeJson(tc.function?.arguments);
+              result = await invokeFn(
+                "chat-order-quote",
+                {
+                  kind: "dca",
+                  inputToken: args.inputToken ?? "",
+                  outputToken: args.outputToken ?? "",
+                  totalAmount: args.totalAmount,
+                  numberOfOrders: args.numberOfOrders,
+                  intervalSeconds: args.intervalSeconds,
+                  minPriceUsd: args.minPriceUsd ?? null,
+                  maxPriceUsd: args.maxPriceUsd ?? null,
+                },
+                req,
+              );
+              eventType = "dca_quote";
+            } else if (name === "prepare_bracket_order") {
+              const args = safeJson(tc.function?.arguments);
+              result = await invokeFn(
+                "chat-order-quote",
+                {
+                  kind: "bracket",
+                  inputToken: args.inputToken ?? "",
+                  outputToken: args.outputToken ?? "",
+                  sellAmount: args.sellAmount,
+                  tpPriceUsd: args.tpPriceUsd,
+                  slPriceUsd: args.slPriceUsd,
+                  entryMode: args.entryMode ?? "market",
+                  entryPriceUsd: args.entryPriceUsd ?? null,
+                },
+                req,
+              );
+              eventType = "bracket_quote";
+            } else if (name === "prepare_ladder") {
+              const args = safeJson(tc.function?.arguments);
+              result = await invokeFn(
+                "chat-order-quote",
+                {
+                  kind: "ladder",
+                  side: args.side ?? "buy",
+                  asset: args.asset ?? "",
+                  quote: args.quote ?? "USDC",
+                  totalAmount: args.totalAmount,
+                  rungCount: args.rungCount,
+                  minPriceUsd: args.minPriceUsd,
+                  maxPriceUsd: args.maxPriceUsd,
+                },
+                req,
+              );
+              eventType = "ladder_quote";
+            } else if (name === "get_open_orders") {
+              const args = safeJson(tc.function?.arguments);
+              const target = (args.address ?? "").trim() || walletAddress;
+              if (!target) {
+                result = { error: "No wallet connected. Connect your wallet first." };
+              } else {
+                result = await invokeFn("chat-open-orders", { wallet: target }, req);
+              }
+              eventType = "open_orders";
             } else {
               result = { error: `Unknown tool: ${name}` };
             }
