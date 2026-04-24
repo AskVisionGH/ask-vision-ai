@@ -99,7 +99,6 @@ export const PostOrderNotificationPrompt = () => {
         toast.success("In-app notifications on");
       }
       setOpen(false);
-      onDismissed?.();
     } finally {
       setBusy(false);
     }
@@ -121,7 +120,6 @@ export const PostOrderNotificationPrompt = () => {
       });
       toast.success("In-app notifications on");
       setOpen(false);
-      onDismissed?.();
     } finally {
       setBusy(false);
     }
