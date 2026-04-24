@@ -254,6 +254,8 @@ const Contacts = () => {
             ))}
           </ul>
         )}
+          </div>
+        </main>
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -324,7 +326,7 @@ const Contacts = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </main>
+    </div>
   );
 };
 
