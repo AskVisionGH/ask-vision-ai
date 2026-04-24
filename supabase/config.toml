@@ -27,3 +27,7 @@ project_id = "jtybzyffpdklwvgjvrpj"
     verify_jwt = false
   [functions.alert-rules-evaluator]
     verify_jwt = false
+  [functions.helius-webhook]
+    verify_jwt = false
+  [functions.helius-webhook-sync]
+    verify_jwt = false
