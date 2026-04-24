@@ -47,11 +47,24 @@ interface NormalizedOrder {
 }
 
 const fmtAmount = (n: number) => {
-  if (n === 0) return "0";
-  if (Math.abs(n) < 0.000001) return n.toExponential(3);
-  if (Math.abs(n) < 1) return n.toLocaleString("en-US", { maximumFractionDigits: 6 });
-  if (Math.abs(n) < 1000) return n.toLocaleString("en-US", { maximumFractionDigits: 4 });
-  return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  if (!Number.isFinite(n) || n === 0) return "0";
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+  if (abs >= 1000) return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  if (abs >= 1) return n.toLocaleString("en-US", { maximumFractionDigits: 4 });
+  if (abs >= 0.01) return n.toLocaleString("en-US", { maximumFractionDigits: 4 });
+  if (abs >= 0.0001) return n.toLocaleString("en-US", { maximumFractionDigits: 6 });
+  // For dust amounts, cap at 8 decimals — no scientific notation.
+  return n.toLocaleString("en-US", { maximumFractionDigits: 8, minimumFractionDigits: 0 });
+};
+
+const fmtRate = (n: number) => {
+  if (!Number.isFinite(n) || n === 0) return "0";
+  const abs = Math.abs(n);
+  if (abs >= 1000) return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  if (abs >= 1) return n.toLocaleString("en-US", { maximumFractionDigits: 4 });
+  if (abs >= 0.01) return n.toLocaleString("en-US", { maximumFractionDigits: 6 });
+  return n.toLocaleString("en-US", { maximumFractionDigits: 8 });
 };
 
 const fmtCountdown = (expiredAt: number | null) => {
@@ -88,8 +101,8 @@ const normalize = (o: RawOrder): NormalizedOrder | null => {
     key,
     inputMint,
     outputMint,
-    inSymbol: a.inputMintInfo?.symbol ?? "?",
-    outSymbol: a.outputMintInfo?.symbol ?? "?",
+    inSymbol: a.inputMintInfo?.symbol || `${inputMint.slice(0, 4)}…`,
+    outSymbol: a.outputMintInfo?.symbol || `${outputMint.slice(0, 4)}…`,
     inLogo: a.inputMintInfo?.logo ?? null,
     outLogo: a.outputMintInfo?.logo ?? null,
     inAmount,
@@ -245,7 +258,7 @@ export const OpenOrdersList = ({ refreshKey = 0 }: Props) => {
                       <span className="text-muted-foreground">→</span> {fmtAmount(o.outAmount)} {o.outSymbol}
                     </p>
                     <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
-                      @ {fmtAmount(o.rate)} {o.outSymbol}/{o.inSymbol}
+                      @ {fmtRate(o.rate)} {o.outSymbol}/{o.inSymbol}
                       <span className="mx-1.5 text-muted-foreground/40">·</span>
                       <Clock className="-mt-0.5 mr-0.5 inline h-2.5 w-2.5" />
                       <span className={cn(expired && "text-down")}>{expiry}</span>
