@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
   ArrowLeft,
   ExternalLink,
+  Menu,
   Plus,
   Search,
   Star,
@@ -12,10 +13,13 @@ import {
   Wallet,
   X,
 } from "lucide-react";
+import { AppSidebar } from "@/components/AppSidebar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { VisionLogo } from "@/components/VisionLogo";
 import {
   Dialog,
   DialogContent,
@@ -33,6 +37,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useAuth } from "@/hooks/useAuth";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
+import { useProfile } from "@/hooks/useProfile";
 import { useSmartWallets, type SmartWalletRow } from "@/hooks/useSmartWallets";
 import { cn } from "@/lib/utils";
 
