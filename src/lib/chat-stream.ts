@@ -405,6 +405,118 @@ export interface TokenPnLData {
   error?: string;
 }
 
+export interface OrderTokenSide {
+  symbol: string;
+  name: string;
+  address: string;
+  decimals: number;
+  logo: string | null;
+  priceUsd: number | null;
+}
+
+export interface LimitOrderQuoteData {
+  input: OrderTokenSide;
+  output: OrderTokenSide;
+  /** Amount of input being sold, UI units. */
+  sellAmountUi: number;
+  /** Limit price in OUTPUT per 1 INPUT. */
+  limitPrice: number;
+  /** Output the user will receive at the limit price. */
+  receiveAmountUi: number;
+  /** Current market mid (output per 1 input). */
+  marketPrice: number | null;
+  /** % delta of limit vs current market. */
+  deltaPct: number | null;
+  /** Seconds until expiry. null = good till cancelled. */
+  expirySeconds: number | null;
+  expiryLabel: string;
+  sellValueUsd: number | null;
+  receiveValueUsd: number | null;
+  /** Will fill instantly because limit is too aggressive. */
+  willFillInstantly: boolean;
+  error?: string;
+}
+
+export interface DcaQuoteData {
+  input: OrderTokenSide;
+  output: OrderTokenSide;
+  totalAmountUi: number;
+  numberOfOrders: number;
+  intervalSeconds: number;
+  intervalLabel: string;
+  perOrderUi: number;
+  perOrderUsd: number | null;
+  totalUsd: number | null;
+  totalDurationSeconds: number;
+  minPriceUsd: number | null;
+  maxPriceUsd: number | null;
+  error?: string;
+}
+
+export interface BracketQuoteData {
+  input: OrderTokenSide;
+  output: OrderTokenSide;
+  sellAmountUi: number;
+  sellValueUsd: number | null;
+  entryMode: "market" | "limit";
+  entryPriceUsd: number | null;
+  entrySide: "above" | "below" | null;
+  tpPriceUsd: number;
+  slPriceUsd: number;
+  marketPriceUsd: number | null;
+  /** URL with prefilled state for /trade */
+  tradeUrl: string;
+  error?: string;
+}
+
+export interface LadderQuoteData {
+  asset: OrderTokenSide;
+  quote: OrderTokenSide;
+  side: "buy" | "sell";
+  totalAmountUi: number;
+  totalUsd: number | null;
+  rungCount: number;
+  minPriceUsd: number;
+  maxPriceUsd: number;
+  averagePriceUsd: number;
+  rungs: { priceUsd: number; spendUi: number; receiveUi: number }[];
+  /** URL with prefilled state for /trade */
+  tradeUrl: string;
+  error?: string;
+}
+
+export interface OpenOrderSummary {
+  kind: "limit" | "dca";
+  /** Provider order id (for cancel) */
+  id: string;
+  inSymbol: string;
+  outSymbol: string;
+  inLogo: string | null;
+  outLogo: string | null;
+  /** Remaining input amount (UI units) */
+  inAmount: number;
+  /** Target output amount for limit orders */
+  outAmount: number | null;
+  /** For DCA: remaining cycles */
+  remainingCycles: number | null;
+  /** For DCA: per-cycle amount in input units */
+  perCycleAmount: number | null;
+  /** ms epoch */
+  expiresAt: number | null;
+  /** ms epoch (DCA next cycle) */
+  nextCycleAt: number | null;
+}
+
+export interface OpenOrdersData {
+  walletAddress: string | null;
+  limitCount: number;
+  dcaCount: number;
+  totalCount: number;
+  /** Up to ~6 most relevant orders for inline preview. */
+  preview: OpenOrderSummary[];
+  error?: string;
+}
+
 export type ToolEvent =
   | { type: "wallet_balance"; data: WalletBalanceData }
   | { type: "token_info"; data: TokenInfoData }
@@ -420,6 +532,11 @@ export type ToolEvent =
   | { type: "wallet_pnl"; data: WalletPnLData }
   | { type: "recent_txs"; data: RecentTxsData }
   | { type: "token_pnl"; data: TokenPnLData }
+  | { type: "limit_quote"; data: LimitOrderQuoteData }
+  | { type: "dca_quote"; data: DcaQuoteData }
+  | { type: "bracket_quote"; data: BracketQuoteData }
+  | { type: "ladder_quote"; data: LadderQuoteData }
+  | { type: "open_orders"; data: OpenOrdersData }
   | { type: string; data: any };
 
 export interface ChatMessage {
