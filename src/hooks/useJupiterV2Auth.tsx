@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState, useSyncExternalStore } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import bs58 from "bs58";
 import { supabase } from "@/integrations/supabase/client";
@@ -41,10 +41,25 @@ function writeCached(c: CachedJwt) {
 function clearCached() {
   try {
     window.sessionStorage.removeItem(STORAGE_KEY);
+    notifyCacheChange();
   } catch {
     /* ignore */
   }
 }
+
+// Tiny pub/sub so multiple hook instances stay in sync without per-instance
+// useState/useEffect (which were tripping HMR with "Should have a queue").
+const cacheListeners = new Set<() => void>();
+const subscribeCache = (cb: () => void) => {
+  cacheListeners.add(cb);
+  return () => { cacheListeners.delete(cb); };
+};
+const notifyCacheChange = () => { cacheListeners.forEach((cb) => cb()); };
+const getCacheSnapshot = () => {
+  if (typeof window === "undefined") return null;
+  try { return window.sessionStorage.getItem(STORAGE_KEY); } catch { return null; }
+};
+const getServerSnapshot = () => null;
 
 const supaPost = async (fn: string, body: unknown): Promise<any> => {
   const { data, error } = await supabase.functions.invoke(fn, { body });
@@ -69,18 +84,18 @@ export const useJupiterV2Auth = () => {
   const { publicKey, signMessage } = useWallet();
   const inflight = useRef<Promise<string> | null>(null);
   const [signing, setSigning] = useState(false);
-  const [cachedToken, setCachedToken] = useState<string | null>(null);
+  const rawCache = useSyncExternalStore(subscribeCache, getCacheSnapshot, getServerSnapshot);
 
-  useEffect(() => {
-    const walletPubkey = publicKey?.toBase58();
-    if (!walletPubkey) {
-      setCachedToken(null);
-      return;
-    }
-
-    const cached = readCached();
-    setCachedToken(cached?.walletPubkey === walletPubkey ? cached.token : null);
-  }, [publicKey]);
+  const walletPubkey = publicKey?.toBase58() ?? null;
+  let cachedToken: string | null = null;
+  if (rawCache && walletPubkey) {
+    try {
+      const parsed = JSON.parse(rawCache) as CachedJwt;
+      if (parsed?.token && parsed?.walletPubkey === walletPubkey && parsed.expiresAt > Date.now()) {
+        cachedToken = parsed.token;
+      }
+    } catch { /* ignore */ }
+  }
 
   const ensureJwt = useCallback(async (): Promise<string> => {
     if (!publicKey) throw new Error("Connect your wallet to continue");
@@ -88,10 +103,7 @@ export const useJupiterV2Auth = () => {
 
     const walletPubkey = publicKey.toBase58();
     const cached = readCached();
-    if (cached && cached.walletPubkey === walletPubkey) {
-      setCachedToken(cached.token);
-      return cached.token;
-    }
+    if (cached && cached.walletPubkey === walletPubkey) return cached.token;
 
     if (inflight.current) return inflight.current;
 
@@ -119,7 +131,7 @@ export const useJupiterV2Auth = () => {
         const token: string = verified.token;
         if (!token) throw new Error("No token returned");
         writeCached({ token, walletPubkey, expiresAt: Date.now() + TTL_MS });
-        setCachedToken(token);
+        notifyCacheChange();
         return token;
       } finally {
         setSigning(false);
@@ -132,7 +144,6 @@ export const useJupiterV2Auth = () => {
 
   const reset = useCallback(() => {
     clearCached();
-    setCachedToken(null);
   }, []);
 
   return { ensureJwt, reset, signing, cachedToken, hasCachedJwt: !!cachedToken };
