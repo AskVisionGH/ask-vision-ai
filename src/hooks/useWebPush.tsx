@@ -7,15 +7,17 @@ import { useAuth } from "@/hooks/useAuth";
 const VAPID_PUBLIC_KEY =
   "BB7gAyOB03BQ5JJO38mXTX2v5o7B5BQ8x7KAIk-osTtpkO_WMmHhU49fD-7U82rtdhPu4HhVfrcRCSweuGaAFbo";
 
-// Push API requires the server's public key as a Uint8Array. Convert our
-// base64url string on the fly.
-function urlBase64ToUint8Array(base64: string): Uint8Array {
+// Push API requires the server's public key as a BufferSource. Convert our
+// base64url string into a fresh ArrayBuffer (avoids SharedArrayBuffer
+// inference issues with Uint8Array).
+function urlBase64ToBuffer(base64: string): ArrayBuffer {
   const padding = "=".repeat((4 - (base64.length % 4)) % 4);
-  const b64 = (base64 + padding).replaceAll("-", "+").replaceAll("_", "/");
+  const b64 = (base64 + padding).split("-").join("+").split("_").join("/");
   const raw = atob(b64);
-  const out = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
-  return out;
+  const buf = new ArrayBuffer(raw.length);
+  const view = new Uint8Array(buf);
+  for (let i = 0; i < raw.length; i++) view[i] = raw.charCodeAt(i);
+  return buf;
 }
 
 type PermissionState = NotificationPermission | "unsupported";
