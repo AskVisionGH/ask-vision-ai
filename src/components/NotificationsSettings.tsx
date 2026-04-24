@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Bell, BellOff, Smartphone, Inbox, MoonStar } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
