@@ -192,6 +192,16 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
   const [chainPicker, setChainPicker] = useState<null | "to">(null);
   const [phase, setPhase] = useState<Phase>({ name: "idle" });
 
+  // 1s ticker while bridging so the countdown label re-renders every second.
+  // We keep the tick value in state (not a ref) because label rendering reads it.
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    if (phase.name !== "bridging") return;
+    setNowTick(Date.now());
+    const id = window.setInterval(() => setNowTick(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [phase.name]);
+
   // ---------- Load chains once ----------
   useEffect(() => {
     let cancelled = false;
