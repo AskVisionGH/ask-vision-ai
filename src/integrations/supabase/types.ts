@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      alert_rules: {
+        Row: {
+          config: Json
+          created_at: string
+          enabled: boolean
+          id: string
+          kind: Database["public"]["Enums"]["alert_rule_kind"]
+          label: string
+          last_triggered_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          config?: Json
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          kind: Database["public"]["Enums"]["alert_rule_kind"]
+          label: string
+          last_triggered_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          config?: Json
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          kind?: Database["public"]["Enums"]["alert_rule_kind"]
+          label?: string
+          last_triggered_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       app_counters: {
         Row: {
           key: string
@@ -744,6 +780,7 @@ export type Database = {
       }
     }
     Enums: {
+      alert_rule_kind: "price" | "wallet_activity" | "portfolio_pnl"
       app_role: "admin" | "user"
       crypto_experience: "new" | "intermediate" | "advanced"
       notification_category:
@@ -881,6 +918,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      alert_rule_kind: ["price", "wallet_activity", "portfolio_pnl"],
       app_role: ["admin", "user"],
       crypto_experience: ["new", "intermediate", "advanced"],
       notification_category: [

@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
  *   3. Categories — which kinds of alerts to fire
  *   4. Quiet hours — time-range suppression with the user's IANA timezone
  */
-export const NotificationsSettings = () => {
+export const AlertPreferences = () => {
   const { prefs, loading, update } = useNotificationPreferences();
   const push = useWebPush();
   const [savingQuiet, setSavingQuiet] = useState(false);

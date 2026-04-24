@@ -19,10 +19,10 @@ const CATEGORY_LABEL: Record<string, string> = {
 };
 
 /**
- * Bell with an unread-count dot + dropdown list of the latest 50 notifications.
+ * Bell with an unread-count dot + dropdown list of the latest 50 alerts.
  * Live-updates via Supabase realtime. Portaled content (per project memory).
  */
-export const NotificationBell = () => {
+export const AlertBell = () => {
   const { items, unreadCount, markAllRead, markRead } = useNotifications();
 
   return (
@@ -34,8 +34,8 @@ export const NotificationBell = () => {
           className="relative h-9 w-9 text-muted-foreground hover:text-foreground"
           aria-label={
             unreadCount > 0
-              ? `Notifications (${unreadCount} unread)`
-              : "Notifications"
+              ? `Alerts (${unreadCount} unread)`
+              : "Alerts"
           }
         >
           <Bell className="h-4 w-4" />
@@ -75,14 +75,14 @@ export const NotificationBell = () => {
 
         {items.length === 0 ? (
           <div className="px-3 py-8 text-center text-xs text-muted-foreground/70">
-            No notifications yet.
+            No alerts yet.
             <br />
-            Enable alerts in{" "}
+            Set up triggers on the{" "}
             <Link
-              to="/settings#notifications"
+              to="/alerts"
               className="text-primary hover:underline"
             >
-              settings
+              Alerts page
             </Link>
             .
           </div>
