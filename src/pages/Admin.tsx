@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
-import { ArrowLeft, Check, Copy, Loader2, RefreshCw, Shield, ShieldOff } from "lucide-react";
+import { ArrowLeft, Check, Copy, ExternalLink, Loader2, Mail, RefreshCw, Shield, ShieldOff, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
@@ -17,8 +17,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { EXPERIENCE_OPTIONS, INTEREST_OPTIONS, RISK_OPTIONS } from "@/lib/profile-options";
 
 type SweepRun = {
   id: string;
@@ -33,12 +41,20 @@ type SweepRun = {
   error_message: string | null;
 };
 
+// Full profile so the onboarding-answers dialog has everything it needs.
 type ProfileRow = {
   user_id: string;
   display_name: string | null;
   experience: string | null;
   risk_tolerance: string | null;
+  interests: string[];
   onboarding_completed: boolean;
+  created_at: string;
+};
+
+type WalletLink = {
+  user_id: string;
+  wallet_address: string;
   created_at: string;
 };
 
