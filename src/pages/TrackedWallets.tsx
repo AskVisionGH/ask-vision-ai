@@ -498,9 +498,9 @@ const TrackedWallets = () => {
               Stop tracking
             </AlertDialogAction>
           </AlertDialogFooter>
-        </AlertDialogContent>
+      </AlertDialogContent>
       </AlertDialog>
-    </main>
+    </div>
   );
 };
 
