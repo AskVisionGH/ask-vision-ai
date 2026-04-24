@@ -80,7 +80,7 @@ const indexFeesFn = inngest.createFunction(
 Deno.serve(
   serve({
     client: inngest,
-    functions: [sweepFn],
+    functions: [sweepFn, indexFeesFn],
     servePath: "/functions/v1/inngest-sweep-cron",
   }),
 );
