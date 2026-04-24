@@ -3,6 +3,7 @@ import { Settings as SettingsIcon } from "lucide-react";
 import { TradeTabs, type TradeTab } from "@/components/trade/TradeTabs";
 import { TradeProBracket } from "@/components/trade/TradeProBracket";
 import { TradeDca } from "@/components/trade/TradeDca";
+import { TradeLadder } from "@/components/trade/TradeLadder";
 import {
   Popover,
   PopoverContent,
@@ -10,22 +11,31 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
-// Pro is a container that hosts two flows:
-//   * TP/SL — bracket orders via Jupiter Trigger v2 (managed vault)
-//   * DCA   — recurring time-based buys via Jupiter Recurring v1
+// Pro is a container that hosts three flows:
+//   * TP/SL  — bracket orders via Jupiter Trigger v2 (managed vault)
+//   * DCA    — recurring time-based buys via Jupiter Recurring v1
+//   * Ladder — N parallel limit orders across a price range (Trigger v1)
 
-type ProMode = "tpsl" | "dca";
+type ProMode = "tpsl" | "dca" | "ladder";
 
 const SUB_TABS: { id: ProMode; label: string }[] = [
   { id: "tpsl", label: "TP / SL" },
   { id: "dca", label: "DCA" },
+  { id: "ladder", label: "Ladder" },
 ];
 
-const EXPIRY_PRESETS = [
+const BRACKET_EXPIRY_PRESETS = [
   { label: "1d", ms: 86_400_000 },
   { label: "7d", ms: 7 * 86_400_000 },
   { label: "30d", ms: 30 * 86_400_000 },
 ] as const;
+
+const LADDER_EXPIRY_PRESETS: { label: string; seconds: number | null }[] = [
+  { label: "1d", seconds: 86_400 },
+  { label: "7d", seconds: 7 * 86_400 },
+  { label: "30d", seconds: 30 * 86_400 },
+  { label: "Never", seconds: null },
+];
 
 interface Props {
   tab: TradeTab;
@@ -35,6 +45,9 @@ interface Props {
 export const TradePro = ({ tab, onTabChange }: Props) => {
   const [mode, setMode] = useState<ProMode>("tpsl");
   const [expiryMs, setExpiryMs] = useState<number>(7 * 86_400_000);
+  const [ladderExpirySec, setLadderExpirySec] = useState<number | null>(7 * 86_400);
+
+  const showSettings = mode === "tpsl" || mode === "ladder";
 
   return (
     <div className="w-full max-w-[440px] space-y-4">
@@ -67,7 +80,7 @@ export const TradePro = ({ tab, onTabChange }: Props) => {
           })}
         </div>
 
-        {mode === "tpsl" && (
+        {showSettings && (
           <div className="absolute right-0 top-1/2 -translate-y-1/2">
             <Popover>
               <PopoverTrigger asChild>
@@ -83,26 +96,53 @@ export const TradePro = ({ tab, onTabChange }: Props) => {
                 <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                   Order expiry
                 </p>
-                <div className="mt-3 grid grid-cols-3 gap-1.5">
-                  {EXPIRY_PRESETS.map((p) => (
-                    <button
-                      key={p.label}
-                      type="button"
-                      onClick={() => setExpiryMs(p.ms)}
-                      className={cn(
-                        "ease-vision rounded-md border px-2 py-1.5 font-mono text-[11px]",
-                        expiryMs === p.ms
-                          ? "border-primary/60 bg-primary/10 text-foreground"
-                          : "border-border/60 bg-secondary/40 text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-                <p className="mt-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
-                  Brackets auto-cancel after this period. Funds stay in your vault until withdrawn.
-                </p>
+                {mode === "tpsl" ? (
+                  <>
+                    <div className="mt-3 grid grid-cols-3 gap-1.5">
+                      {BRACKET_EXPIRY_PRESETS.map((p) => (
+                        <button
+                          key={p.label}
+                          type="button"
+                          onClick={() => setExpiryMs(p.ms)}
+                          className={cn(
+                            "ease-vision rounded-md border px-2 py-1.5 font-mono text-[11px]",
+                            expiryMs === p.ms
+                              ? "border-primary/60 bg-primary/10 text-foreground"
+                              : "border-border/60 bg-secondary/40 text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="mt-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
+                      Brackets auto-cancel after this period. Funds stay in your vault until withdrawn.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="mt-3 grid grid-cols-4 gap-1.5">
+                      {LADDER_EXPIRY_PRESETS.map((p) => (
+                        <button
+                          key={p.label}
+                          type="button"
+                          onClick={() => setLadderExpirySec(p.seconds)}
+                          className={cn(
+                            "ease-vision rounded-md border px-2 py-1.5 font-mono text-[11px]",
+                            ladderExpirySec === p.seconds
+                              ? "border-primary/60 bg-primary/10 text-foreground"
+                              : "border-border/60 bg-secondary/40 text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="mt-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
+                      Each unfilled rung auto-cancels after this period.
+                    </p>
+                  </>
+                )}
               </PopoverContent>
             </Popover>
           </div>
@@ -111,8 +151,10 @@ export const TradePro = ({ tab, onTabChange }: Props) => {
 
       {mode === "tpsl" ? (
         <TradeProBracket expiryMs={expiryMs} />
-      ) : (
+      ) : mode === "dca" ? (
         <TradeDca />
+      ) : (
+        <TradeLadder expirySeconds={ladderExpirySec} />
       )}
     </div>
   );
