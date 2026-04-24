@@ -1,7 +1,18 @@
-import { ChangeEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeft, Camera, Languages, RotateCcw, ShieldAlert, Trash2, UserMinus } from "lucide-react";
+import {
+  ArrowLeft,
+  Camera,
+  KeyRound,
+  Languages,
+  Mail,
+  RotateCcw,
+  ShieldAlert,
+  Trash2,
+  UserMinus,
+} from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { DEFAULT_LANGUAGE, LANGUAGE_OPTIONS, type LanguageCode } from "@/lib/languages";
