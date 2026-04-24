@@ -151,7 +151,7 @@ interface Props {
 
 export const ProOpenOrders = ({ refreshKey = 0 }: Props) => {
   const { publicKey, connected, signTransaction } = useWallet();
-  const { ensureJwt } = useJupiterV2Auth();
+  const { ensureJwt, hasCachedJwt, signing } = useJupiterV2Auth();
   const queryClient = useQueryClient();
   const [now, setNow] = useState(Date.now());
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -165,9 +165,10 @@ export const ProOpenOrders = ({ refreshKey = 0 }: Props) => {
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey,
-    enabled: !!wallet,
+    enabled: !!wallet && hasCachedJwt,
     refetchInterval: 30_000,
     refetchOnWindowFocus: true,
+    retry: false,
     queryFn: async () => {
       const jwt = await ensureJwt();
       const res = await supaPost("trigger-v2-orders", {
@@ -187,6 +188,22 @@ export const ProOpenOrders = ({ refreshKey = 0 }: Props) => {
     return () => window.clearInterval(t);
   }, []);
   void now;
+
+  const handleRefresh = useCallback(async () => {
+    try {
+      if (!hasCachedJwt) {
+        await ensureJwt();
+      }
+      await refetch();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Unknown error";
+      toast({
+        title: "Couldn't load brackets",
+        description: msg,
+        variant: "destructive",
+      });
+    }
+  }, [ensureJwt, hasCachedJwt, refetch]);
 
   const handleCancel = useCallback(
     async (order: NormalizedOrder) => {
@@ -262,17 +279,23 @@ export const ProOpenOrders = ({ refreshKey = 0 }: Props) => {
         </span>
         <button
           type="button"
-          onClick={() => refetch()}
-          disabled={isFetching}
+          onClick={handleRefresh}
+          disabled={isFetching || signing}
           className="font-mono text-[10px] text-muted-foreground hover:text-foreground disabled:opacity-50"
         >
-          {isFetching ? "Refreshing…" : "Refresh"}
+          {signing ? "Check wallet…" : isFetching ? "Refreshing…" : hasCachedJwt ? "Refresh" : "Load"}
         </button>
       </div>
 
       {isLoading ? (
         <div className="flex items-center justify-center rounded-2xl border border-border/60 bg-card/40 px-5 py-6 text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
+        </div>
+      ) : !hasCachedJwt ? (
+        <div className="rounded-2xl border border-dashed border-border/60 bg-card/30 px-5 py-6 text-center">
+          <p className="font-mono text-[11px] text-muted-foreground">
+            Tap load when you want to unlock bracket history.
+          </p>
         </div>
       ) : isError ? (
         <div className="rounded-2xl border border-destructive/30 bg-destructive/5 px-5 py-4 font-mono text-[11px] text-destructive">
