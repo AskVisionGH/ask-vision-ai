@@ -125,7 +125,8 @@ Deno.serve(async (req) => {
 
 // ---------------- Solana sweeps ----------------
 
-async function syncSolanaSweeps(supabase: ReturnType<typeof createClient>): Promise<number> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function syncSolanaSweeps(supabase: any): Promise<number> {
   // Pull all successful sweep runs from the last 90 days. The dedupe index
   // on (chain, signature, asset) lets us re-run safely.
   const since = new Date(Date.now() - 90 * 86400_000).toISOString();
@@ -191,7 +192,8 @@ async function syncSolanaSweeps(supabase: ReturnType<typeof createClient>): Prom
 
 // ---------------- DCA upfront fees ----------------
 
-async function syncDcaFees(supabase: ReturnType<typeof createClient>): Promise<number> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function syncDcaFees(supabase: any): Promise<number> {
   // DCA fee transfers are recorded in `tx_events` with metadata.feeAmountAtomic
   // or a dedicated kind. We treat any swap/transfer event whose metadata
   // explicitly tags `platform_fee: true` as a recordable fee.
@@ -247,7 +249,8 @@ async function syncDcaFees(supabase: ReturnType<typeof createClient>): Promise<n
 // transfer IS the LI.FI integrator fee (paid inline on the source-chain
 // swap, no claim step needed). We only consider events from the last 90 days
 // and skip anything we already indexed.
-async function syncSolBridgeFees(supabase: ReturnType<typeof createClient>): Promise<number> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function syncSolBridgeFees(supabase: any): Promise<number> {
   const heliusKey = Deno.env.get("HELIUS_API_KEY");
   if (!heliusKey) throw new Error("HELIUS_API_KEY not configured");
 
@@ -263,14 +266,17 @@ async function syncSolBridgeFees(supabase: ReturnType<typeof createClient>): Pro
   if (!events || events.length === 0) return 0;
 
   // Skip signatures we've already indexed (cheap pre-filter).
-  const sigs = events.map((e) => e.signature as string);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sigs = (events as any[]).map((e: any) => e.signature as string);
   const { data: existing } = await supabase
     .from("treasury_fees")
     .select("signature")
     .eq("chain", "solana")
     .in("signature", sigs);
-  const seen = new Set((existing ?? []).map((r) => r.signature as string));
-  const todo = events.filter((e) => !seen.has(e.signature as string));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const seen = new Set(((existing ?? []) as any[]).map((r: any) => r.signature as string));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const todo = (events as any[]).filter((e: any) => !seen.has(e.signature as string));
   if (todo.length === 0) return 0;
 
   const heliusUrl = `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`;
@@ -378,7 +384,8 @@ interface EtherscanTx {
 }
 
 async function syncEthBridgeFees(
-  supabase: ReturnType<typeof createClient>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
   apiKey: string,
 ): Promise<number> {
   const treasury = ETH_TREASURY.toLowerCase();
@@ -510,7 +517,8 @@ async function fetchEthUsdPrice(): Promise<number | null> {
 // ---------------- Upsert helper ----------------
 
 async function upsertFees(
-  supabase: ReturnType<typeof createClient>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
   rows: FeeRow[],
 ): Promise<number> {
   if (rows.length === 0) return 0;
