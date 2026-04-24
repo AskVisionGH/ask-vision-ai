@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
-import { VersionedTransaction } from "@solana/web3.js";
+import { Transaction, VersionedTransaction } from "@solana/web3.js";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -68,6 +68,8 @@ type Phase =
   | { name: "idle" }
   | { name: "authing" }
   | { name: "preparing" }
+  | { name: "awaiting_fee_signature" }
+  | { name: "submitting_fee" }
   | { name: "awaiting_signature" }
   | { name: "submitting" }
   | { name: "success"; orderId: string; signature: string | null; orderType: string }
