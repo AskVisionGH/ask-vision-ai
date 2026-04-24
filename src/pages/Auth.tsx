@@ -37,6 +37,7 @@ const Auth = () => {
   const [submitting, setSubmitting] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<"google" | "apple" | null>(null);
   const [walletSigning, setWalletSigning] = useState(false);
+  const [sendingReset, setSendingReset] = useState(false);
   // When the user clicks the single "Sign in with wallet" pill while
   // disconnected, we open the modal and remember the intent so we can
   // auto-trigger signing the moment a wallet connects.
@@ -69,6 +70,29 @@ const Auth = () => {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const sendResetEmail = async () => {
+    if (sendingReset) return;
+    const target = email.trim();
+    if (!target) {
+      toast.error("Enter your email first", {
+        description: "We'll send the reset link there.",
+      });
+      return;
+    }
+    setSendingReset(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(target, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setSendingReset(false);
+    if (error) {
+      toast.error("Couldn't send reset email", { description: error.message });
+      return;
+    }
+    toast.success("Check your inbox", {
+      description: `We sent a reset link to ${target}.`,
+    });
   };
 
   const signInWithProvider = async (provider: "google" | "apple") => {
