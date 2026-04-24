@@ -8,22 +8,28 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useWalletAutoLink } from "@/hooks/useWalletAutoLink";
 import { toast } from "@/hooks/use-toast";
+import type { MergeCandidate } from "@/hooks/useWalletAutoLink";
 
 const shortAddr = (addr: string) => `${addr.slice(0, 4)}…${addr.slice(-4)}`;
+
+interface Props {
+  candidate: MergeCandidate | null;
+  merging: boolean;
+  onAccept: () => Promise<{ ok: boolean; error?: string }>;
+  onDismiss: () => void;
+}
 
 /**
  * Renders a one-time prompt when the connected wallet is already linked
  * to a separate wallet-only account, offering to absorb that account's
  * data into the user's current account.
  */
-export const WalletMergePrompt = () => {
-  const { mergeCandidate, merging, acceptMerge, dismissMerge } = useWalletAutoLink();
-  const open = !!mergeCandidate;
+export const WalletMergePrompt = ({ candidate, merging, onAccept, onDismiss }: Props) => {
+  const open = !!candidate;
 
-  const onConfirm = async () => {
-    const res = await acceptMerge();
+  const handleConfirm = async () => {
+    const res = await onAccept();
     if (res.ok) {
       toast({
         title: "Accounts merged",
@@ -39,14 +45,14 @@ export const WalletMergePrompt = () => {
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && !merging && dismissMerge()}>
+    <Dialog open={open} onOpenChange={(o) => !o && !merging && onDismiss()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Merge wallet account?</DialogTitle>
           <DialogDescription>
             We noticed the wallet{" "}
             <span className="font-mono text-foreground">
-              {mergeCandidate ? shortAddr(mergeCandidate.walletAddress) : ""}
+              {candidate ? shortAddr(candidate.walletAddress) : ""}
             </span>{" "}
             was previously used to sign in directly, creating a separate account.
             Merge it into your current account so your old chats, contacts and
@@ -54,10 +60,10 @@ export const WalletMergePrompt = () => {
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button variant="ghost" onClick={dismissMerge} disabled={merging}>
+          <Button variant="ghost" onClick={onDismiss} disabled={merging}>
             Not now
           </Button>
-          <Button onClick={onConfirm} disabled={merging}>
+          <Button onClick={handleConfirm} disabled={merging}>
             {merging ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Merging…
