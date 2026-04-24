@@ -7,6 +7,7 @@ import { WalletContextProvider } from "@/providers/WalletContextProvider";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { useWalletAutoLink } from "@/hooks/useWalletAutoLink";
+import { WalletMergePrompt } from "@/components/WalletMergePrompt";
 import Index from "./pages/Index.tsx";
 import Auth from "./pages/Auth.tsx";
 import Chat from "./pages/Chat.tsx";
