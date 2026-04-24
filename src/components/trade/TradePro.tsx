@@ -400,6 +400,7 @@ export const TradePro = ({ tab, onTabChange }: Props) => {
             </Button>
           </div>
         </div>
+        <ProOpenOrders refreshKey={ordersRefreshKey} />
       </div>
     );
   }
@@ -689,6 +690,9 @@ export const TradePro = ({ tab, onTabChange }: Props) => {
           Pro brackets use a managed vault. You'll sign once to authenticate, then once per
           deposit. Funds stay custodied until your bracket fills or you withdraw.
         </p>
+
+        {/* Open brackets */}
+        <ProOpenOrders refreshKey={ordersRefreshKey} />
 
         {/* Token picker */}
         <TokenPickerDialog
