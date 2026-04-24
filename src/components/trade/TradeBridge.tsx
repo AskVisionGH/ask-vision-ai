@@ -158,6 +158,7 @@ interface TradeBridgeProps {
 export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
   const { publicKey, connected, signTransaction } = useWallet();
   const { setVisible } = useWalletModal();
+  const { connection } = useConnection();
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
