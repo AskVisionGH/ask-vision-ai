@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const DEFAULT_ALLOWED_HEADERS = [
+const ALLOWED_HEADERS = [
   "authorization",
   "x-client-info",
   "apikey",
@@ -12,53 +12,75 @@ const DEFAULT_ALLOWED_HEADERS = [
   "x-supabase-client-runtime-version",
 ].join(", ");
 
-const buildCorsHeaders = (req?: Request) => ({
+const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers":
-    req?.headers.get("access-control-request-headers") ?? DEFAULT_ALLOWED_HEADERS,
-});
+  "Access-Control-Allow-Headers": ALLOWED_HEADERS,
+};
 
-// Thin proxy to Helius mainnet RPC. The browser POSTs JSON-RPC bodies here
-// so the API key never reaches the client. Tiny CPU cost — just a fetch.
+const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json" };
+
+// Thin proxy to Helius mainnet RPC. Wallet adapters fire many concurrent
+// JSON-RPC calls; we add a timeout + structured error responses so a single
+// flaky upstream doesn't crash the worker (which surfaces as a 503
+// SUPABASE_EDGE_RUNTIME_ERROR to the client).
 serve(async (req) => {
-  const corsHeaders = buildCorsHeaders(req);
-
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  try {
-    const HELIUS_API_KEY = Deno.env.get("HELIUS_API_KEY");
-    if (!HELIUS_API_KEY) {
-      return new Response(JSON.stringify({ error: "RPC misconfigured" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+  const HELIUS_API_KEY = Deno.env.get("HELIUS_API_KEY");
+  if (!HELIUS_API_KEY) {
+    return new Response(
+      JSON.stringify({ error: "RPC misconfigured" }),
+      { status: 500, headers: jsonHeaders },
+    );
+  }
 
+  let body: string;
+  try {
+    body = await req.text();
+  } catch (_e) {
+    return new Response(
+      JSON.stringify({ error: "Invalid request body" }),
+      { status: 400, headers: jsonHeaders },
+    );
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+
+  try {
     const upstream = await fetch(
       `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: await req.text(),
+        body,
+        signal: controller.signal,
       },
     );
 
-    const body = await upstream.text();
-    return new Response(body, {
+    const text = await upstream.text();
+    return new Response(text, {
       status: upstream.status,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: jsonHeaders,
     });
   } catch (e) {
-    console.error("rpc-url error:", e);
+    const aborted = e instanceof Error && e.name === "AbortError";
+    console.error("rpc-url upstream error:", aborted ? "timeout" : e);
     return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
+      JSON.stringify({
+        jsonrpc: "2.0",
+        error: {
+          code: -32000,
+          message: aborted ? "RPC upstream timeout" : "RPC upstream unavailable",
+        },
+        id: null,
+      }),
+      { status: 200, headers: jsonHeaders },
     );
+  } finally {
+    clearTimeout(timeout);
   }
 });
