@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import type { ChatMessage, ToolEvent } from "@/lib/chat-stream";
 
+export type ShareMode = "read_only" | "importable";
+
 export interface ConversationRow {
   id: string;
   title: string;
@@ -10,6 +12,7 @@ export interface ConversationRow {
   pinned: boolean;
   pin_order: number;
   share_id: string | null;
+  share_mode: ShareMode;
   created_at: string;
   updated_at: string;
 }
@@ -24,7 +27,7 @@ export interface MessageRow {
 }
 
 const CONVO_COLS =
-  "id, title, wallet_address, pinned, pin_order, share_id, created_at, updated_at";
+  "id, title, wallet_address, pinned, pin_order, share_id, share_mode, created_at, updated_at";
 
 /** Subscribes to the user's conversations, sorted newest first. */
 export const useConversations = () => {
