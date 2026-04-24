@@ -132,7 +132,7 @@ export const TradeSwap = () => {
 
   const [pickerSide, setPickerSide] = useState<"in" | "out" | null>(null);
   const [phase, setPhase] = useState<Phase>({ name: "idle" });
-  const [solBalance, setSolBalance] = useState<number | null>(null);
+  const [inputBalance, setInputBalance] = useState<number | null>(null);
 
   const { connection } = useConnection();
   const { publicKey, connected, signTransaction } = useWallet();
@@ -146,25 +146,40 @@ export const TradeSwap = () => {
     };
   }, []);
 
-  // Load native SOL balance when input is SOL.
+  // Load balance for whichever token is selected on the input side.
+  // SOL → native lamports; SPL → sum of parsed token accounts for that mint.
   useEffect(() => {
     if (!connected || !publicKey) {
-      setSolBalance(null);
+      setInputBalance(null);
       return;
     }
     let cancelled = false;
+    const owner = new PublicKey(publicKey.toBase58());
+    setInputBalance(null);
     (async () => {
       try {
-        const lamports = await connection.getBalance(new PublicKey(publicKey.toBase58()));
-        if (!cancelled) setSolBalance(lamports / LAMPORTS_PER_SOL);
+        if (inputToken.address === SOL_TOKEN.address) {
+          const lamports = await connection.getBalance(owner);
+          if (!cancelled) setInputBalance(lamports / LAMPORTS_PER_SOL);
+        } else {
+          const mint = new PublicKey(inputToken.address);
+          const resp = await connection.getParsedTokenAccountsByOwner(owner, { mint });
+          let total = 0;
+          for (const acc of resp.value) {
+            const ui = acc.account.data.parsed?.info?.tokenAmount?.uiAmount;
+            if (typeof ui === "number") total += ui;
+          }
+          if (!cancelled) setInputBalance(total);
+        }
       } catch {
-        if (!cancelled) setSolBalance(null);
+        if (!cancelled) setInputBalance(null);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [connected, publicKey, connection, phase.name]);
+  }, [connected, publicKey, connection, inputToken.address, phase.name]);
+
 
   const numericAmount = useMemo(() => {
     const n = parseFloat(amount);
