@@ -64,6 +64,7 @@ const Chat = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchHits, setSearchHits] = useState<Set<string> | null>(null);
+  const [shareTarget, setShareTarget] = useState<ConversationRow | null>(null);
   // Whether the signed-in user has zero linked wallets in the DB. Drives the
   // one-time wallet-onboarding prompt for email signups. `null` = unknown
   // (still loading), so the prompt waits instead of flashing in then out.
