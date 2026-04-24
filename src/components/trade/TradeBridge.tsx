@@ -428,7 +428,7 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
           continue;
         }
       }
-      throw new Error("Bridge is taking longer than expected. Track it on LI.FI Explorer.");
+      throw new Error("Bridge is taking longer than expected. You can keep tracking it from the source transaction.");
     } catch (e) {
       if (!mounted.current) return;
       setPhase({ name: "error", message: e instanceof Error ? e.message : "Something went wrong." });
@@ -653,7 +653,7 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
                         <Info className="h-2.5 w-2.5 cursor-help" />
                       </TooltipTrigger>
                       <TooltipContent side="top">
-                        Deducted from the input amount and routed via LI.FI's integrator program.
+                        Deducted from the input amount to support Vision's cross-chain routing.
                       </TooltipContent>
                     </Tooltip>
                   </span>
@@ -686,7 +686,7 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
           </Button>
 
           <p className="text-center font-mono text-[9px] uppercase tracking-wider text-muted-foreground/60">
-            Powered by LI.FI · {chains.length} chains supported
+            Vision routing · {chains.length} chains supported
           </p>
         </div>
       </div>
