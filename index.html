@@ -22,7 +22,36 @@
 </head>
 
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Fallback shown only if the JS bundle fails to mount (e.g. iOS < 14
+           in-app browsers that can't parse modern syntax). React replaces
+           this entire subtree on mount, so users on supported devices never
+           see it. -->
+      <noscript>
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; max-width: 480px; margin: 40px auto; text-align: center; color: #e5e7eb; background: #0a0a0a;">
+          <h1 style="font-size: 18px; margin-bottom: 12px;">JavaScript required</h1>
+          <p style="font-size: 14px; line-height: 1.5; opacity: 0.8;">Vision needs JavaScript to run. Please enable it in your browser settings.</p>
+        </div>
+      </noscript>
+      <div id="boot-fallback" style="display: none; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; max-width: 480px; margin: 40px auto; text-align: center; color: #e5e7eb; background: #0a0a0a; border-radius: 12px;">
+        <h1 style="font-size: 18px; margin-bottom: 12px; font-weight: 600;">Vision can't load on this browser</h1>
+        <p style="font-size: 14px; line-height: 1.5; opacity: 0.85; margin-bottom: 16px;">
+          You may be using an in-app browser (X, Instagram, Discord) on an older iOS version. Vision requires <strong>iOS 14 or newer</strong>.
+        </p>
+        <p style="font-size: 13px; line-height: 1.5; opacity: 0.7;">
+          Try opening this page in <strong>Safari</strong> or <strong>Chrome</strong> directly, or update your device to iOS 14+.
+        </p>
+      </div>
+      <script>
+        // If React hasn't mounted within 6s, reveal the compatibility hint.
+        // React replaces #root's children on mount, so this timer is harmless
+        // on healthy devices — the script element gets removed before firing.
+        setTimeout(function () {
+          var el = document.getElementById('boot-fallback');
+          if (el) el.style.display = 'block';
+        }, 6000);
+      </script>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
