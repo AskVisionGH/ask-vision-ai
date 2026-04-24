@@ -3,16 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { ArrowLeft, Camera, Languages, RotateCcw, ShieldAlert, Trash2, UserMinus } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import {
-  CryptoExperience,
-  RiskTolerance,
-  useProfile,
-} from "@/hooks/useProfile";
-import {
-  EXPERIENCE_OPTIONS,
-  INTEREST_OPTIONS,
-  RISK_OPTIONS,
-} from "@/lib/profile-options";
+import { useProfile } from "@/hooks/useProfile";
 import { DEFAULT_LANGUAGE, LANGUAGE_OPTIONS, type LanguageCode } from "@/lib/languages";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,9 +33,6 @@ const Settings = () => {
 
   const [name, setName] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [experience, setExperience] = useState<CryptoExperience | null>(null);
-  const [interests, setInterests] = useState<string[]>([]);
-  const [risk, setRisk] = useState<RiskTolerance | null>(null);
   const [language, setLanguage] = useState<LanguageCode>(DEFAULT_LANGUAGE);
   const [saving, setSaving] = useState(false);
   const [savingAvatar, setSavingAvatar] = useState(false);
@@ -54,9 +42,6 @@ const Settings = () => {
     if (!profile) return;
     setName(profile.display_name ?? "");
     setAvatarUrl(profile.avatar_url);
-    setExperience(profile.experience);
-    setInterests(profile.interests ?? []);
-    setRisk(profile.risk_tolerance);
     setLanguage((profile.language as LanguageCode) ?? DEFAULT_LANGUAGE);
   }, [profile]);
 
@@ -78,19 +63,10 @@ const Settings = () => {
     }
   };
 
-  const toggleInterest = (value: string) => {
-    setInterests((prev) =>
-      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value],
-    );
-  };
-
   const save = async () => {
     setSaving(true);
     const ok = await updateProfile({
       display_name: name.trim() || null,
-      experience,
-      interests,
-      risk_tolerance: risk,
       language,
     });
     setSaving(false);
@@ -174,86 +150,6 @@ const Settings = () => {
               <p className="mt-3 text-xs text-muted-foreground/70">
                 Signed in as <span className="text-foreground">{user?.email}</span>
               </p>
-            </section>
-
-            {/* Experience */}
-            <section className="rounded-2xl border border-border bg-card/40 p-6 backdrop-blur-md">
-              <h2 className="mb-4 text-sm font-medium text-foreground">Experience level</h2>
-              <div className="grid gap-2 sm:grid-cols-3">
-                {EXPERIENCE_OPTIONS.map((opt) => {
-                  const active = experience === opt.value;
-                  return (
-                    <button
-                      key={opt.value}
-                      onClick={() =>
-                        setExperience(active ? null : opt.value)
-                      }
-                      className={cn(
-                        "rounded-xl border px-3 py-3 text-left ease-vision",
-                        active
-                          ? "border-primary/60 bg-primary/10"
-                          : "border-border bg-card/30 hover:border-primary/30",
-                      )}
-                    >
-                      <div className="text-sm font-medium text-foreground">{opt.label}</div>
-                      <div className="mt-1 text-[11px] text-muted-foreground">
-                        {opt.description}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-
-            {/* Interests */}
-            <section className="rounded-2xl border border-border bg-card/40 p-6 backdrop-blur-md">
-              <h2 className="mb-4 text-sm font-medium text-foreground">Interests</h2>
-              <div className="flex flex-wrap gap-2">
-                {INTEREST_OPTIONS.map((opt) => {
-                  const active = interests.includes(opt.value);
-                  return (
-                    <button
-                      key={opt.value}
-                      onClick={() => toggleInterest(opt.value)}
-                      className={cn(
-                        "rounded-full border px-4 py-2 text-xs ease-vision",
-                        active
-                          ? "border-primary/60 bg-primary/15 text-foreground"
-                          : "border-border bg-card/30 text-muted-foreground hover:border-primary/30 hover:text-foreground",
-                      )}
-                    >
-                      {opt.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-
-            {/* Risk */}
-            <section className="rounded-2xl border border-border bg-card/40 p-6 backdrop-blur-md">
-              <h2 className="mb-4 text-sm font-medium text-foreground">Risk tone</h2>
-              <div className="grid gap-2 sm:grid-cols-3">
-                {RISK_OPTIONS.map((opt) => {
-                  const active = risk === opt.value;
-                  return (
-                    <button
-                      key={opt.value}
-                      onClick={() => setRisk(active ? null : opt.value)}
-                      className={cn(
-                        "rounded-xl border px-3 py-3 text-left ease-vision",
-                        active
-                          ? "border-primary/60 bg-primary/10"
-                          : "border-border bg-card/30 hover:border-primary/30",
-                      )}
-                    >
-                      <div className="text-sm font-medium text-foreground">{opt.label}</div>
-                      <div className="mt-1 text-[11px] text-muted-foreground">
-                        {opt.description}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
             </section>
 
             {/* Language */}
