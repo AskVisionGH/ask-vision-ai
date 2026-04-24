@@ -24,6 +24,7 @@ import { UserAvatar } from "@/components/UserAvatar";
 import { TradeSwap } from "@/components/trade/TradeSwap";
 import { TradeLimit } from "@/components/trade/TradeLimit";
 import { TradePro } from "@/components/trade/TradePro";
+import { TradeBridge } from "@/components/trade/TradeBridge";
 import type { TradeTab } from "@/components/trade/TradeTabs";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
@@ -39,7 +40,7 @@ const Trade = () => {
   const [tab, setTab] = useState<TradeTab>(() => {
     const params = new URLSearchParams(location.search);
     const t = params.get("tab");
-    if (t === "limit" || t === "pro" || t === "trade") return t;
+    if (t === "limit" || t === "pro" || t === "trade" || t === "bridge") return t;
     return "trade";
   });
 
@@ -47,7 +48,7 @@ const Trade = () => {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const t = params.get("tab");
-    if (t === "limit" || t === "pro" || t === "trade") setTab(t);
+    if (t === "limit" || t === "pro" || t === "trade" || t === "bridge") setTab(t);
   }, [location.search]);
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
@@ -141,13 +142,17 @@ const Trade = () => {
                   ? "Set a price. We'll fill automatically when the market hits it."
                   : tab === "pro"
                     ? "Bracket orders with take-profit and stop-loss in a single placement."
-                    : "Swap any Solana token at the best on-chain price."}
+                    : tab === "bridge"
+                      ? "Move tokens across chains with the best routes from LI.FI."
+                      : "Swap any Solana token at the best on-chain price."}
               </p>
             </div>
             {tab === "pro" ? (
               <TradePro tab={tab} onTabChange={setTab} />
             ) : tab === "limit" ? (
               <TradeLimit tab={tab} onTabChange={setTab} />
+            ) : tab === "bridge" ? (
+              <TradeBridge tab={tab} onTabChange={setTab} />
             ) : (
               <TradeSwap tab={tab} onTabChange={setTab} />
             )}
@@ -335,15 +340,15 @@ const TradeSidebar = ({
         </button>
         <button
           type="button"
-          disabled
-          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-muted-foreground/50 ease-vision cursor-not-allowed"
-          aria-label="Bridge (coming soon)"
+          onClick={() => {
+            // Navigate to /trade?tab=bridge — Trade page reads ?tab and updates state.
+            window.location.assign("/trade?tab=bridge");
+          }}
+          className="ease-vision flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+          aria-label="Bridge"
         >
           <ArrowLeftRight className="h-3.5 w-3.5" />
           <span>Bridge</span>
-          <span className="ml-auto rounded-full border border-border/60 bg-secondary/40 px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
-            Soon
-          </span>
         </button>
         {isAdmin && <NavRow to="/admin" icon={<Shield className="h-3.5 w-3.5" />} label="Admin" />}
       </div>
