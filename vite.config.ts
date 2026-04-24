@@ -32,12 +32,15 @@ export default defineConfig(({ mode }) => ({
       globals: { Buffer: true, process: true, global: true },
       protocolImports: true,
     }),
-    // Production-only: emit a second bundle that runs on iOS 12+, older Android
-    // WebViews, and most in-app browsers. Modern browsers still get the fast
-    // ES2019 bundle via <script type="module">.
+    // Production-only: emit a second bundle that runs on older iOS WebKit and
+    // older Android WebViews / in-app browsers. Modern browsers still get the
+    // fast ES2019 bundle via <script type="module">.
+    // NOTE: targets bottom out at iOS 14 / Safari 14 because @solana/web3.js
+    // and bs58 use BigInt literals (`0n`), which iOS < 14 cannot parse at all.
+    // Lowering further would force esbuild to fail the build.
     mode !== "development" &&
       legacy({
-        targets: ["defaults", "not IE 11", "iOS >= 12", "Safari >= 12"],
+        targets: ["defaults", "not IE 11", "iOS >= 14", "Safari >= 14"],
         modernPolyfills: true,
         renderLegacyChunks: true,
       }),
