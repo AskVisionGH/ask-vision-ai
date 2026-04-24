@@ -443,12 +443,16 @@ export const TradeProBracket = ({ expiryMs }: TradeProBracketProps) => {
   const isBusy =
     phase.name === "authing" ||
     phase.name === "preparing" ||
+    phase.name === "awaiting_fee_signature" ||
+    phase.name === "submitting_fee" ||
     phase.name === "awaiting_signature" ||
     phase.name === "submitting" ||
     jwtSigning;
 
   const busyLabel =
     phase.name === "authing" || jwtSigning ? "Sign in to continue…"
+    : phase.name === "awaiting_fee_signature" ? "Approve 1% platform fee…"
+    : phase.name === "submitting_fee" ? "Collecting fee…"
     : phase.name === "preparing" ? "Building order…"
     : phase.name === "awaiting_signature" ? "Approve deposit in wallet…"
     : phase.name === "submitting" ? "Submitting…"
