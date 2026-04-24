@@ -29,9 +29,7 @@ serve(async (req) => {
     if (body.page != null) params.set("page", String(body.page));
     if (body.inputMint) params.set("inputMint", String(body.inputMint));
     if (body.outputMint) params.set("outputMint", String(body.outputMint));
-    if (body.includeFailedTx != null) {
-      params.set("includeFailedTx", body.includeFailedTx ? "true" : "false");
-    }
+    params.set("includeFailedTx", body.includeFailedTx ? "true" : "false");
 
     const r = await fetch(`${BASE}/getRecurringOrders?${params.toString()}`, {
       headers: { "x-api-key": apiKey },
