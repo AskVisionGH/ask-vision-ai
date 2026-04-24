@@ -470,6 +470,11 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
   } else if (numericAmount <= 0) {
     ctaLabel = "Enter an amount";
     ctaDisabled = true; ctaAction = null;
+  } else if (!sameFamily && !destAddressValid) {
+    ctaLabel = toChain.chainType === "EVM"
+      ? "Enter destination EVM address"
+      : "Enter destination address";
+    ctaDisabled = true; ctaAction = null;
   } else if (quoteLoading) {
     ctaLabel = "Finding best route…";
     ctaDisabled = true; ctaAction = null;
