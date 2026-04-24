@@ -47,9 +47,17 @@ const ProtectedRoute = ({
 };
 
 const AppRoutes = () => {
-  // Persist (user, wallet) link any time a wallet is connected while signed in.
-  useWalletAutoLink();
+  // Persist (user, wallet) link any time a wallet is connected while signed in,
+  // and surface a merge dialog if the wallet already belongs to another account.
+  const walletLink = useWalletAutoLink();
   return (
+    <>
+      <WalletMergePrompt
+        candidate={walletLink.mergeCandidate}
+        merging={walletLink.merging}
+        onAccept={walletLink.acceptMerge}
+        onDismiss={walletLink.dismissMerge}
+      />
     <Routes>
       <Route path="/" element={<Index />} />
       <Route path="/auth" element={<Auth />} />
