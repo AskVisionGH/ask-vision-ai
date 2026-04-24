@@ -53,6 +53,7 @@ type TreasuryFee = {
   signature: string;
   from_address: string | null;
   block_time: string;
+  related_user_id: string | null;
   metadata: Record<string, unknown> | null;
 };
 
@@ -614,6 +615,7 @@ const SOURCE_LABELS: Record<TreasuryFee["source_kind"], string> = {
 
 const TreasuryTab = () => {
   const [fees, setFees] = useState<TreasuryFee[]>([]);
+  const [namesByUser, setNamesByUser] = useState<Record<string, string | null>>({});
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [chainFilter, setChainFilter] = useState<"all" | "solana" | "ethereum">("all");
@@ -629,7 +631,26 @@ const TreasuryTab = () => {
     if (error) {
       toast({ title: "Failed to load treasury", description: error.message, variant: "destructive" });
     } else {
-      setFees((data ?? []) as TreasuryFee[]);
+      const rows = (data ?? []) as TreasuryFee[];
+      setFees(rows);
+      // Backfill display names for any fee tied to a known user. Admin RLS
+      // on profiles lets us read across all users in one shot.
+      const ids = Array.from(
+        new Set(rows.map((r) => r.related_user_id).filter((v): v is string => !!v)),
+      );
+      if (ids.length > 0) {
+        const { data: profs } = await supabase
+          .from("profiles")
+          .select("user_id, display_name")
+          .in("user_id", ids);
+        const map: Record<string, string | null> = {};
+        for (const p of (profs ?? []) as { user_id: string; display_name: string | null }[]) {
+          map[p.user_id] = p.display_name;
+        }
+        setNamesByUser(map);
+      } else {
+        setNamesByUser({});
+      }
     }
     setLoading(false);
   };
@@ -750,6 +771,7 @@ const TreasuryTab = () => {
             <TableHeader>
               <TableRow>
                 <TableHead>When</TableHead>
+                <TableHead>User</TableHead>
                 <TableHead>Chain</TableHead>
                 <TableHead>Source</TableHead>
                 <TableHead>Asset</TableHead>
@@ -761,7 +783,7 @@ const TreasuryTab = () => {
             <TableBody>
               {filtered.length === 0 && !loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={8} className="py-10 text-center text-sm text-muted-foreground">
                     No fees recorded yet. Press "Refresh" to backfill from sweeps and the ETH treasury.
                   </TableCell>
                 </TableRow>
@@ -773,6 +795,17 @@ const TreasuryTab = () => {
                 return (
                   <TableRow key={f.id}>
                     <TableCell className="text-xs">{format(new Date(f.block_time), "MMM d HH:mm")}</TableCell>
+                    <TableCell className="text-xs">
+                      {f.related_user_id ? (
+                        namesByUser[f.related_user_id] ?? (
+                          <span className="font-mono text-muted-foreground">
+                            {f.related_user_id.slice(0, 6)}…
+                          </span>
+                        )
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="text-xs capitalize">{f.chain}</Badge>
                     </TableCell>
