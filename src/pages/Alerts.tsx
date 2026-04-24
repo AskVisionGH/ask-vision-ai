@@ -277,7 +277,7 @@ const AlertsRules = () => {
   const [confirmDelete, setConfirmDelete] = useState<AlertRule | null>(null);
 
   const summarize = (r: AlertRule): string => {
-    const c = r.config as Record<string, unknown>;
+    const c = r.config as unknown as Record<string, unknown>;
     if (r.kind === "price") {
       return `${(c.token_symbol as string) ?? "Token"} ${
         c.direction === "above" ? "rises above" : "falls below"
