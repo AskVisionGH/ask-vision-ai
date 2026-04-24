@@ -21,6 +21,7 @@ import { VisionLogo } from "@/components/VisionLogo";
 import { UserAvatar } from "@/components/UserAvatar";
 import { TradeSwap } from "@/components/trade/TradeSwap";
 import { TradeLimit } from "@/components/trade/TradeLimit";
+import { TradePro } from "@/components/trade/TradePro";
 import type { TradeTab } from "@/components/trade/TradeTabs";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
@@ -117,10 +118,14 @@ const Trade = () => {
               <p className="mt-4 text-xs text-muted-foreground">
                 {tab === "limit"
                   ? "Set a price. We'll fill automatically when the market hits it."
-                  : "Swap any Solana token at the best on-chain price."}
+                  : tab === "pro"
+                    ? "Bracket orders with take-profit and stop-loss, powered by Jupiter v2."
+                    : "Swap any Solana token at the best on-chain price."}
               </p>
             </div>
-            {tab === "limit" ? (
+            {tab === "pro" ? (
+              <TradePro tab={tab} onTabChange={setTab} />
+            ) : tab === "limit" ? (
               <TradeLimit tab={tab} onTabChange={setTab} />
             ) : (
               <TradeSwap tab={tab} onTabChange={setTab} />
