@@ -159,7 +159,7 @@ const Admin = () => {
         <Tabs defaultValue="stats" className="space-y-4">
           <TabsList>
             <TabsTrigger value="stats">Stats</TabsTrigger>
-            <TabsTrigger value="sweeps">Fee sweeps</TabsTrigger>
+            <TabsTrigger value="treasury">Treasury</TabsTrigger>
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="roles">Roles</TabsTrigger>
           </TabsList>
@@ -167,8 +167,8 @@ const Admin = () => {
           <TabsContent value="stats">
             <StatsTab />
           </TabsContent>
-          <TabsContent value="sweeps">
-            <SweepsTab />
+          <TabsContent value="treasury">
+            <TreasuryTab />
           </TabsContent>
           <TabsContent value="users">
             <UsersTab />
