@@ -192,7 +192,7 @@ export const AppSidebar = ({
           active={activePath === "/chat"}
         />
         <NavRow
-          to="/trade"
+          to="/trade?tab=trade"
           icon={<Repeat className="h-3.5 w-3.5" />}
           label="Trade"
           active={isTradeActive}
