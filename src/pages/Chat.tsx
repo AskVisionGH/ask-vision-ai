@@ -7,6 +7,7 @@ import { ChatComposer } from "@/components/ChatComposer";
 import { ChatSidebar } from "@/components/ChatSidebar";
 import { ConnectWalletButton } from "@/components/ConnectWalletButton";
 import { VisionLogo } from "@/components/VisionLogo";
+import { WalletOnboardingPrompt } from "@/components/WalletOnboardingPrompt";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Menu } from "lucide-react";
