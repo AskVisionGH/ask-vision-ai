@@ -176,6 +176,17 @@ async function buildFreeSentiment(resolved: ResolvedToken): Promise<SocialSentim
     );
   }
 
+  // Nitter: free X/Twitter access via public RSS instances. No key needed.
+  // Pulls keyword search + curated Crypto Twitter influencers.
+  tasks.push(
+    fetchNitterPosts(resolved)
+      .then((posts) => (posts.length ? { source: "X (via Nitter)", posts } : null))
+      .catch((e) => {
+        console.warn("nitter fetch failed:", e);
+        return null;
+      }),
+  );
+
   const settled = await Promise.all(tasks);
   for (const result of settled) {
     if (!result) continue;
