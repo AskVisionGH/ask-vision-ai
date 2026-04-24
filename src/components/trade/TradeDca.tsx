@@ -56,6 +56,8 @@ const INTERVAL_PRESETS = [
 type Phase =
   | { name: "idle" }
   | { name: "preparing" }
+  | { name: "awaiting_fee_signature" }
+  | { name: "submitting_fee" }
   | { name: "awaiting_signature" }
   | { name: "submitting" }
   | { name: "success"; orderId: string | null; signature: string | null }
