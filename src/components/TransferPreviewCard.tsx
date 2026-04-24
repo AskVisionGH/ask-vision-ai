@@ -33,6 +33,7 @@ import { cn } from "@/lib/utils";
 import { TokenLogo } from "@/components/TokenLogo";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { supabase } from "@/integrations/supabase/client";
 import type { TransferQuoteData } from "@/lib/chat-stream";
 
 interface Props {
@@ -42,8 +43,6 @@ interface Props {
 const REFRESH_MS = 30000;
 const POLL_INTERVAL_MS = 1500;
 const POLL_TIMEOUT_MS = 60000;
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const AUTH_TOKEN = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 type Phase =
   | { name: "preview" }
@@ -76,16 +75,22 @@ const truncAddr = (s: string) => `${s.slice(0, 5)}…${s.slice(-4)}`;
 const truncSig = (s: string) => `${s.slice(0, 4)}…${s.slice(-4)}`;
 
 const supaPost = async (fn: string, body: unknown) => {
-  const resp = await fetch(`${SUPABASE_URL}/functions/v1/${fn}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${AUTH_TOKEN}`,
-    },
-    body: JSON.stringify(body),
-  });
-  const data = await resp.json().catch(() => ({}));
-  if (!resp.ok) throw new Error(data?.error ?? `${fn} failed`);
+  // Use supabase.functions.invoke so the user's session JWT is forwarded —
+  // tx-submit relies on the JWT to identify the caller and log tx_events.
+  const { data, error } = await supabase.functions.invoke(fn, { body });
+  if (error) {
+    const ctx = (error as any).context;
+    if (ctx && typeof ctx.json === "function") {
+      try {
+        const parsed = await ctx.json();
+        if (parsed?.error) throw new Error(parsed.error);
+      } catch { /* fall through */ }
+    }
+    throw new Error(error.message ?? `${fn} failed`);
+  }
+  if (data && typeof data === "object" && "error" in (data as any) && (data as any).error) {
+    throw new Error((data as any).error);
+  }
   return data;
 };
 
