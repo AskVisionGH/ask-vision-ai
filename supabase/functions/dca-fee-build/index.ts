@@ -5,14 +5,14 @@ import {
   SystemProgram,
   Transaction,
   ComputeBudgetProgram,
-} from "https://esm.sh/@solana/web3.js@1.95.3";
+} from "npm:@solana/web3.js@1.95.3";
 import {
   createTransferCheckedInstruction,
   getAssociatedTokenAddressSync,
   createAssociatedTokenAccountIdempotentInstruction,
   TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
-} from "https://esm.sh/@solana/spl-token@0.4.8";
+} from "npm:@solana/spl-token@0.4.8";
 
 // Builds the 1% upfront platform-fee transfer for a DCA order.
 // The user signs this BEFORE the Jupiter recurring-create transaction.
