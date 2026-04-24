@@ -334,24 +334,14 @@ async function syncEthBridgeFees(
 
   const inserted = await upsertFees(supabase, rows);
 
-  // Backfill USD on any existing ETH rows that were indexed before we
-  // started pricing inline (one-shot — cheap, idempotent).
+  // Backfill USD for ETH rows that were indexed before we priced inline.
   if (ethUsd != null) {
-    await supabase
-      .from("treasury_fees")
-      .update({ amount_usd: 0 }) // placeholder so the .rpc below can work
-      .eq("chain", "ethereum")
-      .eq("asset_symbol", "ETH")
-      .is("amount_usd", null)
-      .select("id");
-    // Postgres can't do `amount * ethUsd` via the JS client in a single
-    // call without RPC, so fetch null rows and update them individually.
     const { data: nullRows } = await supabase
       .from("treasury_fees")
       .select("id, amount")
       .eq("chain", "ethereum")
       .eq("asset_symbol", "ETH")
-      .eq("amount_usd", 0);
+      .is("amount_usd", null);
     if (nullRows && nullRows.length > 0) {
       for (const r of nullRows) {
         await supabase
