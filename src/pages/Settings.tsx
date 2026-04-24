@@ -49,6 +49,14 @@ const Settings = () => {
   const [savingAvatar, setSavingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Security: change password / change email — kept local so the form clears
+  // after a successful update and doesn't leak between sessions.
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [updatingPassword, setUpdatingPassword] = useState(false);
+  const [newEmail, setNewEmail] = useState("");
+  const [updatingEmail, setUpdatingEmail] = useState(false);
+
   useEffect(() => {
     if (!profile) return;
     setName(profile.display_name ?? "");
@@ -83,6 +91,59 @@ const Settings = () => {
     setSaving(false);
     if (ok) toast.success("Profile saved");
     else toast.error("Couldn't save profile");
+  };
+
+  const updatePassword = async (e: FormEvent) => {
+    e.preventDefault();
+    if (updatingPassword) return;
+    if (newPassword.length < 8) {
+      toast.error("Password too short", { description: "Use at least 8 characters." });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error("Passwords don't match");
+      return;
+    }
+    setUpdatingPassword(true);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    setUpdatingPassword(false);
+    if (error) {
+      toast.error("Couldn't update password", { description: error.message });
+      return;
+    }
+    setNewPassword("");
+    setConfirmPassword("");
+    toast.success("Password updated");
+  };
+
+  const updateEmail = async (e: FormEvent) => {
+    e.preventDefault();
+    if (updatingEmail) return;
+    const target = newEmail.trim().toLowerCase();
+    if (!target || !target.includes("@")) {
+      toast.error("Enter a valid email");
+      return;
+    }
+    if (target === user?.email?.toLowerCase()) {
+      toast.error("That's already your email");
+      return;
+    }
+    setUpdatingEmail(true);
+    // Supabase sends a confirmation link to BOTH the old and new addresses.
+    // The change only takes effect once both are confirmed.
+    const { error } = await supabase.auth.updateUser(
+      { email: target },
+      { emailRedirectTo: `${window.location.origin}/chat` },
+    );
+    setUpdatingEmail(false);
+    if (error) {
+      toast.error("Couldn't update email", { description: error.message });
+      return;
+    }
+    setNewEmail("");
+    toast.success("Confirm the change", {
+      description: `We sent a confirmation link to ${target} and your current email.`,
+    });
   };
 
   return (
