@@ -185,6 +185,30 @@ async function buildFreeSentiment(resolved: ResolvedToken): Promise<SocialSentim
     allPosts.push(...result.posts);
   }
 
+  // Upgrade sentiment with Lovable AI on the most relevant posts (last 48h, by recency).
+  // Keyword scoring stays as fallback if the AI call fails.
+  if (allPosts.length > 0) {
+    const twoDaysAgo = NOW() - 2 * DAY;
+    const recent = allPosts
+      .filter((p) => p.postedAt >= twoDaysAgo)
+      .sort((a, b) => b.postedAt - a.postedAt)
+      .slice(0, 80);
+    if (recent.length > 0) {
+      try {
+        const aiVerdicts = await classifyPostsWithAI(recent, resolved);
+        if (aiVerdicts) {
+          const byId = new Map(recent.map((p) => [p.id, p] as const));
+          for (const [id, verdict] of aiVerdicts.entries()) {
+            const p = byId.get(id);
+            if (p) p.sentiment = verdict;
+          }
+        }
+      } catch (e) {
+        console.warn("AI sentiment classification failed, keeping keyword scores:", e);
+      }
+    }
+  }
+
   if (allPosts.length === 0) {
     return {
       symbol: resolved.symbol,
