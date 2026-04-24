@@ -286,9 +286,21 @@ const Auth = () => {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="pw" className="text-xs uppercase tracking-wider text-muted-foreground">
-                    Password
-                  </Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="pw" className="text-xs uppercase tracking-wider text-muted-foreground">
+                      Password
+                    </Label>
+                    {mode === "signin" && (
+                      <button
+                        type="button"
+                        onClick={sendResetEmail}
+                        disabled={sendingReset}
+                        className="text-[11px] text-muted-foreground hover:text-foreground ease-vision disabled:opacity-50"
+                      >
+                        {sendingReset ? "Sending…" : "Forgot password?"}
+                      </button>
+                    )}
+                  </div>
                   <Input
                     id="pw"
                     type="password"
