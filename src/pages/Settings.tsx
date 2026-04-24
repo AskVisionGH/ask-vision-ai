@@ -1,7 +1,18 @@
-import { ChangeEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeft, Camera, Languages, RotateCcw, ShieldAlert, Trash2, UserMinus } from "lucide-react";
+import {
+  ArrowLeft,
+  Camera,
+  KeyRound,
+  Languages,
+  Mail,
+  RotateCcw,
+  ShieldAlert,
+  Trash2,
+  UserMinus,
+} from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { DEFAULT_LANGUAGE, LANGUAGE_OPTIONS, type LanguageCode } from "@/lib/languages";
@@ -38,6 +49,14 @@ const Settings = () => {
   const [savingAvatar, setSavingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Security: change password / change email — kept local so the form clears
+  // after a successful update and doesn't leak between sessions.
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [updatingPassword, setUpdatingPassword] = useState(false);
+  const [newEmail, setNewEmail] = useState("");
+  const [updatingEmail, setUpdatingEmail] = useState(false);
+
   useEffect(() => {
     if (!profile) return;
     setName(profile.display_name ?? "");
@@ -72,6 +91,59 @@ const Settings = () => {
     setSaving(false);
     if (ok) toast.success("Profile saved");
     else toast.error("Couldn't save profile");
+  };
+
+  const updatePassword = async (e: FormEvent) => {
+    e.preventDefault();
+    if (updatingPassword) return;
+    if (newPassword.length < 8) {
+      toast.error("Password too short", { description: "Use at least 8 characters." });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error("Passwords don't match");
+      return;
+    }
+    setUpdatingPassword(true);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    setUpdatingPassword(false);
+    if (error) {
+      toast.error("Couldn't update password", { description: error.message });
+      return;
+    }
+    setNewPassword("");
+    setConfirmPassword("");
+    toast.success("Password updated");
+  };
+
+  const updateEmail = async (e: FormEvent) => {
+    e.preventDefault();
+    if (updatingEmail) return;
+    const target = newEmail.trim().toLowerCase();
+    if (!target || !target.includes("@")) {
+      toast.error("Enter a valid email");
+      return;
+    }
+    if (target === user?.email?.toLowerCase()) {
+      toast.error("That's already your email");
+      return;
+    }
+    setUpdatingEmail(true);
+    // Supabase sends a confirmation link to BOTH the old and new addresses.
+    // The change only takes effect once both are confirmed.
+    const { error } = await supabase.auth.updateUser(
+      { email: target },
+      { emailRedirectTo: `${window.location.origin}/chat` },
+    );
+    setUpdatingEmail(false);
+    if (error) {
+      toast.error("Couldn't update email", { description: error.message });
+      return;
+    }
+    setNewEmail("");
+    toast.success("Confirm the change", {
+      description: `We sent a confirmation link to ${target} and your current email.`,
+    });
   };
 
   return (
@@ -207,6 +279,99 @@ const Settings = () => {
                   Re-run
                 </Button>
               </div>
+            </section>
+
+            {/* Security: change password + change email */}
+            <section className="rounded-2xl border border-border bg-card/40 p-6 backdrop-blur-md">
+              <h2 className="mb-4 flex items-center gap-2 text-sm font-medium text-foreground">
+                <KeyRound className="h-3.5 w-3.5 text-muted-foreground" />
+                Security
+              </h2>
+
+              {/* Change password */}
+              <form onSubmit={updatePassword} className="space-y-3">
+                <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Change password
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="new-password" className="text-[11px] text-muted-foreground">
+                      New password
+                    </Label>
+                    <Input
+                      id="new-password"
+                      type="password"
+                      autoComplete="new-password"
+                      minLength={8}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="8+ characters"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="confirm-password" className="text-[11px] text-muted-foreground">
+                      Confirm
+                    </Label>
+                    <Input
+                      id="confirm-password"
+                      type="password"
+                      autoComplete="new-password"
+                      minLength={8}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Repeat it"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    type="submit"
+                    variant="outline"
+                    size="sm"
+                    disabled={updatingPassword || !newPassword || !confirmPassword}
+                  >
+                    {updatingPassword ? "Updating…" : "Update password"}
+                  </Button>
+                </div>
+              </form>
+
+              <div className="my-5 h-px bg-border" />
+
+              {/* Change email */}
+              <form onSubmit={updateEmail} className="space-y-3">
+                <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Change email
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  We'll email a confirmation link to both your current and new
+                  address. The change takes effect once both are confirmed.
+                </p>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                  <div className="flex-1 space-y-1.5">
+                    <Label htmlFor="new-email" className="text-[11px] text-muted-foreground">
+                      New email
+                    </Label>
+                    <Input
+                      id="new-email"
+                      type="email"
+                      autoComplete="email"
+                      value={newEmail}
+                      onChange={(e) => setNewEmail(e.target.value)}
+                      placeholder={user?.email ?? "you@domain.com"}
+                    />
+                  </div>
+                  <Button
+                    type="submit"
+                    variant="outline"
+                    size="sm"
+                    disabled={updatingEmail || !newEmail}
+                    className="shrink-0"
+                  >
+                    <Mail className="mr-1.5 h-3.5 w-3.5" />
+                    {updatingEmail ? "Sending…" : "Send confirmation"}
+                  </Button>
+                </div>
+              </form>
             </section>
 
             <div className="flex justify-end pt-2">

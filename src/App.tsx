@@ -10,6 +10,7 @@ import { useWalletAutoLink } from "@/hooks/useWalletAutoLink";
 import { WalletMergePrompt } from "@/components/WalletMergePrompt";
 import Index from "./pages/Index.tsx";
 import Auth from "./pages/Auth.tsx";
+import ResetPassword from "./pages/ResetPassword.tsx";
 import Chat from "./pages/Chat.tsx";
 import SharedChat from "./pages/SharedChat.tsx";
 import Onboarding from "./pages/Onboarding.tsx";
@@ -62,6 +63,7 @@ const AppRoutes = () => {
     <Routes>
       <Route path="/" element={<Index />} />
       <Route path="/auth" element={<Auth />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/shared/:shareId" element={<SharedChat />} />
       <Route
         path="/onboarding"

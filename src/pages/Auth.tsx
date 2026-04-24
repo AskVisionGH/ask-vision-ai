@@ -37,6 +37,7 @@ const Auth = () => {
   const [submitting, setSubmitting] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<"google" | "apple" | null>(null);
   const [walletSigning, setWalletSigning] = useState(false);
+  const [sendingReset, setSendingReset] = useState(false);
   // When the user clicks the single "Sign in with wallet" pill while
   // disconnected, we open the modal and remember the intent so we can
   // auto-trigger signing the moment a wallet connects.
@@ -69,6 +70,29 @@ const Auth = () => {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const sendResetEmail = async () => {
+    if (sendingReset) return;
+    const target = email.trim();
+    if (!target) {
+      toast.error("Enter your email first", {
+        description: "We'll send the reset link there.",
+      });
+      return;
+    }
+    setSendingReset(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(target, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setSendingReset(false);
+    if (error) {
+      toast.error("Couldn't send reset email", { description: error.message });
+      return;
+    }
+    toast.success("Check your inbox", {
+      description: `We sent a reset link to ${target}.`,
+    });
   };
 
   const signInWithProvider = async (provider: "google" | "apple") => {
@@ -262,9 +286,21 @@ const Auth = () => {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="pw" className="text-xs uppercase tracking-wider text-muted-foreground">
-                    Password
-                  </Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="pw" className="text-xs uppercase tracking-wider text-muted-foreground">
+                      Password
+                    </Label>
+                    {mode === "signin" && (
+                      <button
+                        type="button"
+                        onClick={sendResetEmail}
+                        disabled={sendingReset}
+                        className="text-[11px] text-muted-foreground hover:text-foreground ease-vision disabled:opacity-50"
+                      >
+                        {sendingReset ? "Sending…" : "Forgot password?"}
+                      </button>
+                    )}
+                  </div>
                   <Input
                     id="pw"
                     type="password"
