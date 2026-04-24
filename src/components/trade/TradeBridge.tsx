@@ -536,6 +536,32 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
             placeholder={quoteLoading ? "…" : "0.00"}
           />
 
+          {/* Destination wallet (only required for cross-family bridges) */}
+          {toChain && !sameFamily && (
+            <div className="rounded-xl border border-border/60 bg-secondary/30 px-3 py-2.5">
+              <label className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+                Destination wallet on {toChain.name}
+              </label>
+              <Input
+                value={destAddress}
+                onChange={(e) => setDestAddress(e.target.value)}
+                placeholder={
+                  toChain.chainType === "EVM" ? "0x…" : "Wallet address"
+                }
+                spellCheck={false}
+                className={cn(
+                  "mt-1.5 h-9 border-0 bg-transparent px-0 font-mono text-xs focus-visible:ring-0 focus-visible:ring-offset-0",
+                  destAddress && !destAddressValid && "text-down",
+                )}
+              />
+              {destAddress && !destAddressValid && (
+                <p className="font-mono text-[9px] text-down">
+                  Doesn't look like a valid {toChain.chainType === "EVM" ? "EVM" : toChain.chainType} address.
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Quote details */}
           {quote && (
             <div className="space-y-1.5 rounded-xl border border-border/40 bg-secondary/20 px-3 py-2.5 font-mono text-[10px] text-muted-foreground">
