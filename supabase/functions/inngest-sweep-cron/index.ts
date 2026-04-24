@@ -12,7 +12,9 @@ import { serve } from "https://esm.sh/inngest@3.27.0/edge";
 const inngest = new Inngest({ id: "vision-fee-sweeper" });
 
 const sweepFn = inngest.createFunction(
-  { id: "sweep-jupiter-fees", name: "Sweep Jupiter referral fees" },
+  // retries: 0 — the sweep is hourly and best-effort. Retries on failure
+  // caused multiple runs per hour; one tick = one attempt.
+  { id: "sweep-jupiter-fees", name: "Sweep Jupiter referral fees", retries: 0 },
   { cron: "0 * * * *" }, // every hour on the hour, UTC
   async ({ step }) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
