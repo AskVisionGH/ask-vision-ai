@@ -378,6 +378,14 @@ export const ChatSidebar = ({
             <Repeat className="h-4 w-4" />
           </Link>
           <Link
+            to="/trade?tab=bridge"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+            aria-label="Bridge"
+            title="Bridge"
+          >
+            <ArrowLeftRight className="h-4 w-4" />
+          </Link>
+          <Link
             to="/tracked-wallets"
             className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
             aria-label="Tracked wallets"
