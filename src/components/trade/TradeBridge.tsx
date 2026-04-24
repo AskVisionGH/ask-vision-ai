@@ -228,6 +228,54 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
     });
   }, [fromChain, fromToken]);
 
+  // Source-token balance (Solana only for v1 — source chain is locked to SOL).
+  const [fromBalance, setFromBalance] = useState<number | null>(null);
+  useEffect(() => {
+    if (!connected || !publicKey || !fromToken || fromToken.chainId !== SOLANA_CHAIN_ID) {
+      setFromBalance(null);
+      return;
+    }
+    let cancelled = false;
+    setFromBalance(null);
+    const owner = new PublicKey(publicKey.toBase58());
+    (async () => {
+      try {
+        const isNative =
+          fromToken.address === SOL_NATIVE_ADDRESS || fromToken.address === WSOL_MINT;
+        if (isNative) {
+          const lamports = await connection.getBalance(owner);
+          if (!cancelled) setFromBalance(lamports / LAMPORTS_PER_SOL);
+        } else {
+          const mint = new PublicKey(fromToken.address);
+          const resp = await connection.getParsedTokenAccountsByOwner(owner, { mint });
+          let total = 0;
+          for (const acc of resp.value) {
+            const ui = acc.account.data.parsed?.info?.tokenAmount?.uiAmount;
+            if (typeof ui === "number") total += ui;
+          }
+          if (!cancelled) setFromBalance(total);
+        }
+      } catch {
+        if (!cancelled) setFromBalance(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [connected, publicKey, fromToken, connection]);
+
+  const handleMax = useCallback(() => {
+    if (fromBalance == null || !fromToken) return;
+    const isNative =
+      fromToken.address === SOL_NATIVE_ADDRESS || fromToken.address === WSOL_MINT;
+    if (isNative) {
+      // Reserve a bit for rent + tx fees on native SOL.
+      const reserve = 0.01;
+      const max = Math.max(0, fromBalance - reserve);
+      setAmount(max > 0 ? max.toFixed(6) : "");
+    } else {
+      setAmount(fromBalance > 0 ? String(fromBalance) : "");
+    }
+  }, [fromBalance, fromToken]);
+
   const numericAmount = useMemo(() => {
     const n = parseFloat(amount);
     return Number.isFinite(n) && n > 0 ? n : 0;
