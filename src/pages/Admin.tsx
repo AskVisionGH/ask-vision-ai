@@ -771,6 +771,7 @@ const TreasuryTab = () => {
             <TableHeader>
               <TableRow>
                 <TableHead>When</TableHead>
+                <TableHead>User</TableHead>
                 <TableHead>Chain</TableHead>
                 <TableHead>Source</TableHead>
                 <TableHead>Asset</TableHead>
@@ -782,7 +783,7 @@ const TreasuryTab = () => {
             <TableBody>
               {filtered.length === 0 && !loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={8} className="py-10 text-center text-sm text-muted-foreground">
                     No fees recorded yet. Press "Refresh" to backfill from sweeps and the ETH treasury.
                   </TableCell>
                 </TableRow>
