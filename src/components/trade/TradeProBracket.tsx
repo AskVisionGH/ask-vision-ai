@@ -271,13 +271,49 @@ export const TradeProBracket = ({ expiryMs }: TradeProBracketProps) => {
 
       setPhase({ name: "preparing" });
 
-      // Step 1: ensure vault exists
-      await supaPost("trigger-v2-vault", { jwt });
-
-      // Step 2: craft deposit
       const inputAmountAtomic = Math.floor(numericSell * Math.pow(10, inputToken.decimals));
       if (inputAmountAtomic <= 0) throw new Error("Amount too small");
 
+      // ---- Step 1: Collect 1% upfront platform fee ----
+      const feeBuilt = await supaPost("dca-fee-build", {
+        user: publicKey.toBase58(),
+        inputMint: inputToken.address,
+        totalAmountAtomic: String(inputAmountAtomic),
+        decimals: inputToken.decimals,
+      });
+      const feeTxB64: string = feeBuilt?.transaction;
+      if (!feeTxB64) throw new Error("Fee build failed");
+
+      setPhase({ name: "awaiting_fee_signature" });
+      const feeBytes = Uint8Array.from(atob(feeTxB64), (c) => c.charCodeAt(0));
+      const feeTx = Transaction.from(feeBytes);
+      let signedFee: Transaction;
+      try {
+        signedFee = await signTransaction(feeTx);
+      } catch {
+        if (mounted.current) setPhase({ name: "error", message: "Cancelled — try again." });
+        return;
+      }
+      const signedFeeB64 = btoa(
+        String.fromCharCode(...signedFee.serialize({ requireAllSignatures: true })),
+      );
+
+      setPhase({ name: "submitting_fee" });
+      await supaPost("tx-submit", {
+        signedTransaction: signedFeeB64,
+        kind: "transfer",
+        inputMint: inputToken.address,
+        recipient: "treasury",
+        walletAddress: publicKey.toBase58(),
+        metadata: { source: "pro_bracket_platform_fee" },
+      });
+
+      setPhase({ name: "preparing" });
+
+      // Step 2: ensure vault exists
+      await supaPost("trigger-v2-vault", { jwt });
+
+      // Step 3: craft deposit
       const deposit = await supaPost("trigger-v2-deposit-craft", {
         jwt,
         inputMint: inputToken.address,
@@ -289,7 +325,7 @@ export const TradeProBracket = ({ expiryMs }: TradeProBracketProps) => {
       const depositRequestId: string = deposit.requestId;
       if (!depositTxB64 || !depositRequestId) throw new Error("Deposit failed");
 
-      // Step 3: sign deposit
+      // Step 4: sign deposit
       setPhase({ name: "awaiting_signature" });
       const txBytes = Uint8Array.from(atob(depositTxB64), (c) => c.charCodeAt(0));
       const tx = VersionedTransaction.deserialize(txBytes);
