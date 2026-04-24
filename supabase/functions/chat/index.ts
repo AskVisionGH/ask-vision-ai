@@ -417,6 +417,18 @@ serve(async (req) => {
         );
       };
 
+      // Tool cards are buffered here and only flushed once the model starts
+      // streaming its post-tool framing text (or right before stream end).
+      // That gives the UI a smooth "text first, card slides in below" feel
+      // instead of "card pops in, then text appends above and shifts the card".
+      const pendingCards: Array<{ type: string; data: unknown }> = [];
+      const flushPendingCards = () => {
+        while (pendingCards.length > 0) {
+          const card = pendingCards.shift()!;
+          send("tool", card);
+        }
+      };
+
       // Track tools already invoked this turn so we never emit duplicate
       // cards if the model decides to call the same tool again.
       const emittedToolKeys = new Set<string>();
