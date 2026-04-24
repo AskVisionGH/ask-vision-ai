@@ -89,6 +89,11 @@ const TOOLS = [
             description:
               "Token ticker (e.g. 'BTC', 'ETH', 'SOL', 'BONK'), full coin name (e.g. 'Bitcoin'), or Solana mint address.",
           },
+          silent: {
+            type: "boolean",
+            description:
+              "Set to true ONLY when this lookup is an internal step for another tool (e.g. converting a USD amount into a token amount before prepare_swap). Suppresses the token info card in the UI. Default false.",
+          },
         },
         required: ["query"],
         additionalProperties: false,
