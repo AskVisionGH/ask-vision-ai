@@ -19,6 +19,7 @@ import Settings from "./pages/Settings.tsx";
 import Contacts from "./pages/Contacts.tsx";
 import TrackedWallets from "./pages/TrackedWallets.tsx";
 import Admin from "./pages/Admin.tsx";
+import Trade from "./pages/Trade.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -104,6 +105,14 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute>
             <TrackedWallets />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/trade"
+        element={
+          <ProtectedRoute>
+            <Trade />
           </ProtectedRoute>
         }
       />
