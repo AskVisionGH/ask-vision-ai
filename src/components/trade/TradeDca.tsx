@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
-import { VersionedTransaction } from "@solana/web3.js";
+import { Transaction, VersionedTransaction } from "@solana/web3.js";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -56,6 +56,8 @@ const INTERVAL_PRESETS = [
 type Phase =
   | { name: "idle" }
   | { name: "preparing" }
+  | { name: "awaiting_fee_signature" }
+  | { name: "submitting_fee" }
   | { name: "awaiting_signature" }
   | { name: "submitting" }
   | { name: "success"; orderId: string | null; signature: string | null }
@@ -251,6 +253,41 @@ export const TradeDca = () => {
       const inAmountAtomic = Math.floor(numericTotal * Math.pow(10, inputToken.decimals));
       if (inAmountAtomic <= 0) throw new Error("Amount too small");
 
+      // ---- Step 1: Collect 1% upfront platform fee ----
+      const feeBuilt = await supaPost("dca-fee-build", {
+        user: publicKey.toBase58(),
+        inputMint: inputToken.address,
+        totalAmountAtomic: String(inAmountAtomic),
+        decimals: inputToken.decimals,
+      });
+      const feeTxB64: string = feeBuilt?.transaction;
+      if (!feeTxB64) throw new Error("Fee build failed");
+
+      setPhase({ name: "awaiting_fee_signature" });
+      const feeBytes = Uint8Array.from(atob(feeTxB64), (c) => c.charCodeAt(0));
+      const feeTx = Transaction.from(feeBytes);
+      let signedFee: Transaction;
+      try {
+        signedFee = await signTransaction(feeTx);
+      } catch {
+        if (mounted.current) setPhase({ name: "error", message: "Cancelled — try again." });
+        return;
+      }
+      const signedFeeB64 = btoa(
+        String.fromCharCode(...signedFee.serialize({ requireAllSignatures: true })),
+      );
+
+      setPhase({ name: "submitting_fee" });
+      await supaPost("tx-submit", {
+        signedTransaction: signedFeeB64,
+        kind: "transfer",
+        inputMint: inputToken.address,
+        recipient: "treasury",
+        walletAddress: publicKey.toBase58(),
+        metadata: { source: "dca_platform_fee" },
+      });
+
+      // ---- Step 2: Build the Jupiter recurring create transaction ----
       const created = await supaPost("recurring-create", {
         user: publicKey.toBase58(),
         inputMint: inputToken.address,
@@ -365,16 +402,22 @@ export const TradeDca = () => {
   // ---- CTA ----
   const isBusy =
     phase.name === "preparing" ||
+    phase.name === "awaiting_fee_signature" ||
+    phase.name === "submitting_fee" ||
     phase.name === "awaiting_signature" ||
     phase.name === "submitting";
   const busyLabel =
     phase.name === "preparing"
-      ? "Building order…"
-      : phase.name === "awaiting_signature"
-        ? "Approve in wallet…"
-        : phase.name === "submitting"
-          ? "Submitting…"
-          : "";
+      ? "Preparing fee…"
+      : phase.name === "awaiting_fee_signature"
+        ? "Approve fee in wallet…"
+        : phase.name === "submitting_fee"
+          ? "Sending fee…"
+          : phase.name === "awaiting_signature"
+            ? "Approve DCA in wallet…"
+            : phase.name === "submitting"
+              ? "Submitting DCA…"
+              : "";
 
   let ctaLabel = "Start DCA";
   let ctaDisabled = false;
@@ -609,7 +652,20 @@ export const TradeDca = () => {
               }
             />
             <StatsRow
-              label="Protocol fee"
+              label="Platform fee"
+              value={
+                <span className="font-mono text-[12px] text-foreground">
+                  1% upfront
+                  {totalUsd != null && totalUsd > 0 && (
+                    <span className="ml-1 text-muted-foreground">
+                      (≈ {fmtUsd(totalUsd * 0.01)})
+                    </span>
+                  )}
+                </span>
+              }
+            />
+            <StatsRow
+              label="Jupiter fee"
               value={
                 <span className="font-mono text-[12px] text-muted-foreground">
                   0.1% per fill
