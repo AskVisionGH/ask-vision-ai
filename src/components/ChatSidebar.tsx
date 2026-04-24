@@ -511,15 +511,6 @@ export const ChatSidebar = ({
           <Radar className="h-3.5 w-3.5" />
           Tracked wallets
         </Link>
-        {isAdmin ? (
-          <Link
-            to="/admin"
-            className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground ease-vision hover:bg-secondary/60 hover:text-foreground"
-          >
-            <Shield className="h-3.5 w-3.5" />
-            Admin
-          </Link>
-        ) : null}
         <button
           type="button"
           disabled
@@ -551,6 +542,15 @@ export const ChatSidebar = ({
             Soon
           </span>
         </button>
+        {isAdmin ? (
+          <Link
+            to="/admin"
+            className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground ease-vision hover:bg-secondary/60 hover:text-foreground"
+          >
+            <Shield className="h-3.5 w-3.5" />
+            Admin
+          </Link>
+        ) : null}
       </div>
 
       {/* Thread list */}
