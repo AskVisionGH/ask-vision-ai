@@ -27,7 +27,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { TokenLogo } from "@/components/TokenLogo";
-import { TradeTabs, type TradeTab } from "@/components/trade/TradeTabs";
 import {
   TokenPickerDialog,
   pushRecentToken,
@@ -121,12 +120,7 @@ const supaPost = async (fn: string, body: unknown, attempt = 0): Promise<any> =>
   return data;
 };
 
-interface Props {
-  tab: TradeTab;
-  onTabChange: (t: TradeTab) => void;
-}
-
-export const TradePro = ({ tab, onTabChange }: Props) => {
+export const TradeProBracket = () => {
   // Inputs
   const [inputToken, setInputToken] = useState<TokenMeta>(USDC_TOKEN);
   const [outputToken, setOutputToken] = useState<TokenMeta>(SOL_TOKEN);
