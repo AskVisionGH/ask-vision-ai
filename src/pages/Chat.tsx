@@ -6,6 +6,7 @@ import { ChatBubble } from "@/components/ChatBubble";
 import { ChatComposer } from "@/components/ChatComposer";
 import { ChatSidebar } from "@/components/ChatSidebar";
 import { ConnectWalletButton } from "@/components/ConnectWalletButton";
+import { NotificationBell } from "@/components/NotificationBell";
 import { ShareConversationDialog } from "@/components/ShareConversationDialog";
 import { VisionLogo } from "@/components/VisionLogo";
 import { WalletOnboardingPrompt } from "@/components/WalletOnboardingPrompt";
