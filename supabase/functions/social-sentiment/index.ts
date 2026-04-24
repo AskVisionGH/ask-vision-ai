@@ -176,16 +176,7 @@ async function buildFreeSentiment(resolved: ResolvedToken): Promise<SocialSentim
     );
   }
 
-  // Nitter: free X/Twitter access via public RSS instances. No key needed.
-  // Pulls keyword search + curated Crypto Twitter influencers.
-  tasks.push(
-    fetchNitterPosts(resolved)
-      .then((posts) => (posts.length ? { source: "X (via Nitter)", posts } : null))
-      .catch((e) => {
-        console.warn("nitter fetch failed:", e);
-        return null;
-      }),
-  );
+
 
   const settled = await Promise.all(tasks);
   for (const result of settled) {
@@ -209,7 +200,7 @@ async function buildFreeSentiment(resolved: ResolvedToken): Promise<SocialSentim
       headline: `No social chatter found for $${resolved.symbol} in the last 48h`,
       series: [],
       topPosts: [],
-      sources: ["Pump.fun", "Reddit", "Hacker News", "X (via Nitter)", neynarKey ? "Farcaster" : null].filter(Boolean) as string[],
+      sources: ["Pump.fun", "Reddit", "Hacker News", neynarKey ? "Farcaster" : null].filter(Boolean) as string[],
       reportUrl: null,
       error: `No reliable social data for $${resolved.symbol} yet — too new or too quiet.`,
     };
