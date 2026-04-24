@@ -34,11 +34,11 @@ export default defineConfig(({ mode }) => ({
     }),
     // Production-only: emit a second bundle that runs on older iOS WebKit and
     // older Android WebViews / in-app browsers. Modern browsers still get the
-    // fast ES2019 bundle via <script type="module">.
-    // NOTE: targets bottom out at iOS/Safari 14 because @solana/web3.js and
-    // bs58 use BigInt literals (`0n`), which iOS < 14 cannot parse at all.
-    // Targets are explicit (no "defaults") because that browserslist query
-    // includes Safari 12 which would fail the build for the same reason.
+    // fast ES2019 bundle via <script type="module">; legacy browsers fall back
+    // to a transpiled chunk via the SystemJS loader.
+    // We deliberately do NOT enable `modernPolyfills` because the Solana libs
+    // use BigInt literals (`0n`) which esbuild can't transpile — the legacy
+    // bundle handles old browsers and the modern bundle stays at ES2019.
     mode !== "development" &&
       legacy({
         targets: [
@@ -48,7 +48,6 @@ export default defineConfig(({ mode }) => ({
           "Firefox >= 67",
           "Edge >= 79",
         ],
-        modernPolyfills: true,
         renderLegacyChunks: true,
       }),
     mode === "development" && componentTagger(),
