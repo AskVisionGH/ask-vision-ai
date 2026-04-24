@@ -185,6 +185,30 @@ async function buildFreeSentiment(resolved: ResolvedToken): Promise<SocialSentim
     allPosts.push(...result.posts);
   }
 
+  // Upgrade sentiment with Lovable AI on the most relevant posts (last 48h, by recency).
+  // Keyword scoring stays as fallback if the AI call fails.
+  if (allPosts.length > 0) {
+    const twoDaysAgo = NOW() - 2 * DAY;
+    const recent = allPosts
+      .filter((p) => p.postedAt >= twoDaysAgo)
+      .sort((a, b) => b.postedAt - a.postedAt)
+      .slice(0, 80);
+    if (recent.length > 0) {
+      try {
+        const aiVerdicts = await classifyPostsWithAI(recent, resolved);
+        if (aiVerdicts) {
+          const byId = new Map(recent.map((p) => [p.id, p] as const));
+          for (const [id, verdict] of aiVerdicts.entries()) {
+            const p = byId.get(id);
+            if (p) p.sentiment = verdict;
+          }
+        }
+      } catch (e) {
+        console.warn("AI sentiment classification failed, keeping keyword scores:", e);
+      }
+    }
+  }
+
   if (allPosts.length === 0) {
     return {
       symbol: resolved.symbol,
@@ -723,6 +747,107 @@ function classifyText(text: string): SocialPost["sentiment"] {
   if (score > 0) return "positive";
   if (score < 0) return "negative";
   return "neutral";
+}
+
+// Batch-classify posts with Lovable AI (Gemini Flash Lite) — fast, ~free, far
+// more accurate than keyword scoring on sarcasm, slang, mixed signals, etc.
+// Returns null on any failure so the caller falls back to keyword scores.
+async function classifyPostsWithAI(
+  posts: SocialPost[],
+  resolved: ResolvedToken,
+): Promise<Map<string, SocialPost["sentiment"]> | null> {
+  const apiKey = Deno.env.get("LOVABLE_API_KEY");
+  if (!apiKey || posts.length === 0) return null;
+
+  // Trim each post to a reasonable length to keep the prompt compact.
+  const items = posts.map((p, i) => ({
+    i,
+    text: (p.title || "").replace(/\s+/g, " ").trim().slice(0, 280),
+  }));
+
+  const system =
+    `You are a crypto social-sentiment classifier. For each post, decide whether it expresses ` +
+    `bullish/positive, bearish/negative, or neutral sentiment about $${resolved.symbol} (${resolved.name}). ` +
+    `Treat sarcasm, irony, and mixed sentiment carefully. Posts that are off-topic, spam, or unrelated to ` +
+    `$${resolved.symbol} should be marked "neutral". Return one verdict per post.`;
+
+  const user = JSON.stringify({ symbol: resolved.symbol, posts: items });
+
+  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash-lite",
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "classify_posts",
+            description: "Return a sentiment verdict for each input post by index.",
+            parameters: {
+              type: "object",
+              properties: {
+                verdicts: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      i: { type: "integer" },
+                      sentiment: { type: "string", enum: ["positive", "neutral", "negative"] },
+                    },
+                    required: ["i", "sentiment"],
+                    additionalProperties: false,
+                  },
+                },
+              },
+              required: ["verdicts"],
+              additionalProperties: false,
+            },
+          },
+        },
+      ],
+      tool_choice: { type: "function", function: { name: "classify_posts" } },
+    }),
+  });
+
+  if (!resp.ok) {
+    const t = await resp.text().catch(() => "");
+    console.warn("AI classify gateway error:", resp.status, t.slice(0, 200));
+    return null;
+  }
+
+  const data = await resp.json();
+  const call = data?.choices?.[0]?.message?.tool_calls?.[0];
+  const argStr = call?.function?.arguments;
+  if (typeof argStr !== "string") return null;
+
+  let parsed: any;
+  try {
+    parsed = JSON.parse(argStr);
+  } catch {
+    return null;
+  }
+
+  const verdicts = Array.isArray(parsed?.verdicts) ? parsed.verdicts : [];
+  if (verdicts.length === 0) return null;
+
+  const out = new Map<string, SocialPost["sentiment"]>();
+  for (const v of verdicts) {
+    const idx = Number(v?.i);
+    const s = v?.sentiment;
+    if (!Number.isInteger(idx) || idx < 0 || idx >= posts.length) continue;
+    if (s === "positive" || s === "negative" || s === "neutral") {
+      out.set(posts[idx].id, s);
+    }
+  }
+  return out.size > 0 ? out : null;
 }
 
 function sentimentToScore(sentiment: SocialPost["sentiment"]): number {
