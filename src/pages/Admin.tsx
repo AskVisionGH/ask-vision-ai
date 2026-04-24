@@ -77,6 +77,12 @@ const formatUsd = (n: number | null | undefined) =>
     : "—";
 
 const shortId = (id: string) => `${id.slice(0, 8)}…${id.slice(-4)}`;
+const shortEmail = (email: string) => {
+  const [local, domain] = email.split("@");
+  if (!domain) return email;
+  const shortLocal = local.length > 10 ? `${local.slice(0, 8)}…` : local;
+  return `${shortLocal}@${domain}`;
+};
 
 const CopyId = ({ value, label }: { value: string; label?: string }) => {
   const [copied, setCopied] = useState(false);
