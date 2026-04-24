@@ -3,13 +3,14 @@ import { supabase } from "@/integrations/supabase/client";
 
 type PermissionState = "default" | "granted" | "denied" | "unsupported";
 
-const urlBase64ToUint8Array = (base64: string): Uint8Array => {
+const urlBase64ToUint8Array = (base64: string): BufferSource => {
   const padding = "=".repeat((4 - (base64.length % 4)) % 4);
   const normalized = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
   const raw = atob(normalized);
-  const out = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i += 1) out[i] = raw.charCodeAt(i);
-  return out;
+  const buf = new ArrayBuffer(raw.length);
+  const view = new Uint8Array(buf);
+  for (let i = 0; i < raw.length; i += 1) view[i] = raw.charCodeAt(i);
+  return buf;
 };
 
 const isSupported = () =>
