@@ -86,9 +86,10 @@ const Trade = () => {
                 </Button>
               </SheetTrigger>
               <SheetContent side="left" className="w-72 p-0 [&>button.absolute]:hidden">
-                <TradeSidebar
+                <AppSidebar
                   collapsed={false}
                   activePath={location.pathname}
+                  activeTradeTab={tab}
                   isAdmin={isAdmin}
                   user={user}
                   profile={profile}
