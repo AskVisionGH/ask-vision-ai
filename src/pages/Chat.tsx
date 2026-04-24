@@ -7,11 +7,13 @@ import { ChatComposer } from "@/components/ChatComposer";
 import { ChatSidebar } from "@/components/ChatSidebar";
 import { ConnectWalletButton } from "@/components/ConnectWalletButton";
 import { VisionLogo } from "@/components/VisionLogo";
+import { WalletOnboardingPrompt } from "@/components/WalletOnboardingPrompt";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Menu } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
+import { supabase } from "@/integrations/supabase/client";
 import { useContacts } from "@/hooks/useContacts";
 import {
   autoTitleConversation,
@@ -60,6 +62,10 @@ const Chat = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchHits, setSearchHits] = useState<Set<string> | null>(null);
+  // Whether the signed-in user has zero linked wallets in the DB. Drives the
+  // one-time wallet-onboarding prompt for email signups. `null` = unknown
+  // (still loading), so the prompt waits instead of flashing in then out.
+  const [hasNoWallet, setHasNoWallet] = useState<boolean | null>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   // Conversations created in-session via send() — we already have their
   // messages locally, so skip the network fetch (which would race against
@@ -114,6 +120,36 @@ const Chat = () => {
     }, 200);
     return () => window.clearTimeout(handle);
   }, [searchQuery, user]);
+
+  // One-time check: does this user have any linked wallets? Drives the
+  // wallet-onboarding prompt. We only need a count, and we re-run on user
+  // change (e.g. account switch). The prompt itself dismisses on `connected`
+  // from the wallet adapter context, and `useWalletAutoLink` handles
+  // persisting the new row.
+  useEffect(() => {
+    if (!user) {
+      setHasNoWallet(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { count, error } = await supabase
+        .from("wallet_links")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id);
+      if (cancelled) return;
+      if (error) {
+        // Fail closed: don't show the prompt if we can't tell. Better to
+        // under-prompt than to nag a user who already has a wallet.
+        setHasNoWallet(false);
+        return;
+      }
+      setHasNoWallet((count ?? 0) === 0);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   const selectConversation = (id: string) => {
     setSearchParams({ c: id });
@@ -415,6 +451,8 @@ const Chat = () => {
 
   return (
     <div className="relative flex h-screen bg-background text-foreground">
+      {/* One-time wallet prompt for email signups with no linked wallet. */}
+      <WalletOnboardingPrompt needsWallet={hasNoWallet === true} />
       <div className="pointer-events-none absolute inset-0 bg-aurora" aria-hidden />
 
       {/* Desktop sidebar */}
