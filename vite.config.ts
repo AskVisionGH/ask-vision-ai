@@ -13,16 +13,14 @@ export default defineConfig(({ mode }) => ({
       overlay: false,
     },
   },
-  // Vite's default build.target is `es2020`. Several iOS in-app browsers
-  // (Instagram/X/Discord WebViews on older iPhones) and any iOS Safari < 14
-  // silently fail to parse es2020 syntax → permanent white screen with no
-  // visible error. Lowering to es2019 keeps modern syntax for everyone on
-  // iOS 14+ while widening compatibility with embedded WebKit.
-  // (We don't ship a legacy fallback bundle: @solana/web3.js & bs58 use
-  // BigInt literals, which iOS < 14 can't parse at all — those devices
-  // can't run the wallet stack regardless of transpilation.)
+  // iOS Safari < 14 silently fails to parse modern syntax → permanent white
+  // screen with no visible error in in-app browsers (Instagram/X/Discord).
+  // We can't go below es2020 because @solana/web3.js & bs58 use BigInt
+  // literals (`0n`) which require native iOS 14+ support anyway. Targeting
+  // Safari 14 explicitly tells esbuild what's safe to keep vs. transpile,
+  // which fixes the white screen on any iOS device that can run BigInt.
   build: {
-    target: "es2019",
+    target: ["es2020", "safari14", "ios14", "chrome87", "firefox78", "edge88"],
   },
   plugins: [
     react(),
