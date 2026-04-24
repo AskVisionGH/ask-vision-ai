@@ -33,6 +33,8 @@ const LIFI_FEE_SOURCES = new Set<string>([
   "0x1231deb6f5749ef6ce6943a275a1d3e7486f4eae",
   // FeeCollector — sweeps integrator balances periodically.
   "0xbd6c7b0d2f68c2b7805d88388319cfb6ecb50ea9",
+  // LI.FI integrator payout EOA — observed paying out vision-ai bridge fees.
+  "0x5babe600b9fcd5fb7b66c0611bf4896d967b23a1",
   // Add more when discovered.
 ]);
 
