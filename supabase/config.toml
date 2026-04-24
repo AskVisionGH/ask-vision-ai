@@ -13,6 +13,8 @@ project_id = "jtybzyffpdklwvgjvrpj"
     verify_jwt = true
   [functions.sweep-fees]
     verify_jwt = false
+  [functions.treasury-fees-sync]
+    verify_jwt = false
   [functions.send-transactional-email]
     verify_jwt = true
   [functions.preview-transactional-email]
