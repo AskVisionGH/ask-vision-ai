@@ -173,13 +173,30 @@ const SharedChat = () => {
 
           {status === "ready" && convo && (
             <>
-              <div className="mb-8 border-b border-border/60 pb-6">
-                <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">
-                  Shared conversation
-                </p>
-                <h1 className="mt-2 text-2xl font-light tracking-tight">
-                  {convo.title}
-                </h1>
+              <div className="mb-8 flex flex-col gap-4 border-b border-border/60 pb-6 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">
+                    Shared conversation · {convo.share_mode === "importable" ? "Importable" : "Read-only"}
+                  </p>
+                  <h1 className="mt-2 text-2xl font-light tracking-tight">
+                    {convo.title}
+                  </h1>
+                </div>
+                {convo.share_mode === "importable" && (
+                  <Button
+                    onClick={handleImport}
+                    disabled={importing}
+                    className="rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
+                    size="sm"
+                  >
+                    {importing ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Download className="mr-1.5 h-3.5 w-3.5" />
+                    )}
+                    {user ? "Import to my chats" : "Sign in to import"}
+                  </Button>
+                )}
               </div>
 
               <div className="flex flex-col gap-5">
