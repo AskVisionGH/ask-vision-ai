@@ -60,15 +60,16 @@ const supaPost = async (fn: string, body: unknown) => {
   const { data, error } = await supabase.functions.invoke(fn, { body });
   if (error) {
     // The functions client wraps the underlying response; pull a friendly
-    // error string out of either the FunctionsHttpError body or message.
+    // error string out of the FunctionsHttpError body when possible.
     const ctx = (error as any).context;
+    let serverMsg: string | null = null;
     if (ctx && typeof ctx.json === "function") {
       try {
         const parsed = await ctx.json();
-        if (parsed?.error) throw new Error(parsed.error);
-      } catch { /* fall through */ }
+        if (parsed?.error) serverMsg = String(parsed.error);
+      } catch { /* body wasn't JSON */ }
     }
-    throw new Error(error.message ?? `${fn} failed`);
+    throw new Error(serverMsg ?? error.message ?? `${fn} failed`);
   }
   if (data && typeof data === "object" && "error" in (data as any) && (data as any).error) {
     throw new Error((data as any).error);
