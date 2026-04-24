@@ -516,6 +516,13 @@ export const ChatSidebar = ({
           Trade
         </Link>
         <Link
+          to="/trade?tab=bridge"
+          className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground ease-vision hover:bg-secondary/60 hover:text-foreground"
+        >
+          <ArrowLeftRight className="h-3.5 w-3.5" />
+          Bridge
+        </Link>
+        <Link
           to="/tracked-wallets"
           className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground ease-vision hover:bg-secondary/60 hover:text-foreground"
         >
@@ -537,18 +544,6 @@ export const ChatSidebar = ({
         >
           <Bell className="h-3.5 w-3.5" />
           <span>Alerts</span>
-          <span className="ml-auto rounded-full border border-border/60 bg-secondary/40 px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
-            Soon
-          </span>
-        </button>
-        <button
-          type="button"
-          disabled
-          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-muted-foreground/50 ease-vision cursor-not-allowed"
-          aria-label="Bridge (coming soon)"
-        >
-          <ArrowLeftRight className="h-3.5 w-3.5" />
-          <span>Bridge</span>
           <span className="ml-auto rounded-full border border-border/60 bg-secondary/40 px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
             Soon
           </span>
