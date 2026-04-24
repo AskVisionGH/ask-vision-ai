@@ -11,30 +11,22 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { useNotificationPreferences } from "@/hooks/useNotificationPreferences";
 import { useWebPush } from "@/hooks/useWebPush";
 
-interface Props {
-  /**
-   * Set to `true` right after a user successfully places an order
-   * (swap / limit / DCA / TP-SL). The dialog will show once, then
-   * flip `post_order_prompt_seen` so it never reappears.
-   */
-  trigger: boolean;
-  onDismissed?: () => void;
-}
-
 /**
- * One-time post-order upsell for notifications.
+ * Global one-time post-order upsell for notifications.
  *
- * Shown the first time a user places an order, if they haven't already
- * seen it. Three outcomes:
- *   - "Enable notifications" → flip master_enabled on + request push + close.
- *   - "Just in-app"          → master_enabled on, web push off + close.
- *   - "Not now"              → leave everything off + close.
- * All three paths set `post_order_prompt_seen = true`.
+ * Subscribes to `tx_events` INSERT for the signed-in user. When the
+ * first event arrives AND prefs.post_order_prompt_seen is false,
+ * the dialog opens. Any of the three choices flips the flag so it
+ * never fires again.
+ *
+ * Render this once near the app root (inside AuthProvider).
  */
-export const PostOrderNotificationPrompt = ({ trigger, onDismissed }: Props) => {
+export const PostOrderNotificationPrompt = () => {
   const { prefs, update } = useNotificationPreferences();
   const push = useWebPush();
   const [open, setOpen] = useState(false);
