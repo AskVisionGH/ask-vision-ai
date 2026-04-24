@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
   ArrowLeft,
+  Bell,
   Camera,
   KeyRound,
   Languages,
@@ -28,6 +29,7 @@ import {
 } from "@/components/ui/select";
 import { UserAvatar } from "@/components/UserAvatar";
 import { DeleteAccountDialog } from "@/components/DeleteAccountDialog";
+import { NotificationsSettings } from "@/components/NotificationsSettings";
 import {
   Accordion,
   AccordionContent,
@@ -267,6 +269,22 @@ const Settings = () => {
                       ))}
                     </SelectContent>
                   </Select>
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem
+                id="notifications"
+                value="notifications"
+                className="rounded-2xl border border-border bg-card/40 px-6 backdrop-blur-md"
+              >
+                <AccordionTrigger className="py-4 text-sm font-medium text-foreground hover:no-underline [&[data-state=open]]:pb-3">
+                  <span className="flex items-center gap-2">
+                    <Bell className="h-3.5 w-3.5 text-muted-foreground" />
+                    Notifications
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className="pb-5">
+                  <NotificationsSettings />
                 </AccordionContent>
               </AccordionItem>
 
