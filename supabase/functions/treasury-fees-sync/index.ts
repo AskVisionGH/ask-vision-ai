@@ -24,17 +24,16 @@ const corsHeaders = {
 const SOL_TREASURY = "ASKVSe32esNeK7i84oGsL5F9cqh8ov3neXEF8jSc9i89";
 const ETH_TREASURY = "0xd62427353491907D6A0606DC8be4a8Be05bBaF58";
 
-// LI.FI integrator fee collectors. These are the addresses LI.FI uses to
-// settle integrator payouts. Normalized to lowercase. Add new ones as we see
-// them in the wild — anything from an unknown address is silently ignored.
+// LI.FI integrator fee collectors on Ethereum. These are the addresses LI.FI
+// uses to settle integrator payouts. Normalized to lowercase. Add new ones
+// as we see them in the wild — anything from an unknown address is silently
+// ignored.
 const LIFI_FEE_SOURCES = new Set<string>([
   // LI.FI Diamond router (main contract) — handles direct fee payouts on a
   // subset of routes.
   "0x1231deb6f5749ef6ce6943a275a1d3e7486f4eae",
   // FeeCollector — sweeps integrator balances periodically.
   "0xbd6c7b0d2f68c2b7805d88388319cfb6ecb50ea9",
-  // LI.FI integrator payout EOA — observed paying out vision-ai bridge fees.
-  "0x5babe600b9fcd5fb7b66c0611bf4896d967b23a1",
   // Add more when discovered.
 ]);
 
