@@ -8,9 +8,9 @@ import {
   AlertCircle,
   Info,
 } from "lucide-react";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
-import { VersionedTransaction } from "@solana/web3.js";
+import { LAMPORTS_PER_SOL, PublicKey, VersionedTransaction } from "@solana/web3.js";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -158,6 +158,7 @@ interface TradeBridgeProps {
 export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
   const { publicKey, connected, signTransaction } = useWallet();
   const { setVisible } = useWalletModal();
+  const { connection } = useConnection();
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -226,6 +227,54 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
       chainId: SOLANA_CHAIN_ID,
     });
   }, [fromChain, fromToken]);
+
+  // Source-token balance (Solana only for v1 — source chain is locked to SOL).
+  const [fromBalance, setFromBalance] = useState<number | null>(null);
+  useEffect(() => {
+    if (!connected || !publicKey || !fromToken || fromToken.chainId !== SOLANA_CHAIN_ID) {
+      setFromBalance(null);
+      return;
+    }
+    let cancelled = false;
+    setFromBalance(null);
+    const owner = new PublicKey(publicKey.toBase58());
+    (async () => {
+      try {
+        const isNative =
+          fromToken.address === SOL_NATIVE_ADDRESS || fromToken.address === WSOL_MINT;
+        if (isNative) {
+          const lamports = await connection.getBalance(owner);
+          if (!cancelled) setFromBalance(lamports / LAMPORTS_PER_SOL);
+        } else {
+          const mint = new PublicKey(fromToken.address);
+          const resp = await connection.getParsedTokenAccountsByOwner(owner, { mint });
+          let total = 0;
+          for (const acc of resp.value) {
+            const ui = acc.account.data.parsed?.info?.tokenAmount?.uiAmount;
+            if (typeof ui === "number") total += ui;
+          }
+          if (!cancelled) setFromBalance(total);
+        }
+      } catch {
+        if (!cancelled) setFromBalance(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [connected, publicKey, fromToken, connection]);
+
+  const handleMax = useCallback(() => {
+    if (fromBalance == null || !fromToken) return;
+    const isNative =
+      fromToken.address === SOL_NATIVE_ADDRESS || fromToken.address === WSOL_MINT;
+    if (isNative) {
+      // Reserve a bit for rent + tx fees on native SOL.
+      const reserve = 0.01;
+      const max = Math.max(0, fromBalance - reserve);
+      setAmount(max > 0 ? max.toFixed(6) : "");
+    } else {
+      setAmount(fromBalance > 0 ? String(fromBalance) : "");
+    }
+  }, [fromBalance, fromToken]);
 
   const numericAmount = useMemo(() => {
     const n = parseFloat(amount);
@@ -470,6 +519,16 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
   } else if (numericAmount <= 0) {
     ctaLabel = "Enter an amount";
     ctaDisabled = true; ctaAction = null;
+  } else if (
+    fromBalance != null &&
+    fromToken?.chainId === SOLANA_CHAIN_ID &&
+    numericAmount >
+      ((fromToken.address === SOL_NATIVE_ADDRESS || fromToken.address === WSOL_MINT)
+        ? Math.max(0, fromBalance - 0.005)
+        : fromBalance)
+  ) {
+    ctaLabel = "Insufficient balance";
+    ctaDisabled = true; ctaAction = null;
   } else if (!sameFamily && !destAddressValid) {
     ctaLabel = toChain.chainType === "EVM"
       ? "Enter destination EVM address"
@@ -513,6 +572,8 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
             onAmountChange={handleAmountChange}
             amountReadonly={false}
             usd={quote?.fromAmountUsd ?? (fromToken?.priceUsd != null ? fromToken.priceUsd * numericAmount : null)}
+            balance={fromBalance}
+            onMax={fromBalance != null && fromBalance > 0 ? handleMax : undefined}
           />
 
           <div className="flex justify-center">
@@ -680,11 +741,14 @@ interface PanelRowProps {
   amountReadonly: boolean;
   usd: number | null;
   placeholder?: string;
+  balance?: number | null;
+  onMax?: () => void;
 }
 
 const PanelRow = ({
   label, chainName, chainLogo, chainLocked, onPickChain,
   token, onPickToken, amount, onAmountChange, amountReadonly, usd, placeholder,
+  balance, onMax,
 }: PanelRowProps) => (
   <div className="rounded-xl border border-border/60 bg-secondary/30 p-3">
     <div className="flex items-center justify-between">
@@ -733,8 +797,22 @@ const PanelRow = ({
         className="h-9 border-0 bg-transparent text-right font-mono text-base focus-visible:ring-0 focus-visible:ring-offset-0"
       />
     </div>
-    <div className="mt-1 flex justify-end font-mono text-[10px] text-muted-foreground">
-      {usd != null ? fmtUsd(usd) : "—"}
+    <div className="mt-1 flex items-center justify-between font-mono text-[10px] text-muted-foreground">
+      {balance != null ? (
+        <div className="flex items-center gap-2">
+          <span>Balance: {fmtAmount(balance)}</span>
+          {onMax && (
+            <button
+              type="button"
+              onClick={onMax}
+              className="ease-vision rounded-full border border-border/60 bg-background/60 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-primary hover:bg-secondary"
+            >
+              Max
+            </button>
+          )}
+        </div>
+      ) : <span />}
+      <span>{usd != null ? fmtUsd(usd) : "—"}</span>
     </div>
   </div>
 );
