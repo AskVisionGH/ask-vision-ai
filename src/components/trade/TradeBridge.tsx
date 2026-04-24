@@ -20,10 +20,10 @@ import { TokenLogo } from "@/components/TokenLogo";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 
-// LI.FI uses "SOL" for Solana and numeric ids for EVM chains.
-const SOLANA_CHAIN_ID = "SOL" as const;
-// LI.FI's canonical native-SOL token address (their tokens endpoint uses
-// the wrapped-SOL mint as the SVM "native" representative).
+// LI.FI uses numeric ids for every chain. Solana's id is this constant.
+// (We previously assumed "SOL" but LI.FI's API expects the numeric form.)
+const SOLANA_CHAIN_ID = 1151111081099710 as const;
+// Native SOL address per LI.FI's token list (the all-zeroes Solana system program).
 const SOL_NATIVE_ADDRESS = "11111111111111111111111111111111";
 // Fallback to wrapped SOL mint when LI.FI's list returns it instead.
 const WSOL_MINT = "So11111111111111111111111111111111111111112";
