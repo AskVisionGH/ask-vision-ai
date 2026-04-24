@@ -424,8 +424,9 @@ const StatsTab = () => {
   const onboardedPct = stats.totalUsers > 0
     ? Math.round((stats.onboardedUsers / stats.totalUsers) * 100)
     : 0;
+  // Lifetime totals power the avg — deletes shouldn't make this number jump.
   const avgMessages = stats.totalUsers > 0
-    ? (stats.totalMessages / stats.totalUsers).toFixed(1)
+    ? (stats.totalMessagesEver / stats.totalUsers).toFixed(1)
     : "0";
 
   const expLabel = Object.fromEntries(EXPERIENCE_OPTIONS.map((o) => [o.value, o.label]));
@@ -476,13 +477,14 @@ const StatsTab = () => {
           <StatCard
             icon={MessageSquare}
             label="Conversations"
-            value={stats.totalConversations.toLocaleString()}
+            value={stats.totalConversationsEver.toLocaleString()}
+            hint={`${stats.activeConversations.toLocaleString()} active · ${(stats.totalConversationsEver - stats.activeConversations).toLocaleString()} deleted`}
           />
           <StatCard
             icon={MessageSquare}
             label="Messages"
-            value={stats.totalMessages.toLocaleString()}
-            hint={`+${stats.messagesLast7d} in last 7d`}
+            value={stats.totalMessagesEver.toLocaleString()}
+            hint={`${stats.activeMessages.toLocaleString()} active · +${stats.messagesLast7d} in last 7d`}
           />
           <StatCard
             icon={BarChart3}
