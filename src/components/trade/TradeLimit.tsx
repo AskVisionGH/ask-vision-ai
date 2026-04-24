@@ -616,9 +616,9 @@ export const TradeLimit = ({ tab, onTabChange }: Props) => {
 
           {/* Inline warnings */}
           {willFillInstantly && (
-            <div className="flex items-start gap-2 border-t border-amber-400/30 bg-amber-400/5 px-5 py-3">
-              <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-amber-400" />
-              <p className="font-mono text-[11px] leading-relaxed text-amber-200">
+            <div className="flex items-start gap-2 border-t border-warn/30 bg-warn/5 px-5 py-3">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-warn" />
+              <p className="font-mono text-[11px] leading-relaxed text-warn">
                 Your target is far below market — this order will fill almost
                 instantly at a worse price than a normal swap. Tap the button
                 again to confirm.
