@@ -132,7 +132,7 @@ export const TradeSwap = () => {
 
   const [pickerSide, setPickerSide] = useState<"in" | "out" | null>(null);
   const [phase, setPhase] = useState<Phase>({ name: "idle" });
-  const [solBalance, setSolBalance] = useState<number | null>(null);
+  const [inputBalance, setInputBalance] = useState<number | null>(null);
 
   const { connection } = useConnection();
   const { publicKey, connected, signTransaction } = useWallet();
@@ -146,25 +146,40 @@ export const TradeSwap = () => {
     };
   }, []);
 
-  // Load native SOL balance when input is SOL.
+  // Load balance for whichever token is selected on the input side.
+  // SOL → native lamports; SPL → sum of parsed token accounts for that mint.
   useEffect(() => {
     if (!connected || !publicKey) {
-      setSolBalance(null);
+      setInputBalance(null);
       return;
     }
     let cancelled = false;
+    const owner = new PublicKey(publicKey.toBase58());
+    setInputBalance(null);
     (async () => {
       try {
-        const lamports = await connection.getBalance(new PublicKey(publicKey.toBase58()));
-        if (!cancelled) setSolBalance(lamports / LAMPORTS_PER_SOL);
+        if (inputToken.address === SOL_TOKEN.address) {
+          const lamports = await connection.getBalance(owner);
+          if (!cancelled) setInputBalance(lamports / LAMPORTS_PER_SOL);
+        } else {
+          const mint = new PublicKey(inputToken.address);
+          const resp = await connection.getParsedTokenAccountsByOwner(owner, { mint });
+          let total = 0;
+          for (const acc of resp.value) {
+            const ui = acc.account.data.parsed?.info?.tokenAmount?.uiAmount;
+            if (typeof ui === "number") total += ui;
+          }
+          if (!cancelled) setInputBalance(total);
+        }
       } catch {
-        if (!cancelled) setSolBalance(null);
+        if (!cancelled) setInputBalance(null);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [connected, publicKey, connection, phase.name]);
+  }, [connected, publicKey, connection, inputToken.address, phase.name]);
+
 
   const numericAmount = useMemo(() => {
     const n = parseFloat(amount);
@@ -245,11 +260,15 @@ export const TradeSwap = () => {
   };
 
   const handleMax = () => {
-    if (inputToken.address === SOL_TOKEN.address && solBalance != null) {
-      // Reserve a bit for rent + fees
+    if (inputBalance == null) return;
+    if (inputToken.address === SOL_TOKEN.address) {
+      // Reserve a bit for rent + fees on native SOL
       const reserve = 0.01;
-      const max = Math.max(0, solBalance - reserve);
+      const max = Math.max(0, inputBalance - reserve);
       setAmount(max > 0 ? max.toFixed(6) : "");
+    } else {
+      // SPL tokens — full balance is spendable
+      setAmount(inputBalance > 0 ? String(inputBalance) : "");
     }
   };
 
@@ -269,10 +288,13 @@ export const TradeSwap = () => {
   };
 
   const insufficient =
-    inputToken.address === SOL_TOKEN.address &&
-    solBalance != null &&
+    inputBalance != null &&
     numericAmount > 0 &&
-    numericAmount > Math.max(0, solBalance - 0.005);
+    numericAmount >
+      (inputToken.address === SOL_TOKEN.address
+        ? Math.max(0, inputBalance - 0.005)
+        : inputBalance);
+
 
   const handleSwap = useCallback(async () => {
     if (!connected || !publicKey || !signTransaction || !quote || !outputToken) return;
@@ -529,8 +551,8 @@ export const TradeSwap = () => {
             amount={amount}
             onAmountChange={handleAmountChange}
             usd={inUsd}
-            balance={inputToken.address === SOL_TOKEN.address ? solBalance : null}
-            onMax={inputToken.address === SOL_TOKEN.address ? handleMax : undefined}
+            balance={inputBalance}
+            onMax={inputBalance != null && inputBalance > 0 ? handleMax : undefined}
             onPickToken={() => setPickerSide("in")}
             readOnly={false}
           />
