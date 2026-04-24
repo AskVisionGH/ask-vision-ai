@@ -6,6 +6,7 @@ import { ChatBubble } from "@/components/ChatBubble";
 import { ChatComposer } from "@/components/ChatComposer";
 import { ChatSidebar } from "@/components/ChatSidebar";
 import { ConnectWalletButton } from "@/components/ConnectWalletButton";
+import { NotificationBell } from "@/components/NotificationBell";
 import { ShareConversationDialog } from "@/components/ShareConversationDialog";
 import { VisionLogo } from "@/components/VisionLogo";
 import { WalletOnboardingPrompt } from "@/components/WalletOnboardingPrompt";
@@ -504,7 +505,10 @@ const Chat = () => {
               </span>
             </div>
           </div>
-          <ConnectWalletButton size="default" />
+          <div className="flex items-center gap-1.5">
+            <NotificationBell />
+            <ConnectWalletButton size="default" />
+          </div>
         </header>
 
         {/* Messages */}
