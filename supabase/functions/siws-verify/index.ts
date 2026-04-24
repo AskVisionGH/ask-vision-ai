@@ -143,10 +143,19 @@ Deno.serve(async (req) => {
 
     // 4. Mint a session for the user. The magic-link generator gives us
     //    an action_link with tokens we can convert to a session client-side.
-    const syntheticEmail = `${wallet.toLowerCase()}@wallet.vision.local`;
+    //    For wallet-only accounts we use the synthetic wallet email; for
+    //    existing email accounts (e.g. someone who signed up with Google and
+    //    then connected this wallet) we use whatever email auth.users has.
+    const { data: userRecord, error: userErr } = await admin.auth.admin.getUserById(userId);
+    if (userErr || !userRecord?.user?.email) {
+      console.error("[siws-verify] could not load user email", userErr);
+      return jsonError(500, "Could not create session");
+    }
+    const sessionEmail = userRecord.user.email;
+
     const { data: linkData, error: linkGenErr } = await admin.auth.admin.generateLink({
       type: "magiclink",
-      email: syntheticEmail,
+      email: sessionEmail,
     });
 
     if (linkGenErr || !linkData) {
@@ -168,7 +177,7 @@ Deno.serve(async (req) => {
         // Client calls supabase.auth.verifyOtp({ token_hash, type: "magiclink" })
         // to exchange this for a real session.
         tokenHash: hashedToken,
-        email: syntheticEmail,
+        email: sessionEmail,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
