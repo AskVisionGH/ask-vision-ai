@@ -287,7 +287,8 @@ const Settings = () => {
                     </div>
                   </div>
                   <Switch
-                    checked={prefs.master_enabled}
+                    checked={prefs?.master_enabled ?? false}
+                    disabled={!prefs}
                     onCheckedChange={(v) => void updatePrefs({ master_enabled: v })}
                     aria-label="Master alerts toggle"
                   />
