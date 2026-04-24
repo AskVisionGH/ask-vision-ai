@@ -402,16 +402,22 @@ export const TradeDca = () => {
   // ---- CTA ----
   const isBusy =
     phase.name === "preparing" ||
+    phase.name === "awaiting_fee_signature" ||
+    phase.name === "submitting_fee" ||
     phase.name === "awaiting_signature" ||
     phase.name === "submitting";
   const busyLabel =
     phase.name === "preparing"
-      ? "Building order…"
-      : phase.name === "awaiting_signature"
-        ? "Approve in wallet…"
-        : phase.name === "submitting"
-          ? "Submitting…"
-          : "";
+      ? "Preparing fee…"
+      : phase.name === "awaiting_fee_signature"
+        ? "Approve fee in wallet…"
+        : phase.name === "submitting_fee"
+          ? "Sending fee…"
+          : phase.name === "awaiting_signature"
+            ? "Approve DCA in wallet…"
+            : phase.name === "submitting"
+              ? "Submitting DCA…"
+              : "";
 
   let ctaLabel = "Start DCA";
   let ctaDisabled = false;
