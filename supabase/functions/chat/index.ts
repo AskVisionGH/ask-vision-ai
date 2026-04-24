@@ -788,10 +788,12 @@ serve(async (req) => {
               toolErrored = true;
             }
 
-            // Emit the tool card immediately so the user sees it before the
-            // model finishes writing its framing text — but only on success.
+            // Buffer the card — it will be flushed once the next iteration
+            // starts streaming framing text, or right before stream end. This
+            // makes the UI flow "text appears, card slides in below" instead
+            // of "card pops in, then text appends above and shifts it down".
             if (eventType && !hasError) {
-              send("tool", { type: eventType, data: result });
+              pendingCards.push({ type: eventType, data: result });
               cardEmitted = true;
             }
 
