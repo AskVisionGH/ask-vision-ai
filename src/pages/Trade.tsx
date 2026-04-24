@@ -197,26 +197,10 @@ const TradeSidebar = ({
           <Link
             to="/chat"
             className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
-            aria-label="New chat"
-            title="New chat"
+            aria-label="Chat"
+            title="Chat"
           >
-            <MessageSquarePlus className="h-4 w-4" />
-          </Link>
-          <Link
-            to="/contacts"
-            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
-            aria-label="Contacts"
-            title="Contacts"
-          >
-            <Users className="h-4 w-4" />
-          </Link>
-          <Link
-            to="/tracked-wallets"
-            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
-            aria-label="Tracked wallets"
-            title="Tracked wallets"
-          >
-            <Radar className="h-4 w-4" />
+            <MessageSquare className="h-4 w-4" />
           </Link>
           <Link
             to="/trade"
@@ -230,6 +214,22 @@ const TradeSidebar = ({
             title="Trade"
           >
             <Repeat className="h-4 w-4" />
+          </Link>
+          <Link
+            to="/tracked-wallets"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+            aria-label="Tracked wallets"
+            title="Tracked wallets"
+          >
+            <Radar className="h-4 w-4" />
+          </Link>
+          <Link
+            to="/contacts"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+            aria-label="Contacts"
+            title="Contacts"
+          >
+            <Users className="h-4 w-4" />
           </Link>
         </div>
         {isAdmin && (
