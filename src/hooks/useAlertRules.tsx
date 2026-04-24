@@ -117,7 +117,7 @@ export const useAlertRules = () => {
       );
       const { error } = await supabase
         .from("alert_rules")
-        .update(updatePayload)
+        .update(updatePayload as never)
         .eq("id", id);
       if (error) {
         void load();
