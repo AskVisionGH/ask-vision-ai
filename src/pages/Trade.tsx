@@ -57,10 +57,11 @@ const Trade = () => {
           sidebarCollapsed ? "w-14" : "w-64",
         )}
       >
-        <TradeSidebar
+        <AppSidebar
           collapsed={sidebarCollapsed}
           onToggleCollapsed={() => setSidebarCollapsed((v) => !v)}
           activePath={location.pathname}
+          activeTradeTab={tab}
           isAdmin={isAdmin}
           user={user}
           profile={profile}
