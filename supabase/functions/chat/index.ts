@@ -1017,6 +1017,19 @@ function buildProfileBlock(profile: any): string | null {
     lines.push("- Risk tone: AGGRESSIVE. They want signal not safety rails. State risks once, plainly, then move on. No hand-wringing.");
   }
 
+  // Language preference — pinned reply language unless "auto" (mirror input).
+  const lang = typeof profile.language === "string" ? profile.language : "auto";
+  const LANG_NAMES: Record<string, string> = {
+    en: "English", es: "Spanish", fr: "French", de: "German", it: "Italian",
+    pt: "Portuguese", nl: "Dutch", ja: "Japanese", ko: "Korean", zh: "Chinese (Simplified)",
+    ar: "Arabic", hi: "Hindi", ru: "Russian", tr: "Turkish", pl: "Polish",
+  };
+  if (lang === "auto") {
+    lines.push("- Language: ALWAYS reply in the same language the user wrote their last message in. If they switch languages, switch with them. Token tickers ($SOL, $USDC) and addresses stay as-is.");
+  } else if (LANG_NAMES[lang]) {
+    lines.push(`- Language: ALWAYS reply in **${LANG_NAMES[lang]}**, regardless of which language the user writes in. Token tickers ($SOL, $USDC) and addresses stay as-is. Translate everything else (UI labels, explanations, errors).`);
+  }
+
   if (lines.length === 0) return null;
   return `User context:\n${lines.join("\n")}\n\nNever fabricate facts about the user beyond what's listed above.`;
 }
