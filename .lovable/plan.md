@@ -1,86 +1,101 @@
 
 
-## Trading screen — `/trade`
+# Limit Orders — Design & Plan
 
-A dedicated page with the Vision dark/lilac aesthetic and a Jupiter-style swap module. Tabs: **Trade**, **Limit**, **Bridge**, **Buy**, **Sell** — only Trade is active; the rest render as disabled with a "Soon" pill.
+Building a beautiful, dead-simple limit order experience on the `/trade` screen using Jupiter's **Trigger API v1** (no API key required, supports our 1% referral fee).
 
-### Layout
+## What you get (UX)
+
+A new **Limit** tab next to **Trade** that mirrors the swap card layout, with one extra row: **target price**.
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│  Sidebar      │  Header (logo + Connect wallet)             │
-│  (existing)   ├─────────────────────────────────────────────┤
-│               │            ┌───────────────────────┐         │
-│  • Trade ←    │            │ Trade│Limit│Bridge│…  │ ⚙       │
-│    (active)   │            ├───────────────────────┤         │
-│               │            │ Sell                   │         │
-│               │            │  0.00         [SOL ▾] │         │
-│               │            │  $0.00                 │         │
-│               │            ├──────── ⇅ ────────────┤         │
-│               │            │ Buy                    │         │
-│               │            │  0.00      [Select ▾] │         │
-│               │            │  $0.00                 │         │
-│               │            ├───────────────────────┤         │
-│               │            │ Rate · Impact · Route │         │
-│               │            ├───────────────────────┤         │
-│               │            │   [Connect / Swap]    │         │
-│               │            └───────────────────────┘         │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────┐
+│  ◢   [ TRADE | LIMIT ]    ⚙    │
+├─────────────────────────────────┤
+│ SELL                Bal: 4.21   │
+│ 1.00          [SOL ▾]           │
+│ ≈ $145.00                       │
+├─────────────────────────────────┤
+│ WHEN 1 SOL =                    │
+│ 200.00 USDC  [Market +37%] 🔁  │ ← target price input
+│ ≈ Order fills when SOL ≥ $200   │
+├─────────────────────────────────┤
+│ BUY (you receive)               │
+│ 200.00        [USDC ▾]          │ ← auto-calc from price
+├─────────────────────────────────┤
+│ Expires: [1d] [7d] [30d] [Never]│
+│ Platform fee: 1% on fill        │
+├─────────────────────────────────┤
+│   [   PLACE LIMIT ORDER   ]     │
+└─────────────────────────────────┘
+
+▼ Open orders (3)
+  SELL 1 SOL → 200 USDC   in 6d 23h   [Cancel]
+  BUY  500 BONK at $0.00002          [Cancel]
 ```
 
-Centered card, max-width ~440px, on top of the same `bg-aurora` glow used in Chat. Reuses sidebar shell so navigation feels identical.
+### Key UX touches
+- **One field, both directions**: type either the receive amount *or* the price — the other auto-computes from the rate. Toggle with a tiny ⇄ icon.
+- **Smart price chips**: quick-set the price to `Market`, `+1%`, `+5%`, `+10%`, `-5%` (sell side) or the inverse for buys. Pulls live market price from the existing `swap-quote` shadow call.
+- **Live "distance from market" badge**: green chip "+12% above market" or red "-3% below" so users instantly see whether the order is realistic.
+- **Expiry chips**: 1 day / 7 days / 30 days / Never — no date picker noise.
+- **Open orders list** below the card: fetched from Jupiter, with token logos, time-to-expiry, and one-click cancel.
+- **Same beautiful confirmation flow** as swaps — building → sign → submitting → success card with Solscan link.
 
-### Files to create
+## How it works (technical)
 
-1. **`src/pages/Trade.tsx`** — page shell mirroring Chat.tsx layout (sidebar + header with `ConnectWalletButton`). Renders `<TradeSwap />` centered.
-2. **`src/components/trade/TradeSwap.tsx`** — main swap module:
-   - Tab row at top: Trade (active), Limit, Bridge, Buy, Sell (disabled with `Soon` chip)
-   - Sell input (amount + token picker, defaults to SOL) with USD value + balance pill ("Max" button when wallet connected)
-   - Flip button (⇅) swaps input/output
-   - Buy input (amount auto-filled from quote, output token picker, defaults to empty → "Select token")
-   - Stats row: rate, price impact (color-coded), slippage (auto, click to open settings), route via N AMMs, network fee, 1% platform fee disclosure
-   - Settings popover (gear icon): slippage tolerance (0.1 / 0.5 / 1.0 / custom bps)
-   - Primary CTA: "Connect wallet" → opens wallet modal; or "Enter an amount" → "Select a token" → "Swap" with loading states
-3. **`src/components/trade/TokenPickerDialog.tsx`** — modal token search (Jupiter-style): search by symbol/name/mint, show top tokens, recently used, and live results from `lite-api.jup.ag/tokens/v2/search`. Shows logo, symbol, name, price.
-4. **`src/components/trade/TradeTabs.tsx`** — small pill-tab component, only Trade enabled.
+### New edge functions (3)
 
-### Files to modify
+1. **`limit-order-build`** — Builds the createOrder transaction.
+   - Calls `POST https://lite-api.jup.ag/trigger/v1/createOrder`
+   - Params: `inputMint`, `outputMint`, `maker`, `payer`, `params: { makingAmount, takingAmount, expiredAt, feeBps: 100 }`, plus `feeAccount` (our derived referral PDA — same logic as `swap-build`).
+   - Returns `{ requestId, transaction (base64) }` for the client to sign.
+   - **Fee**: passes `feeBps: 100` and the referral `feeAccount` for the OUTPUT mint, so our 1% sweep applies on every fill.
 
-- **`src/App.tsx`** — register `<Route path="/trade" element={<ProtectedRoute><Trade /></ProtectedRoute>} />`.
-- **`src/components/ChatSidebar.tsx`** — turn the existing disabled "Trade" button into an active `<Link to="/trade">` (remove "Soon" pill, keep `Repeat` icon, highlight when on `/trade`). Also add a Trade icon entry to the collapsed rail. Bridge stays disabled.
+2. **`limit-order-execute`** — Submits the signed createOrder tx.
+   - Calls `POST https://lite-api.jup.ag/trigger/v1/execute` with `requestId` + `signedTransaction`.
+   - Returns `{ signature, status }`. Polled the same way swaps are.
 
-### Behavior
+3. **`limit-order-list`** — Lists & cancels orders for a wallet.
+   - `GET https://lite-api.jup.ag/trigger/v1/getTriggerOrders?user=<wallet>&orderStatus=active` for the open list.
+   - For cancels: `POST /trigger/v1/cancelOrder` then `/execute`. Wrapped in the same edge function with an `action` param (`list` | `cancel`).
 
-- **Quote fetching**: debounced (350ms) call to existing `swap-quote` edge function whenever input amount/token/output token/slippage changes. Auto-refresh every 15s while idle. Shows skeleton on the output amount while fetching.
-- **Token defaults**: input = SOL (with native balance shown when wallet connected via `useWallet` + connection from `WalletContextProvider`); output = empty until user picks.
-- **Confirm flow**: same as `SwapPreviewCard` — call `swap-build`, deserialize with `VersionedTransaction`, sign via wallet adapter, submit through `tx-submit`, poll `tx-status`. On success, show inline success state with Solscan link and a "Swap again" reset button.
-- **Validation states for the CTA** (in order):
-  1. Wallet not connected → "Connect wallet" (opens modal)
-  2. No output token selected → "Select a token" (disabled)
-  3. No amount or 0 → "Enter an amount" (disabled)
-  4. Amount > balance → "Insufficient SOL/TOKEN" (disabled)
-  5. Quote loading → "Fetching best price…" (disabled with spinner)
-  6. Quote error → red banner + "Retry"
-  7. Otherwise → "Swap" (lilac primary, `shadow-glow`)
-- **Disabled tabs**: clicking Limit/Bridge/Buy/Sell does nothing; tooltip "Coming soon".
+### New components (3)
 
-### Design tokens (already in `index.css`)
+- **`src/components/trade/TradeLimit.tsx`** — Main limit order card. Mirrors `TradeSwap.tsx`'s structure (token pickers, balance, MAX, settings popover) so it feels native. Local state: `inputToken`, `outputToken`, `sellAmount`, `targetPrice`, `expirySeconds`, plus a derived `buyAmount = sellAmount * targetPrice`. Fetches a tiny market quote via existing `swap-quote` to power the "distance from market" badge and "Market" chip.
+- **`src/components/trade/LimitPriceField.tsx`** — Specialized price input with the preset chips (`Market`, `+1%`, `+5%`, `+10%`, custom %). Shows the +/- delta vs market.
+- **`src/components/trade/OpenOrdersList.tsx`** — Renders user's active limit orders below the card with cancel buttons. Uses React Query to refetch every 30s and on visibility change.
 
-- Card: `bg-card/60 backdrop-blur-sm` + `border border-border` + `rounded-2xl`
-- Active tab: `bg-secondary text-foreground`; inactive: `text-muted-foreground`; disabled: `text-muted-foreground/40` + `Soon` chip
-- CTA: `bg-primary text-primary-foreground shadow-glow ease-vision`
-- Token picker buttons: pill-shaped `bg-secondary hover:bg-muted` with token logo + symbol + chevron
-- Mono font for amounts, regular for labels — matches `SwapPreviewCard`
+### Wiring
 
-### Reuses (no new edge functions needed)
+- **`TradeTabs.tsx`**: flip `limit` to `enabled: true`, remove "Soon" badge.
+- **`src/pages/Trade.tsx`**: lift the active tab into page state and conditionally render `<TradeSwap />` vs `<TradeLimit />` (currently the tab state lives inside `TradeSwap` — we'll hoist it).
+- **Same shared pieces reused**: `TokenPickerDialog`, `TokenLogo`, `SwapSide`-style row component, the success card pattern, the slippage popover (replaced with "Expiry" popover for limit), and the glowing CTA button.
 
-- `swap-quote` for live pricing
-- `swap-build` + `tx-submit` + `tx-status` for execution
-- `TokenLogo` component, `useWallet`, `useWalletModal`, existing `supabase.functions.invoke` patterns from `SwapPreviewCard`
+### Validation & safety
 
-### Out of scope (future)
+- Block submit if: target price is less favorable than market by >50% (warning modal: "This will fill instantly at a worse price than market — sure?").
+- Block if `makingAmount > balance` (same `insufficient` check as swap).
+- Min order size guard ($1 USD equivalent) to avoid dusty Jupiter rejects.
+- All fetches go through the existing `supaPost` pattern → uniform error toasts.
+- 7-day default expiry to prevent stale orders accumulating.
 
-- Limit orders, Bridge (Wormhole/deBridge), Buy (on-ramp), Sell (off-ramp) — tabs are placeholders only
-- Token balances for non-SOL output side (Max button only on input)
-- Charts inside the swap card
+### Files added / changed
+
+**New**
+- `supabase/functions/limit-order-build/index.ts`
+- `supabase/functions/limit-order-execute/index.ts`
+- `supabase/functions/limit-order-manage/index.ts` (list + cancel)
+- `src/components/trade/TradeLimit.tsx`
+- `src/components/trade/LimitPriceField.tsx`
+- `src/components/trade/OpenOrdersList.tsx`
+
+**Modified**
+- `src/components/trade/TradeTabs.tsx` — enable Limit tab
+- `src/pages/Trade.tsx` — host tab state, switch components
+- `src/components/trade/TradeSwap.tsx` — accept `tab` + `onTabChange` as props (small refactor to lift state)
+
+### Out of scope (call out, don't build)
+- OCO / TP-SL brackets (Jupiter v2 only — needs API key + JWT). Single limit orders only for v1.
+- Notifications when an order fills (would need a poll job + email integration — separate ticket).
 
