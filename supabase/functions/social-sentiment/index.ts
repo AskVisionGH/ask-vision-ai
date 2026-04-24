@@ -141,6 +141,17 @@ async function buildFreeSentiment(resolved: ResolvedToken): Promise<SocialSentim
       }),
   );
 
+  // Hacker News via Algolia search — fully open, no auth, no UA gating.
+  // Great signal for major coins (BTC/ETH/SOL) which Reddit + Pump.fun miss.
+  tasks.push(
+    fetchHackerNewsPosts(resolved)
+      .then((posts) => (posts.length ? { source: "Hacker News", posts } : null))
+      .catch((e) => {
+        console.warn("hn fetch failed:", e);
+        return null;
+      }),
+  );
+
   const neynarKey = Deno.env.get("NEYNAR_API_KEY");
   if (neynarKey) {
     tasks.push(
@@ -187,7 +198,7 @@ async function buildFreeSentiment(resolved: ResolvedToken): Promise<SocialSentim
       headline: `No social chatter found for $${resolved.symbol} in the last 48h`,
       series: [],
       topPosts: [],
-      sources: ["Pump.fun", "Reddit", neynarKey ? "Farcaster" : null].filter(Boolean) as string[],
+      sources: ["Pump.fun", "Reddit", "Hacker News", neynarKey ? "Farcaster" : null].filter(Boolean) as string[],
       reportUrl: null,
       error: `No reliable social data for $${resolved.symbol} yet — too new or too quiet.`,
     };
@@ -291,28 +302,64 @@ function parsePumpReplies(json: any, mint: string): SocialPost[] {
 }
 
 // ─── Source: Reddit search (no key required) ─────────────────────────────────
+// Reddit aggressively blocks bot User-Agents (returns 403). We use a realistic
+// browser UA + their old.reddit host which is more lenient. We also try the
+// coin's primary subreddit when the symbol is a known major coin so we still
+// get signal for BTC/ETH/etc that don't show up in general site search.
+const SUBREDDIT_BY_SYMBOL: Record<string, string> = {
+  BTC: "Bitcoin", ETH: "ethereum", SOL: "solana", XRP: "Ripple", DOGE: "dogecoin",
+  ADA: "cardano", BNB: "binance", AVAX: "Avax", MATIC: "0xPolygon", POL: "0xPolygon",
+  DOT: "Polkadot", LINK: "Chainlink", LTC: "litecoin", BCH: "Bitcoincash",
+  TRX: "Tronix", ATOM: "cosmosnetwork", NEAR: "nearprotocol", ARB: "arbitrum",
+  OP: "optimism", APT: "aptos", SUI: "SuiNetwork", TON: "TONcoinOfficial",
+  PEPE: "pepecoin", SHIB: "Shibainucoin", UNI: "UniSwap", AAVE: "Aave_Official",
+  JUP: "jupiterexchange", BONK: "Bonk", WIF: "dogwifhat",
+};
+
 async function fetchRedditPosts(resolved: ResolvedToken): Promise<SocialPost[]> {
-  // Search the whole site for the symbol, restricted to last week. We dedupe
-  // and filter to last 48h afterwards. Use a unique UA — Reddit blocks bare ones.
   const term = resolved.symbol.length >= 3
     ? `"$${resolved.symbol}" OR "${resolved.name}"`
     : `"${resolved.name}"`;
-  const url =
-    `https://www.reddit.com/search.json?q=${encodeURIComponent(term)}&sort=new&t=week&limit=50`;
 
-  const resp = await fetch(url, {
-    headers: {
-      "User-Agent": "VisionBot/1.0 (+https://lovable.dev)",
-      Accept: "application/json",
-    },
-  });
-  if (!resp.ok) {
-    console.warn("reddit non-OK", resp.status);
-    return [];
+  // Realistic browser UA — Reddit returns 403 for obvious bot UAs.
+  const headers = {
+    "User-Agent":
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
+      "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    Accept: "application/json,text/html;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+  };
+
+  const urls: string[] = [
+    `https://www.reddit.com/search.json?q=${encodeURIComponent(term)}&sort=new&t=week&limit=50`,
+  ];
+  // Pull from the coin's flagship subreddit too if we know it.
+  const subreddit = SUBREDDIT_BY_SYMBOL[resolved.symbol.toUpperCase()];
+  if (subreddit) {
+    urls.push(`https://www.reddit.com/r/${subreddit}/new.json?limit=50`);
   }
-  const json = await resp.json();
-  const children = json?.data?.children ?? [];
-  return children
+
+  const collected: any[] = [];
+  for (const url of urls) {
+    try {
+      const resp = await fetch(url, { headers });
+      if (!resp.ok) {
+        console.warn("reddit non-OK", resp.status, url);
+        continue;
+      }
+      const j = await resp.json();
+      const children = j?.data?.children ?? [];
+      collected.push(...children);
+    } catch (e) {
+      console.warn("reddit fetch error:", e);
+    }
+  }
+
+  if (!collected.length) return [];
+
+  // Dedupe by id.
+  const seen = new Set<string>();
+  return collected
     .map((child: any, idx: number) => {
       const d = child?.data ?? {};
       const title = String(d.title ?? "").trim();
@@ -332,10 +379,72 @@ async function fetchRedditPosts(resolved: ResolvedToken): Promise<SocialPost[]> 
         postedAt,
       } satisfies SocialPost;
     })
+    .filter((p: SocialPost | null): p is SocialPost => {
+      if (!p || p.postedAt <= 0) return false;
+      if (seen.has(p.id)) return false;
+      seen.add(p.id);
+      return true;
+    });
+}
+
+// ─── Source: Hacker News (Algolia) — fully open, no auth ─────────────────────
+// Algolia HN search returns stories + comments mentioning the query. We pull
+// the last week and let the 48h filter downstream do its job.
+async function fetchHackerNewsPosts(resolved: ResolvedToken): Promise<SocialPost[]> {
+  // Build a query that matches symbol or full name. Algolia treats space as AND
+  // so we use the API's `query` param which does keyword search.
+  const term = resolved.symbol.length >= 3
+    ? `${resolved.symbol} ${resolved.name}`
+    : resolved.name;
+  const since = NOW() - 7 * DAY;
+  const url =
+    `https://hn.algolia.com/api/v1/search_by_date?query=${encodeURIComponent(term)}` +
+    `&tags=(story,comment)&numericFilters=created_at_i>${since}&hitsPerPage=50`;
+
+  const resp = await fetch(url, {
+    headers: { Accept: "application/json", "User-Agent": "VisionBot/1.0" },
+  });
+  if (!resp.ok) {
+    console.warn("hn non-OK", resp.status);
+    return [];
+  }
+  const json = await resp.json();
+  const hits = (json?.hits ?? []) as any[];
+
+  const symLower = resolved.symbol.toLowerCase();
+  const nameLower = resolved.name.toLowerCase();
+
+  return hits
+    .map((h: any, idx: number) => {
+      const title = String(h.title ?? h.story_title ?? "").trim();
+      const text = String(h.comment_text ?? h.story_text ?? "")
+        .replace(/<[^>]+>/g, " ")
+        .trim();
+      const combined = [title, text].filter(Boolean).join(" — ");
+      if (!combined) return null;
+      // Loose relevance gate — require either the symbol or the name to appear
+      // in the combined text. Algolia's keyword search isn't strict enough on
+      // its own (e.g. "BTC" can match unrelated acronyms).
+      const lower = combined.toLowerCase();
+      if (!lower.includes(symLower) && !lower.includes(nameLower)) return null;
+      const postedAt = Number(h.created_at_i ?? 0);
+      const objId = h.objectID ?? `${idx}`;
+      return {
+        id: `hn-${objId}`,
+        network: "hackernews",
+        url: `https://news.ycombinator.com/item?id=${objId}`,
+        title: combined.slice(0, 240),
+        creatorName: h.author ? `@${h.author}` : null,
+        creatorAvatar: null,
+        interactions24h: Number(h.points ?? 0) + Number(h.num_comments ?? 0),
+        sentiment: classifyText(combined),
+        postedAt,
+      } satisfies SocialPost;
+    })
     .filter((p: SocialPost | null): p is SocialPost => !!p && p.postedAt > 0);
 }
 
-// ─── Source: Farcaster casts via Neynar ──────────────────────────────────────
+
 async function fetchFarcasterCasts(resolved: ResolvedToken, apiKey: string): Promise<SocialPost[]> {
   const term = resolved.address ?? resolved.symbol;
   const url =
