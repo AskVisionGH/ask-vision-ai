@@ -519,6 +519,16 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
   } else if (numericAmount <= 0) {
     ctaLabel = "Enter an amount";
     ctaDisabled = true; ctaAction = null;
+  } else if (
+    fromBalance != null &&
+    fromToken?.chainId === SOLANA_CHAIN_ID &&
+    numericAmount >
+      ((fromToken.address === SOL_NATIVE_ADDRESS || fromToken.address === WSOL_MINT)
+        ? Math.max(0, fromBalance - 0.005)
+        : fromBalance)
+  ) {
+    ctaLabel = "Insufficient balance";
+    ctaDisabled = true; ctaAction = null;
   } else if (!sameFamily && !destAddressValid) {
     ctaLabel = toChain.chainType === "EVM"
       ? "Enter destination EVM address"
