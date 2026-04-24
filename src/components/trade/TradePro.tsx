@@ -244,17 +244,13 @@ export const TradePro = ({ tab, onTabChange }: Props) => {
 
     if (entryMode === "limit") {
       if (numericEntry <= 0) return "Set an entry price";
-      if (advancedMode === "oco") return null; // OTOCO uses entry as parent + TP/SL on output
-      // tpsl + limit-entry => OTOCO with TP > SL required
     }
 
-    if (advancedMode === "tpsl" || advancedMode === "oco") {
-      if (numericTp <= 0) return "Set a take-profit price";
-      if (numericSl <= 0) return "Set a stop-loss price";
-      if (numericTp <= numericSl) return "Take-profit must be > stop-loss";
-    }
+    if (numericTp <= 0) return "Set a take-profit price";
+    if (numericSl <= 0) return "Set a stop-loss price";
+    if (numericTp <= numericSl) return "Take-profit must be > stop-loss";
     return null;
-  }, [numericSell, sellUsd, entryMode, numericEntry, advancedMode, numericTp, numericSl]);
+  }, [numericSell, sellUsd, entryMode, numericEntry, numericTp, numericSl]);
 
   // For market entry + TP/SL, the trigger token is the output token (we hold
   // it post-entry and want to sell it at TP or SL). The orderType is OCO.
