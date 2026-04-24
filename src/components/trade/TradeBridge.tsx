@@ -562,6 +562,8 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
             onAmountChange={handleAmountChange}
             amountReadonly={false}
             usd={quote?.fromAmountUsd ?? (fromToken?.priceUsd != null ? fromToken.priceUsd * numericAmount : null)}
+            balance={fromBalance}
+            onMax={fromBalance != null && fromBalance > 0 ? handleMax : undefined}
           />
 
           <div className="flex justify-center">
