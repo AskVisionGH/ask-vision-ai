@@ -1,7 +1,7 @@
 import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeft, Camera, RotateCcw, ShieldAlert, Trash2, UserMinus } from "lucide-react";
+import { ArrowLeft, Camera, Languages, RotateCcw, ShieldAlert, Trash2, UserMinus } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import {
   CryptoExperience,
@@ -13,9 +13,17 @@ import {
   INTEREST_OPTIONS,
   RISK_OPTIONS,
 } from "@/lib/profile-options";
+import { DEFAULT_LANGUAGE, LANGUAGE_OPTIONS, type LanguageCode } from "@/lib/languages";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { UserAvatar } from "@/components/UserAvatar";
 import { DeleteAccountDialog } from "@/components/DeleteAccountDialog";
 import {
@@ -37,6 +45,7 @@ const Settings = () => {
   const [experience, setExperience] = useState<CryptoExperience | null>(null);
   const [interests, setInterests] = useState<string[]>([]);
   const [risk, setRisk] = useState<RiskTolerance | null>(null);
+  const [language, setLanguage] = useState<LanguageCode>(DEFAULT_LANGUAGE);
   const [saving, setSaving] = useState(false);
   const [savingAvatar, setSavingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -48,6 +57,7 @@ const Settings = () => {
     setExperience(profile.experience);
     setInterests(profile.interests ?? []);
     setRisk(profile.risk_tolerance);
+    setLanguage((profile.language as LanguageCode) ?? DEFAULT_LANGUAGE);
   }, [profile]);
 
   const onFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -81,6 +91,7 @@ const Settings = () => {
       experience,
       interests,
       risk_tolerance: risk,
+      language,
     });
     setSaving(false);
     if (ok) toast.success("Profile saved");
@@ -243,6 +254,34 @@ const Settings = () => {
                   );
                 })}
               </div>
+            </section>
+
+            {/* Language */}
+            <section className="rounded-2xl border border-border bg-card/40 p-6 backdrop-blur-md">
+              <h2 className="mb-1.5 flex items-center gap-2 text-sm font-medium text-foreground">
+                <Languages className="h-3.5 w-3.5 text-muted-foreground" />
+                Language
+              </h2>
+              <p className="mb-4 text-xs text-muted-foreground">
+                Vision will reply in this language and use it as a hint when transcribing voice messages.
+              </p>
+              <Select value={language} onValueChange={(v) => setLanguage(v as LanguageCode)}>
+                <SelectTrigger className="w-full sm:w-72">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {LANGUAGE_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      <span className="flex items-center gap-2">
+                        <span>{opt.label}</span>
+                        {opt.value !== "auto" && (
+                          <span className="text-xs text-muted-foreground">— {opt.native}</span>
+                        )}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </section>
 
             <div className="flex justify-end pt-2">

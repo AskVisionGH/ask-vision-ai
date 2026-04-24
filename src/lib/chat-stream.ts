@@ -429,6 +429,8 @@ export interface UserProfileContext {
   experience?: "new" | "intermediate" | "advanced" | null;
   interests?: string[];
   riskTolerance?: "cautious" | "balanced" | "aggressive" | null;
+  /** BCP-47 / "auto" language code for AI replies. */
+  language?: string | null;
 }
 
 export interface ContactContext {

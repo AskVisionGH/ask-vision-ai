@@ -21,6 +21,10 @@ serve(async (req) => {
       return json({ error: "audio file required" }, 400);
     }
 
+    // Optional ISO 639-3 language hint (e.g. "eng", "spa"). Omit for auto-detect.
+    const langRaw = inForm.get("language");
+    const language = typeof langRaw === "string" && /^[a-z]{3}$/.test(langRaw) ? langRaw : null;
+
     // Forward to ElevenLabs.
     const out = new FormData();
     // ElevenLabs accepts a Blob — give it a sensible filename so the multipart
@@ -28,8 +32,9 @@ serve(async (req) => {
     const filename = (audio as File).name ?? "recording.webm";
     out.append("file", audio, filename);
     out.append("model_id", "scribe_v2");
-    // Auto-detect language by omitting `language_code`. Don't tag audio events
-    // or diarize — we just want the cleanest text for a chat input.
+    if (language) out.append("language_code", language);
+    // Don't tag audio events or diarize — we just want the cleanest text for a
+    // chat input.
 
     const resp = await fetch("https://api.elevenlabs.io/v1/speech-to-text", {
       method: "POST",
