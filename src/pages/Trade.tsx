@@ -311,26 +311,15 @@ const TradeSidebar = ({
       </div>
 
       <div className="shrink-0 px-2 py-2">
-        <NavRow to="/contacts" icon={<Users className="h-3.5 w-3.5" />} label="Contacts" />
-        <NavRow to="/tracked-wallets" icon={<Radar className="h-3.5 w-3.5" />} label="Tracked wallets" />
+        <NavRow to="/chat" icon={<MessageSquare className="h-3.5 w-3.5" />} label="Chat" />
         <NavRow
           to="/trade"
           icon={<Repeat className="h-3.5 w-3.5" />}
           label="Trade"
           active={activePath === "/trade"}
         />
-        <button
-          type="button"
-          disabled
-          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-muted-foreground/50 ease-vision cursor-not-allowed"
-          aria-label="Bridge (coming soon)"
-        >
-          <ArrowLeftRight className="h-3.5 w-3.5" />
-          <span>Bridge</span>
-          <span className="ml-auto rounded-full border border-border/60 bg-secondary/40 px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
-            Soon
-          </span>
-        </button>
+        <NavRow to="/tracked-wallets" icon={<Radar className="h-3.5 w-3.5" />} label="Tracking" />
+        <NavRow to="/contacts" icon={<Users className="h-3.5 w-3.5" />} label="Contacts" />
         <button
           type="button"
           disabled
@@ -339,6 +328,18 @@ const TradeSidebar = ({
         >
           <Bell className="h-3.5 w-3.5" />
           <span>Alerts</span>
+          <span className="ml-auto rounded-full border border-border/60 bg-secondary/40 px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
+            Soon
+          </span>
+        </button>
+        <button
+          type="button"
+          disabled
+          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-muted-foreground/50 ease-vision cursor-not-allowed"
+          aria-label="Bridge (coming soon)"
+        >
+          <ArrowLeftRight className="h-3.5 w-3.5" />
+          <span>Bridge</span>
           <span className="ml-auto rounded-full border border-border/60 bg-secondary/40 px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
             Soon
           </span>
