@@ -33,11 +33,18 @@ export type ProfileUpdate = Partial<
 /** Loads the current user's profile and exposes update + avatar-upload helpers. */
 export const useProfile = () => {
   const { user } = useAuth();
+  // Depend on the stable user id, not the user object reference. Supabase fires
+  // TOKEN_REFRESHED periodically, which produces a new session/user *object*
+  // even though the underlying user is unchanged. Keying on `user.id` keeps
+  // `refresh` stable across those refreshes — otherwise every refresh would
+  // flip `loading` back to true, flashing FullScreenLoader and making the
+  // app feel like it's constantly reloading.
+  const userId = user?.id ?? null;
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
-    if (!user) {
+    if (!userId) {
       setProfile(null);
       setLoading(false);
       return;
@@ -45,11 +52,11 @@ export const useProfile = () => {
     const { data, error } = await supabase
       .from("profiles")
       .select("*")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .maybeSingle();
     if (!error && data) setProfile(data as Profile);
     setLoading(false);
-  }, [user]);
+  }, [userId]);
 
   useEffect(() => {
     setLoading(true);
@@ -58,26 +65,26 @@ export const useProfile = () => {
 
   const updateProfile = useCallback(
     async (patch: ProfileUpdate): Promise<boolean> => {
-      if (!user) return false;
+      if (!userId) return false;
       const { data, error } = await supabase
         .from("profiles")
         .update(patch)
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .select("*")
         .single();
       if (error || !data) return false;
       setProfile(data as Profile);
       return true;
     },
-    [user],
+    [userId],
   );
 
   /** Uploads to the `avatars` bucket under `{user_id}/avatar-{ts}.{ext}` and saves the public URL. */
   const uploadAvatar = useCallback(
     async (file: File): Promise<string | null> => {
-      if (!user) return null;
+      if (!userId) return null;
       const ext = (file.name.split(".").pop() ?? "png").toLowerCase();
-      const path = `${user.id}/avatar-${Date.now()}.${ext}`;
+      const path = `${userId}/avatar-${Date.now()}.${ext}`;
       const { error: upErr } = await supabase.storage
         .from("avatars")
         .upload(path, file, { upsert: true, contentType: file.type });
@@ -87,7 +94,7 @@ export const useProfile = () => {
       await updateProfile({ avatar_url: url });
       return url;
     },
-    [user, updateProfile],
+    [userId, updateProfile],
   );
 
   return { profile, loading, refresh, updateProfile, uploadAvatar };
