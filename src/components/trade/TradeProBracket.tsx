@@ -120,7 +120,11 @@ const supaPost = async (fn: string, body: unknown, attempt = 0): Promise<any> =>
   return data;
 };
 
-export const TradeProBracket = () => {
+interface TradeProBracketProps {
+  expiryMs: number;
+}
+
+export const TradeProBracket = ({ expiryMs }: TradeProBracketProps) => {
   // Inputs
   const [inputToken, setInputToken] = useState<TokenMeta>(USDC_TOKEN);
   const [outputToken, setOutputToken] = useState<TokenMeta>(SOL_TOKEN);
@@ -133,8 +137,6 @@ export const TradeProBracket = () => {
   // Limit-entry trigger price
   const [entryPrice, setEntryPrice] = useState("");
   const [entrySide, setEntrySide] = useState<"above" | "below">("below");
-
-  const [expiryMs, setExpiryMs] = useState<number>(7 * 86_400_000);
 
   // Market price of the token we're tracking (output token's USD price)
   const [outputUsdPrice, setOutputUsdPrice] = useState<number | null>(null);
