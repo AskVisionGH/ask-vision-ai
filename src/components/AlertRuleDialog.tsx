@@ -36,7 +36,7 @@ interface Props {
  */
 export const AlertRuleDialog = ({ open, onOpenChange }: Props) => {
   const { create } = useAlertRules();
-  const { wallets } = useSmartWallets();
+  const { tracked: wallets } = useSmartWallets();
 
   const [kind, setKind] = useState<AlertRuleKind>("price");
   const [label, setLabel] = useState("");
