@@ -440,14 +440,7 @@ const UsersTab = () => {
                     </TableCell>
                     <TableCell className="text-xs">
                       {email ? (
-                        <a
-                          href={`mailto:${email}`}
-                          className="inline-flex items-center gap-1.5 text-primary hover:underline"
-                          title={email}
-                        >
-                          <Mail className="h-3 w-3" />
-                          <span className="max-w-[200px] truncate">{email}</span>
-                        </a>
+                        <CopyId value={email} label={shortEmail(email)} />
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
