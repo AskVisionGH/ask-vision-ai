@@ -46,16 +46,15 @@ const ProtectedRoute = ({
   return children;
 };
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <AuthProvider>
-      <WalletContextProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<Index />} />
+const AppRoutes = () => {
+  // Persist (user, wallet) link any time a wallet is connected while signed in.
+  useWalletAutoLink();
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Index />} />
+        <Route path="/auth" element={<Auth />} />
+        <Route path="/shared/:shareId" element={<SharedChat />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/shared/:shareId" element={<SharedChat />} />
               <Route
