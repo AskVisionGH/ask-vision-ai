@@ -731,11 +731,14 @@ interface PanelRowProps {
   amountReadonly: boolean;
   usd: number | null;
   placeholder?: string;
+  balance?: number | null;
+  onMax?: () => void;
 }
 
 const PanelRow = ({
   label, chainName, chainLogo, chainLocked, onPickChain,
   token, onPickToken, amount, onAmountChange, amountReadonly, usd, placeholder,
+  balance, onMax,
 }: PanelRowProps) => (
   <div className="rounded-xl border border-border/60 bg-secondary/30 p-3">
     <div className="flex items-center justify-between">
@@ -784,8 +787,22 @@ const PanelRow = ({
         className="h-9 border-0 bg-transparent text-right font-mono text-base focus-visible:ring-0 focus-visible:ring-offset-0"
       />
     </div>
-    <div className="mt-1 flex justify-end font-mono text-[10px] text-muted-foreground">
-      {usd != null ? fmtUsd(usd) : "—"}
+    <div className="mt-1 flex items-center justify-between font-mono text-[10px] text-muted-foreground">
+      {balance != null ? (
+        <div className="flex items-center gap-2">
+          <span>Balance: {fmtAmount(balance)}</span>
+          {onMax && (
+            <button
+              type="button"
+              onClick={onMax}
+              className="ease-vision rounded-full border border-border/60 bg-background/60 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-primary hover:bg-secondary"
+            >
+              Max
+            </button>
+          )}
+        </div>
+      ) : <span />}
+      <span>{usd != null ? fmtUsd(usd) : "—"}</span>
     </div>
   </div>
 );
