@@ -409,7 +409,7 @@ export const TradePro = ({ tab, onTabChange }: Props) => {
     jwtSigning;
 
   const busyLabel =
-    phase.name === "authing" || jwtSigning ? "Sign in to Jupiter…"
+    phase.name === "authing" || jwtSigning ? "Sign in to continue…"
     : phase.name === "preparing" ? "Building order…"
     : phase.name === "awaiting_signature" ? "Approve deposit in wallet…"
     : phase.name === "submitting" ? "Submitting…"
