@@ -127,6 +127,10 @@ export const ChatComposer = ({
       const ext = mimeType.includes("mp4") ? "m4a" : mimeType.includes("ogg") ? "ogg" : "webm";
       const form = new FormData();
       form.append("audio", new File([blob], `recording.${ext}`, { type: mimeType }));
+      // Pass the user's language as an ISO 639-3 hint when set (improves accuracy
+      // significantly vs auto-detect, especially for non-English speakers).
+      const langOpt = getLanguageOption(profile?.language);
+      if (langOpt.iso639_3) form.append("language", langOpt.iso639_3);
 
       const { data, error } = await supabase.functions.invoke("voice-transcribe", {
         body: form,
@@ -224,16 +228,20 @@ export const ChatComposer = ({
           onClick={recording ? stopRecording : startRecording}
           disabled={disabled || transcribing}
           className={cn(
-            "flex h-8 w-8 shrink-0 items-center justify-center rounded-full ease-vision",
+            "group flex h-8 w-8 shrink-0 items-center justify-center rounded-full ease-vision",
             recording
               ? "bg-destructive text-destructive-foreground hover:opacity-90"
               : transcribing
                 ? "bg-muted text-muted-foreground/40 cursor-not-allowed"
-                : "bg-secondary text-foreground hover:bg-secondary/80",
+                : "bg-secondary text-muted-foreground hover:bg-primary/15 hover:text-primary hover:shadow-glow",
           )}
           aria-label={recording ? "Stop recording" : "Record voice message"}
         >
-          {recording ? <Square className="h-3.5 w-3.5" /> : <Mic className="h-4 w-4" />}
+          {recording ? (
+            <Square className="h-3.5 w-3.5" />
+          ) : (
+            <Mic className="h-4 w-4 transition-transform group-hover:scale-110" />
+          )}
         </button>
 
         {/* Send */}
