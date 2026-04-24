@@ -1,7 +1,7 @@
 import { useWallet } from "@solana/wallet-adapter-react";
-import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useWalletPicker } from "@/components/WalletPicker";
 
 interface Props {
   className?: string;
@@ -10,7 +10,7 @@ interface Props {
 
 /** Pill-shaped connect button matching Vision aesthetic. */
 export const ConnectWalletButton = ({ className, size = "lg" }: Props) => {
-  const { setVisible } = useWalletModal();
+  const { open, Picker } = useWalletPicker();
   const { connected, publicKey, disconnect, connecting } = useWallet();
 
   const short = publicKey
@@ -33,16 +33,19 @@ export const ConnectWalletButton = ({ className, size = "lg" }: Props) => {
   }
 
   return (
-    <Button
-      onClick={() => setVisible(true)}
-      disabled={connecting}
-      size={size}
-      className={cn(
-        "rounded-full font-medium px-7 bg-primary text-primary-foreground hover:bg-primary/90 ease-vision shadow-glow",
-        className,
-      )}
-    >
-      {connecting ? "Connecting…" : "Connect wallet to begin"}
-    </Button>
+    <>
+      <Button
+        onClick={open}
+        disabled={connecting}
+        size={size}
+        className={cn(
+          "rounded-full font-medium px-7 bg-primary text-primary-foreground hover:bg-primary/90 ease-vision shadow-glow",
+          className,
+        )}
+      >
+        {connecting ? "Connecting…" : "Connect wallet to begin"}
+      </Button>
+      {Picker}
+    </>
   );
 };
