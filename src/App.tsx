@@ -11,6 +11,7 @@ import { WalletMergePrompt } from "@/components/WalletMergePrompt";
 import Index from "./pages/Index.tsx";
 import Auth from "./pages/Auth.tsx";
 import ResetPassword from "./pages/ResetPassword.tsx";
+import Unsubscribe from "./pages/Unsubscribe.tsx";
 import Chat from "./pages/Chat.tsx";
 import SharedChat from "./pages/SharedChat.tsx";
 import Onboarding from "./pages/Onboarding.tsx";
@@ -64,6 +65,7 @@ const AppRoutes = () => {
       <Route path="/" element={<Index />} />
       <Route path="/auth" element={<Auth />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/unsubscribe" element={<Unsubscribe />} />
       <Route path="/shared/:shareId" element={<SharedChat />} />
       <Route
         path="/onboarding"
