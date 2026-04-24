@@ -19,9 +19,12 @@ interface SharedConversation {
 
 const SharedChat = () => {
   const { shareId } = useParams<{ shareId: string }>();
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [convo, setConvo] = useState<SharedConversation | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "missing">("loading");
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -34,7 +37,7 @@ const SharedChat = () => {
       // 1. Look up the conversation by its public share id.
       const { data: conversation, error: convoErr } = await supabase
         .from("conversations")
-        .select("id, title, updated_at")
+        .select("id, title, share_mode, updated_at")
         .eq("share_id", shareId)
         .maybeSingle();
 
@@ -70,6 +73,53 @@ const SharedChat = () => {
       cancelled = true;
     };
   }, [shareId]);
+
+  /**
+   * Copies the shared conversation (and all its messages) into the viewer's
+   * own account, then navigates them to the new chat. Only enabled when the
+   * owner set the share mode to `importable`.
+   */
+  const handleImport = async () => {
+    if (!convo) return;
+    if (!user) {
+      navigate(`/auth?redirect=${encodeURIComponent(`/shared/${shareId}`)}`);
+      return;
+    }
+    setImporting(true);
+    try {
+      const { data: newConvo, error: convoErr } = await supabase
+        .from("conversations")
+        .insert({
+          user_id: user.id,
+          title: convo.title,
+        })
+        .select("id")
+        .single();
+      if (convoErr || !newConvo) {
+        toast.error("Couldn't import conversation");
+        return;
+      }
+
+      if (messages.length > 0) {
+        const rows = messages.map((m) => ({
+          conversation_id: newConvo.id,
+          user_id: user.id,
+          role: m.role,
+          content: m.content,
+          tool_events: (m.toolEvents ?? null) as never,
+        }));
+        const { error: msgErr } = await supabase.from("messages").insert(rows);
+        if (msgErr) {
+          toast.error("Imported chat but messages failed to copy");
+        }
+      }
+
+      toast.success("Conversation imported");
+      navigate(`/chat?c=${newConvo.id}`);
+    } finally {
+      setImporting(false);
+    }
+  };
 
   return (
     <div className="relative flex min-h-screen flex-col bg-background text-foreground">
