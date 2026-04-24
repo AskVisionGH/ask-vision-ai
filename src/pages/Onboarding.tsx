@@ -181,9 +181,10 @@ const Onboarding = () => {
           </div>
           <button
             onClick={skipAll}
-            className="text-xs text-muted-foreground/70 hover:text-foreground ease-vision"
+            disabled={skipping || finishing}
+            className="text-xs text-muted-foreground/70 hover:text-foreground ease-vision disabled:opacity-50"
           >
-            Skip for now
+            {skipping ? "Skipping…" : "Skip for now"}
           </button>
         </div>
 
