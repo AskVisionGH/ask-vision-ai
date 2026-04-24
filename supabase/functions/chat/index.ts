@@ -993,7 +993,7 @@ function buildProfileBlock(profile: any): string | null {
   if (!profile || typeof profile !== "object") return null;
   const lines: string[] = [];
   const name = typeof profile.displayName === "string" ? profile.displayName.trim() : "";
-  if (name) lines.push(`- The user's name is **${name}**. Greet them by name on the first message of a conversation, and weave it in naturally during casual chat (don't overdo it).`);
+  if (name) lines.push(`- The user's name is **${name}**. Use their name ONLY in your very first reply of a conversation, or on rare special occasions (genuine congratulations, condolences, or when disambiguating). Do NOT start follow-up messages with their name. Do NOT sprinkle their name into normal replies. Default to no name at all — pretend you don't know it unless one of the rare cases above applies.`);
 
   const exp = profile.experience;
   if (exp === "new") {
