@@ -226,6 +226,96 @@ export type Database = {
           },
         ]
       }
+      notification_preferences: {
+        Row: {
+          cat_news_sentiment: boolean
+          cat_order_fills: boolean
+          cat_price: boolean
+          cat_wallet_activity: boolean
+          channel_in_app: boolean
+          channel_web_push: boolean
+          created_at: string
+          master_enabled: boolean
+          post_order_prompt_seen: boolean
+          quiet_end: string | null
+          quiet_hours_enabled: boolean
+          quiet_start: string | null
+          quiet_timezone: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cat_news_sentiment?: boolean
+          cat_order_fills?: boolean
+          cat_price?: boolean
+          cat_wallet_activity?: boolean
+          channel_in_app?: boolean
+          channel_web_push?: boolean
+          created_at?: string
+          master_enabled?: boolean
+          post_order_prompt_seen?: boolean
+          quiet_end?: string | null
+          quiet_hours_enabled?: boolean
+          quiet_start?: string | null
+          quiet_timezone?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cat_news_sentiment?: boolean
+          cat_order_fills?: boolean
+          cat_price?: boolean
+          cat_wallet_activity?: boolean
+          channel_in_app?: boolean
+          channel_web_push?: boolean
+          created_at?: string
+          master_enabled?: boolean
+          post_order_prompt_seen?: boolean
+          quiet_end?: string | null
+          quiet_hours_enabled?: boolean
+          quiet_start?: string | null
+          quiet_timezone?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          body: string | null
+          category: Database["public"]["Enums"]["notification_category"]
+          created_at: string
+          id: string
+          link: string | null
+          metadata: Json | null
+          read_at: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          body?: string | null
+          category: Database["public"]["Enums"]["notification_category"]
+          created_at?: string
+          id?: string
+          link?: string | null
+          metadata?: Json | null
+          read_at?: string | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          body?: string | null
+          category?: Database["public"]["Enums"]["notification_category"]
+          created_at?: string
+          id?: string
+          link?: string | null
+          metadata?: Json | null
+          read_at?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -264,6 +354,39 @@ export type Database = {
           onboarding_completed?: boolean
           risk_tolerance?: Database["public"]["Enums"]["risk_tolerance"] | null
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          last_used_at: string | null
+          p256dh: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          last_used_at?: string | null
+          p256dh: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          last_used_at?: string | null
+          p256dh?: string
+          user_agent?: string | null
           user_id?: string
         }
         Relationships: []
@@ -623,6 +746,11 @@ export type Database = {
     Enums: {
       app_role: "admin" | "user"
       crypto_experience: "new" | "intermediate" | "advanced"
+      notification_category:
+        | "price"
+        | "wallet_activity"
+        | "order_fills"
+        | "news_sentiment"
       risk_tolerance: "cautious" | "balanced" | "aggressive"
       share_mode: "read_only" | "importable"
       tx_event_kind: "swap" | "transfer" | "bridge"
@@ -755,6 +883,12 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "user"],
       crypto_experience: ["new", "intermediate", "advanced"],
+      notification_category: [
+        "price",
+        "wallet_activity",
+        "order_fills",
+        "news_sentiment",
+      ],
       risk_tolerance: ["cautious", "balanced", "aggressive"],
       share_mode: ["read_only", "importable"],
       tx_event_kind: ["swap", "transfer", "bridge"],
