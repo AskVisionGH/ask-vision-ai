@@ -72,7 +72,13 @@ Deno.serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, serviceRole);
-    const summary = { swap_sweeps: 0, dca_fees: 0, bridge_fees: 0, errors: [] as string[] };
+    const summary = {
+      swap_sweeps: 0,
+      dca_fees: 0,
+      sol_bridge_fees: 0,
+      eth_bridge_fees: 0,
+      errors: [] as string[],
+    };
 
     // 1. Mirror Solana sweep runs ----------------------------------------
     try {
@@ -88,15 +94,26 @@ Deno.serve(async (req) => {
       summary.errors.push(`dca: ${e instanceof Error ? e.message : String(e)}`);
     }
 
-    // 3. Index ETH treasury for bridge fees ------------------------------
+    // 3. Index Solana bridge fees ----------------------------------------
+    // LI.FI deducts the integrator fee inline on the source-chain swap, so
+    // SOL→X bridges drop the fee straight into our SOL treasury within the
+    // bridge tx itself. We scan our own bridge `tx_events` and pull the
+    // matching transfer out of the Helius transaction.
+    try {
+      summary.sol_bridge_fees = await syncSolBridgeFees(supabase);
+    } catch (e) {
+      summary.errors.push(`sol_bridge: ${e instanceof Error ? e.message : String(e)}`);
+    }
+
+    // 4. Index ETH treasury for bridge fees ------------------------------
     if (etherscanKey) {
       try {
-        summary.bridge_fees = await syncEthBridgeFees(supabase, etherscanKey);
+        summary.eth_bridge_fees = await syncEthBridgeFees(supabase, etherscanKey);
       } catch (e) {
-        summary.errors.push(`bridge: ${e instanceof Error ? e.message : String(e)}`);
+        summary.errors.push(`eth_bridge: ${e instanceof Error ? e.message : String(e)}`);
       }
     } else {
-      summary.errors.push("ETHERSCAN_API_KEY not configured — bridge fees skipped");
+      summary.errors.push("ETHERSCAN_API_KEY not configured — ETH bridge fees skipped");
     }
 
     return json({ ok: true, summary });
