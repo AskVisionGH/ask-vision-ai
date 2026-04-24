@@ -795,6 +795,17 @@ const TreasuryTab = () => {
                 return (
                   <TableRow key={f.id}>
                     <TableCell className="text-xs">{format(new Date(f.block_time), "MMM d HH:mm")}</TableCell>
+                    <TableCell className="text-xs">
+                      {f.related_user_id ? (
+                        namesByUser[f.related_user_id] ?? (
+                          <span className="font-mono text-muted-foreground">
+                            {f.related_user_id.slice(0, 6)}…
+                          </span>
+                        )
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="text-xs capitalize">{f.chain}</Badge>
                     </TableCell>
