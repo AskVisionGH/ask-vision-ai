@@ -286,7 +286,8 @@ const Auth = () => {
               </form>
             </TabsContent>
 
-            {/* Wallet tab */}
+            {/* Wallet tab — single pill that opens the wallet picker and
+                auto-signs the moment a wallet connects. */}
             <TabsContent value="wallet" className="mt-5">
               <div className="rounded-2xl border border-border bg-card/40 p-5 backdrop-blur-md">
                 <div className="flex items-start gap-3">
@@ -304,40 +305,32 @@ const Auth = () => {
                   </div>
                 </div>
 
-                {connected && publicKey ? (
-                  <div className="mt-4 space-y-2">
-                    <div className="flex items-center justify-between rounded-lg border border-border/60 bg-secondary/60 px-3 py-2 text-xs">
-                      <span className="font-mono text-muted-foreground">
-                        {publicKey.toBase58().slice(0, 4)}…{publicKey.toBase58().slice(-4)}
-                      </span>
-                      <button
-                        onClick={() => disconnect()}
-                        className="text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground ease-vision"
-                      >
-                        Disconnect
-                      </button>
-                    </div>
-                    <Button
-                      type="button"
-                      onClick={signWithWallet}
-                      disabled={walletSigning}
-                      className="w-full rounded-full bg-primary font-medium text-primary-foreground hover:bg-primary/90 ease-vision"
-                    >
-                      {walletSigning ? "Waiting for signature…" : "Sign in with wallet"}
-                    </Button>
-                  </div>
-                ) : (
-                  <Button
-                    type="button"
-                    onClick={() => setVisible(true)}
-                    className="mt-4 w-full rounded-full bg-primary font-medium text-primary-foreground hover:bg-primary/90 ease-vision"
+                <Button
+                  type="button"
+                  onClick={signWithWallet}
+                  disabled={walletSigning || pendingSign}
+                  className="mt-4 w-full rounded-full bg-primary font-medium text-primary-foreground hover:bg-primary/90 ease-vision"
+                >
+                  {walletSigning
+                    ? "Waiting for signature…"
+                    : pendingSign
+                      ? "Choose a wallet…"
+                      : connected && publicKey
+                        ? `Sign in as ${publicKey.toBase58().slice(0, 4)}…${publicKey.toBase58().slice(-4)}`
+                        : "Sign in with wallet"}
+                </Button>
+
+                {connected && publicKey && (
+                  <button
+                    onClick={() => disconnect()}
+                    className="mt-2 w-full text-center text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground ease-vision"
                   >
-                    Connect wallet
-                  </Button>
+                    Use a different wallet
+                  </button>
                 )}
 
-                <p className="mt-3 text-[10px] text-muted-foreground/70">
-                  Phantom · Solflare · Backpack · any Wallet Standard wallet
+                <p className="mt-3 text-center text-[10px] text-muted-foreground/70">
+                  Phantom, Solflare, Backpack, Coinbase, Trust & more
                 </p>
               </div>
             </TabsContent>
