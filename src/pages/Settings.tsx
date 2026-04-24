@@ -1,7 +1,7 @@
 import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeft, Camera, RotateCcw, ShieldAlert, Trash2, UserMinus } from "lucide-react";
+import { ArrowLeft, Camera, Languages, RotateCcw, ShieldAlert, Trash2, UserMinus } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import {
   CryptoExperience,
@@ -13,9 +13,17 @@ import {
   INTEREST_OPTIONS,
   RISK_OPTIONS,
 } from "@/lib/profile-options";
+import { DEFAULT_LANGUAGE, LANGUAGE_OPTIONS, type LanguageCode } from "@/lib/languages";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { UserAvatar } from "@/components/UserAvatar";
 import { DeleteAccountDialog } from "@/components/DeleteAccountDialog";
 import {
@@ -37,6 +45,7 @@ const Settings = () => {
   const [experience, setExperience] = useState<CryptoExperience | null>(null);
   const [interests, setInterests] = useState<string[]>([]);
   const [risk, setRisk] = useState<RiskTolerance | null>(null);
+  const [language, setLanguage] = useState<LanguageCode>(DEFAULT_LANGUAGE);
   const [saving, setSaving] = useState(false);
   const [savingAvatar, setSavingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -48,6 +57,7 @@ const Settings = () => {
     setExperience(profile.experience);
     setInterests(profile.interests ?? []);
     setRisk(profile.risk_tolerance);
+    setLanguage((profile.language as LanguageCode) ?? DEFAULT_LANGUAGE);
   }, [profile]);
 
   const onFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
