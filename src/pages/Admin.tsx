@@ -175,8 +175,11 @@ type StatsData = {
   signupsLast7d: number;
   signupsLast30d: number;
   signupsByDay: { date: string; count: number }[];
-  totalConversations: number;
-  totalMessages: number;
+  // "active" = currently in DB, "totalEver" = lifetime including deleted.
+  activeConversations: number;
+  totalConversationsEver: number;
+  activeMessages: number;
+  totalMessagesEver: number;
   messagesLast7d: number;
   activeUsers7d: number;
   totalWalletLinks: number;
