@@ -192,7 +192,9 @@ const TradeSidebar = ({
           >
             <Repeat className="h-4 w-4" />
           </Link>
-          {isAdmin && (
+        </div>
+        {isAdmin && (
+          <div className="mt-1.5 flex flex-col items-center">
             <Link
               to="/admin"
               className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
@@ -201,8 +203,8 @@ const TradeSidebar = ({
             >
               <Shield className="h-4 w-4" />
             </Link>
-          )}
-        </div>
+          </div>
+        )}
         <div className="mt-auto flex flex-col items-center gap-1.5">
           <Link
             to="/settings"
