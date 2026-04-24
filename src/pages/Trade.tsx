@@ -143,7 +143,7 @@ const Trade = () => {
                   : tab === "pro"
                     ? "Bracket orders with take-profit and stop-loss in a single placement."
                     : tab === "bridge"
-                      ? "Move tokens across chains with the best routes from LI.FI."
+                      ? "Move tokens across chains with Vision's smart cross-chain routing."
                       : "Swap any Solana token at the best on-chain price."}
               </p>
             </div>
