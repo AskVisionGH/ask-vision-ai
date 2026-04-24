@@ -1,15 +1,19 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { ArrowRight } from "lucide-react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { ArrowRight, Download, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { ChatBubble } from "@/components/ChatBubble";
 import { VisionLogo } from "@/components/VisionLogo";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/useAuth";
 import type { ChatMessage, ToolEvent } from "@/lib/chat-stream";
+import type { ShareMode } from "@/hooks/useConversations";
 
 interface SharedConversation {
   id: string;
   title: string;
+  share_mode: ShareMode;
   updated_at: string;
 }
 
