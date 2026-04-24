@@ -7,6 +7,7 @@ import { WalletContextProvider } from "@/providers/WalletContextProvider";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
 import { useWalletAutoLink } from "@/hooks/useWalletAutoLink";
+import { WalletMergePrompt } from "@/components/WalletMergePrompt";
 import Index from "./pages/Index.tsx";
 import Auth from "./pages/Auth.tsx";
 import Chat from "./pages/Chat.tsx";
@@ -47,9 +48,17 @@ const ProtectedRoute = ({
 };
 
 const AppRoutes = () => {
-  // Persist (user, wallet) link any time a wallet is connected while signed in.
-  useWalletAutoLink();
+  // Persist (user, wallet) link any time a wallet is connected while signed in,
+  // and surface a merge dialog if the wallet already belongs to another account.
+  const walletLink = useWalletAutoLink();
   return (
+    <>
+      <WalletMergePrompt
+        candidate={walletLink.mergeCandidate}
+        merging={walletLink.merging}
+        onAccept={walletLink.acceptMerge}
+        onDismiss={walletLink.dismissMerge}
+      />
     <Routes>
       <Route path="/" element={<Index />} />
       <Route path="/auth" element={<Auth />} />
@@ -103,8 +112,9 @@ const AppRoutes = () => {
         }
       />
       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-      <Route path="*" element={<NotFound />} />
-    </Routes>
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </>
   );
 };
 
