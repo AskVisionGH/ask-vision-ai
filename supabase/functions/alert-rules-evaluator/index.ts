@@ -45,19 +45,8 @@ const notificationCategory: Record<RuleKind, string> = {
   portfolio_pnl: "price", // PnL reuses the price category (no dedicated cat yet)
 };
 
-function parseJwtClaims(token: string): Record<string, unknown> | null {
-  const parts = token.split(".");
-  if (parts.length < 2) return null;
-  try {
-    const padded = parts[1]
-      .replaceAll("-", "+")
-      .replaceAll("_", "/")
-      .padEnd(Math.ceil(parts[1].length / 4) * 4, "=");
-    return JSON.parse(atob(padded)) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
+// (JWT parsing no longer needed — evaluator is gated by being reachable only
+// via the internal cron shared-secret header or a service-role Bearer.)
 
 // Fetch USD prices for a set of token symbols via Jupiter's token search.
 // Returns a Map<UPPER_SYMBOL, priceUsd>. Missing tokens are simply absent.
@@ -111,17 +100,16 @@ Deno.serve(async (req) => {
     });
   }
 
-  // Service-role only (cron invokes with the service key Bearer).
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-  const token = authHeader.slice("Bearer ".length).trim();
-  const claims = parseJwtClaims(token);
-  if (claims?.role !== "service_role") {
+  // Gate: caller must be either the service role (Bearer = service key) or
+  // the internal cron (shared secret header). Any other caller is rejected.
+  const authHeader = req.headers.get("Authorization") ?? "";
+  const cronSecretHeader = req.headers.get("x-cron-secret") ?? "";
+  const bearer = authHeader.startsWith("Bearer ")
+    ? authHeader.slice(7).trim()
+    : "";
+  const isServiceRole = bearer === serviceKey;
+  const isCron = cronSecretHeader.length > 0 && cronSecretHeader === serviceKey;
+  if (!isServiceRole && !isCron) {
     return new Response(JSON.stringify({ error: "Forbidden" }), {
       status: 403,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
