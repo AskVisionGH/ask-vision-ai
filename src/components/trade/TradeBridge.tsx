@@ -67,7 +67,7 @@ type Phase =
   | { name: "building" }
   | { name: "awaiting_signature" }
   | { name: "submitting" }
-  | { name: "bridging"; signature: string; startedAt: number }
+  | { name: "bridging"; signature: string; startedAt: number; estimatedSec: number | null }
   | { name: "success"; signature: string; durationMs: number; toAmountUi: number; toSymbol: string; destExplorer: string | null }
   | { name: "error"; message: string };
 
@@ -191,6 +191,16 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
   const [picker, setPicker] = useState<null | { side: "from" | "to" }>(null);
   const [chainPicker, setChainPicker] = useState<null | "to">(null);
   const [phase, setPhase] = useState<Phase>({ name: "idle" });
+
+  // 1s ticker while bridging so the countdown label re-renders every second.
+  // We keep the tick value in state (not a ref) because label rendering reads it.
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    if (phase.name !== "bridging") return;
+    setNowTick(Date.now());
+    const id = window.setInterval(() => setNowTick(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [phase.name]);
 
   // ---------- Load chains once ----------
   useEffect(() => {
@@ -389,7 +399,7 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
       const signature = submitted.signature as string;
       if (!signature) throw new Error("No signature returned from submit");
 
-      setPhase({ name: "bridging", signature, startedAt });
+      setPhase({ name: "bridging", signature, startedAt, estimatedSec: quote.executionDurationSec ?? null });
 
       // Poll LI.FI status until DONE / FAILED / timeout. The Solana sig is the
       // source-chain hash; LI.FI maps it to the destination-chain receive tx.
@@ -500,12 +510,32 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
     phase.name === "submitting" ||
     phase.name === "bridging";
 
-  const busyLabel =
-    phase.name === "building" ? "Building transaction…"
-    : phase.name === "awaiting_signature" ? "Approve in wallet…"
-    : phase.name === "submitting" ? "Submitting…"
-    : phase.name === "bridging" ? "Bridging across chains…"
-    : "";
+  const fmtMMSS = (totalSec: number) => {
+    const s = Math.max(0, Math.floor(totalSec));
+    const m = Math.floor(s / 60);
+    const r = s % 60;
+    return `${m}:${r.toString().padStart(2, "0")}`;
+  };
+
+  let busyLabel = "";
+  if (phase.name === "building") busyLabel = "Building transaction…";
+  else if (phase.name === "awaiting_signature") busyLabel = "Approve in wallet…";
+  else if (phase.name === "submitting") busyLabel = "Submitting…";
+  else if (phase.name === "bridging") {
+    const elapsedSec = Math.max(0, (nowTick - phase.startedAt) / 1000);
+    const est = phase.estimatedSec;
+    if (est && est > 0) {
+      const remaining = est - elapsedSec;
+      if (remaining > 0) {
+        busyLabel = `Bridging across chains · ~${fmtMMSS(remaining)} remaining`;
+      } else {
+        const over = elapsedSec - est;
+        busyLabel = `Finalizing — taking a bit longer · +${fmtMMSS(over)}`;
+      }
+    } else {
+      busyLabel = `Bridging across chains · ${fmtMMSS(elapsedSec)} elapsed`;
+    }
+  }
 
   let ctaLabel = "Bridge";
   let ctaDisabled = false;
