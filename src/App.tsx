@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { WalletContextProvider } from "@/providers/WalletContextProvider";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
+import { useWalletAutoLink } from "@/hooks/useWalletAutoLink";
 import Index from "./pages/Index.tsx";
 import Auth from "./pages/Auth.tsx";
 import Chat from "./pages/Chat.tsx";
