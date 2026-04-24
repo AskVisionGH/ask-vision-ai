@@ -639,7 +639,7 @@ export const TradePro = ({ tab, onTabChange }: Props) => {
                       className="max-w-[220px]"
                     >
                       <p className="font-mono text-[11px] leading-relaxed">
-                        Jupiter v2 enforces a $10 minimum per bracket.
+                        Pro brackets enforce a $10 minimum per order.
                       </p>
                     </TooltipContent>
                   </Tooltip>
