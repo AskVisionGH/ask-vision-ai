@@ -821,6 +821,9 @@ serve(async (req) => {
           if (isForcedFallbackTurn && cardEmitted) break;
         }
 
+        // Safety net: if the model never produced post-tool text (e.g. forced
+        // fallback or empty wrap-up), make sure buffered cards still ship.
+        flushPendingCards();
         send("done", {});
       } catch (e) {
         console.error("chat stream error:", e);
