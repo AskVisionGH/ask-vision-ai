@@ -47,11 +47,24 @@ interface NormalizedOrder {
 }
 
 const fmtAmount = (n: number) => {
-  if (n === 0) return "0";
-  if (Math.abs(n) < 0.000001) return n.toExponential(3);
-  if (Math.abs(n) < 1) return n.toLocaleString("en-US", { maximumFractionDigits: 6 });
-  if (Math.abs(n) < 1000) return n.toLocaleString("en-US", { maximumFractionDigits: 4 });
-  return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  if (!Number.isFinite(n) || n === 0) return "0";
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+  if (abs >= 1000) return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  if (abs >= 1) return n.toLocaleString("en-US", { maximumFractionDigits: 4 });
+  if (abs >= 0.01) return n.toLocaleString("en-US", { maximumFractionDigits: 4 });
+  if (abs >= 0.0001) return n.toLocaleString("en-US", { maximumFractionDigits: 6 });
+  // For dust amounts, cap at 8 decimals — no scientific notation.
+  return n.toLocaleString("en-US", { maximumFractionDigits: 8, minimumFractionDigits: 0 });
+};
+
+const fmtRate = (n: number) => {
+  if (!Number.isFinite(n) || n === 0) return "0";
+  const abs = Math.abs(n);
+  if (abs >= 1000) return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  if (abs >= 1) return n.toLocaleString("en-US", { maximumFractionDigits: 4 });
+  if (abs >= 0.01) return n.toLocaleString("en-US", { maximumFractionDigits: 6 });
+  return n.toLocaleString("en-US", { maximumFractionDigits: 8 });
 };
 
 const fmtCountdown = (expiredAt: number | null) => {

@@ -37,7 +37,56 @@ serve(async (req) => {
         return json({ error: "Couldn't fetch orders" }, 502);
       }
       const data = await resp.json();
-      return json({ orders: data.orders ?? [] });
+      const orders: any[] = data.orders ?? [];
+
+      // Collect all unique mints across orders so we can enrich missing
+      // symbol/decimals/logo metadata in a single batch.
+      const mints = new Set<string>();
+      for (const o of orders) {
+        const a = o.account ?? o;
+        if (a.inputMint) mints.add(a.inputMint);
+        if (a.outputMint) mints.add(a.outputMint);
+      }
+
+      const metaMap: Record<string, { symbol: string; decimals: number; logo: string | null }> = {};
+      await Promise.all(
+        Array.from(mints).map(async (mint) => {
+          try {
+            const r = await fetch(`https://lite-api.jup.ag/tokens/v1/token/${mint}`);
+            if (!r.ok) return;
+            const t = await r.json();
+            metaMap[mint] = {
+              symbol: t.symbol ?? mint.slice(0, 4),
+              decimals: typeof t.decimals === "number" ? t.decimals : 9,
+              logo: t.logoURI ?? null,
+            };
+          } catch (_e) { /* ignore */ }
+        }),
+      );
+
+      // Inject enriched metadata into each order so the client can render
+      // symbols + properly scaled amounts without extra round-trips.
+      const enriched = orders.map((o) => {
+        const a = o.account ?? o;
+        const inMeta = metaMap[a.inputMint] ?? null;
+        const outMeta = metaMap[a.outputMint] ?? null;
+        return {
+          ...o,
+          account: {
+            ...(o.account ?? {}),
+            inputMint: a.inputMint,
+            outputMint: a.outputMint,
+            makingAmount: a.makingAmount,
+            takingAmount: a.takingAmount,
+            expiredAt: a.expiredAt,
+            createdAt: a.createdAt,
+            inputMintInfo: inMeta ?? a.inputMintInfo,
+            outputMintInfo: outMeta ?? a.outputMintInfo,
+          },
+        };
+      });
+
+      return json({ orders: enriched });
     }
 
     if (action === "cancel") {
