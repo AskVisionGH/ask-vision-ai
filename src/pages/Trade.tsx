@@ -275,7 +275,6 @@ const TradeSidebar = ({
       <div className="shrink-0 px-2 py-2">
         <NavRow to="/contacts" icon={<Users className="h-3.5 w-3.5" />} label="Contacts" />
         <NavRow to="/tracked-wallets" icon={<Radar className="h-3.5 w-3.5" />} label="Tracked wallets" />
-        {isAdmin && <NavRow to="/admin" icon={<Shield className="h-3.5 w-3.5" />} label="Admin" />}
         <NavRow
           to="/trade"
           icon={<Repeat className="h-3.5 w-3.5" />}
@@ -306,6 +305,7 @@ const TradeSidebar = ({
             Soon
           </span>
         </button>
+        {isAdmin && <NavRow to="/admin" icon={<Shield className="h-3.5 w-3.5" />} label="Admin" />}
       </div>
 
       <div className="flex-1" />
