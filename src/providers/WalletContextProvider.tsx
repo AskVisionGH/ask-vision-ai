@@ -6,9 +6,15 @@ import { SolflareWalletAdapter } from "@solana/wallet-adapter-solflare";
 import { BackpackWalletAdapter } from "@solana/wallet-adapter-backpack";
 import { CoinbaseWalletAdapter } from "@solana/wallet-adapter-coinbase";
 import { TrustWalletAdapter } from "@solana/wallet-adapter-trust";
+import {
+  SolanaMobileWalletAdapter,
+  createDefaultAuthorizationResultCache,
+  createDefaultWalletNotFoundHandler,
+} from "@solana-mobile/wallet-adapter-mobile";
 
 // Modal styles must be imported once at the app root.
 import "@solana/wallet-adapter-react-ui/styles.css";
+
 
 interface Props {
   children: ReactNode;
@@ -71,6 +77,22 @@ export const WalletContextProvider = ({ children }: Props) => {
   // installed, so the modal will show every available option.
   const wallets = useMemo(
     () => [
+      // Android: MWA dispatches into the user's installed wallet (Phantom,
+      // Solflare, etc.) over the Mobile Wallet Adapter protocol, which is
+      // why connecting via "Wallet adaptor" worked but tapping "Phantom"
+      // directly didn't.
+      new SolanaMobileWalletAdapter({
+        addressSelector: {
+          select: (addresses) => Promise.resolve(addresses[0]),
+        },
+        appIdentity: {
+          name: "Vision",
+          uri: typeof window !== "undefined" ? window.location.origin : "https://askvision.ai",
+        },
+        authorizationResultCache: createDefaultAuthorizationResultCache(),
+        cluster: "mainnet-beta",
+        onWalletNotFound: createDefaultWalletNotFoundHandler(),
+      }),
       new PhantomWalletAdapter(),
       new SolflareWalletAdapter(),
       new BackpackWalletAdapter(),
