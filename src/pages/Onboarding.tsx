@@ -80,10 +80,16 @@ const Onboarding = () => {
     }, 150);
   };
 
+  // Display name is required to start using the app — enforce minimum 2 chars
+  // after trimming so we don't accept whitespace-only or single-char inputs.
+  const trimmedName = name.trim();
+  const isNameValid = trimmedName.length >= 2 && trimmedName.length <= 60;
+
   const goNext = async () => {
     // Persist the per-step value so partial onboarding still saves.
     if (step === "welcome") {
-      await updateProfile({ display_name: name.trim() || null });
+      if (!isNameValid) return; // guard — button is also disabled
+      await updateProfile({ display_name: trimmedName });
     } else if (step === "experience") {
       await updateProfile({ experience });
     } else if (step === "interests") {
