@@ -9,7 +9,7 @@ interface Props {
 }
 
 const TABS: { id: TradeTab; label: string; enabled: boolean }[] = [
-  { id: "trade", label: "Trade", enabled: true },
+  { id: "trade", label: "Swap", enabled: true },
   { id: "limit", label: "Limit", enabled: true },
   { id: "pro", label: "Pro", enabled: true },
   { id: "bridge", label: "Bridge", enabled: true },
