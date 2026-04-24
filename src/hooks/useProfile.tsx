@@ -82,9 +82,9 @@ export const useProfile = () => {
   /** Uploads to the `avatars` bucket under `{user_id}/avatar-{ts}.{ext}` and saves the public URL. */
   const uploadAvatar = useCallback(
     async (file: File): Promise<string | null> => {
-      if (!user) return null;
+      if (!userId) return null;
       const ext = (file.name.split(".").pop() ?? "png").toLowerCase();
-      const path = `${user.id}/avatar-${Date.now()}.${ext}`;
+      const path = `${userId}/avatar-${Date.now()}.${ext}`;
       const { error: upErr } = await supabase.storage
         .from("avatars")
         .upload(path, file, { upsert: true, contentType: file.type });
@@ -94,7 +94,7 @@ export const useProfile = () => {
       await updateProfile({ avatar_url: url });
       return url;
     },
-    [user, updateProfile],
+    [userId, updateProfile],
   );
 
   return { profile, loading, refresh, updateProfile, uploadAvatar };
