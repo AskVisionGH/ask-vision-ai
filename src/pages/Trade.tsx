@@ -1,5 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import {
+  ArrowLeft,
   ArrowLeftRight,
   Bell,
   LogOut,
@@ -100,6 +101,13 @@ const Trade = () => {
                 Vision
               </span>
             </div>
+            <Link
+              to="/chat"
+              className="hidden md:flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/60 ease-vision"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Back to chat
+            </Link>
           </div>
           <ConnectWalletButton size="default" />
         </header>
