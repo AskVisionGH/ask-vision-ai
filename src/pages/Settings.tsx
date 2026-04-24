@@ -28,7 +28,6 @@ import {
 } from "@/components/ui/select";
 import { UserAvatar } from "@/components/UserAvatar";
 import { DeleteAccountDialog } from "@/components/DeleteAccountDialog";
-import { NotificationsSettings } from "@/components/NotificationsSettings";
 import {
   Accordion,
   AccordionContent,
@@ -173,7 +172,7 @@ const Settings = () => {
           <div className="text-xs text-muted-foreground/70">Loading…</div>
         ) : (
           <div className="space-y-6">
-            {/* Profile basics */}
+            {/* Profile basics — always visible */}
             <section className="rounded-2xl border border-border bg-card/40 p-6 backdrop-blur-md">
               <h2 className="mb-4 text-sm font-medium text-foreground">Profile</h2>
               <div className="flex items-center gap-4">
@@ -223,173 +222,184 @@ const Settings = () => {
               <p className="mt-3 text-xs text-muted-foreground/70">
                 Signed in as <span className="text-foreground">{user?.email}</span>
               </p>
-            </section>
-
-            {/* Language */}
-            <section className="rounded-2xl border border-border bg-card/40 p-6 backdrop-blur-md">
-              <h2 className="mb-1.5 flex items-center gap-2 text-sm font-medium text-foreground">
-                <Languages className="h-3.5 w-3.5 text-muted-foreground" />
-                Language
-              </h2>
-              <p className="mb-4 text-xs text-muted-foreground">
-                Vision will reply in this language and use it as a hint when transcribing voice messages.
-              </p>
-              <Select value={language} onValueChange={(v) => setLanguage(v as LanguageCode)}>
-                <SelectTrigger className="w-full sm:w-72">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {LANGUAGE_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      <span className="flex items-center gap-2">
-                        <span>{opt.label}</span>
-                        {opt.value !== "auto" && (
-                          <span className="text-xs text-muted-foreground">— {opt.native}</span>
-                        )}
-                      </span>
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-              </Select>
-            </section>
-
-            {/* Notifications */}
-            <NotificationsSettings />
-
-            {/* Re-run onboarding */}
-            <section className="rounded-2xl border border-border bg-card/40 p-6 backdrop-blur-md">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <h2 className="flex items-center gap-2 text-sm font-medium text-foreground">
-                    <RotateCcw className="h-3.5 w-3.5 text-muted-foreground" />
-                    Re-run onboarding
-                  </h2>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Walk through the intro flow again to reset your preferences.
-                  </p>
-                </div>
+              <div className="mt-4 flex justify-end">
                 <Button
-                  type="button"
-                  variant="outline"
+                  onClick={save}
+                  disabled={saving}
                   size="sm"
-                  onClick={async () => {
-                    // Onboarding redirects to /chat if already completed, so we
-                    // have to flip the flag back off before navigating.
-                    await updateProfile({ onboarding_completed: false });
-                    navigate("/onboarding");
-                  }}
-                  className="shrink-0"
+                  className="rounded-full bg-primary px-5 text-primary-foreground hover:bg-primary/90 ease-vision"
                 >
-                  Re-run
+                  {saving ? "Saving…" : "Save changes"}
                 </Button>
               </div>
             </section>
 
-            {/* Security: change password + change email */}
-            <section className="rounded-2xl border border-border bg-card/40 p-6 backdrop-blur-md">
-              <h2 className="mb-4 flex items-center gap-2 text-sm font-medium text-foreground">
-                <KeyRound className="h-3.5 w-3.5 text-muted-foreground" />
-                Security
-              </h2>
-
-              {/* Change password */}
-              <form onSubmit={updatePassword} className="space-y-3">
-                <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Change password
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="new-password" className="text-[11px] text-muted-foreground">
-                      New password
-                    </Label>
-                    <Input
-                      id="new-password"
-                      type="password"
-                      autoComplete="new-password"
-                      minLength={8}
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="8+ characters"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="confirm-password" className="text-[11px] text-muted-foreground">
-                      Confirm
-                    </Label>
-                    <Input
-                      id="confirm-password"
-                      type="password"
-                      autoComplete="new-password"
-                      minLength={8}
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="Repeat it"
-                    />
-                  </div>
-                </div>
-                <div className="flex justify-end">
-                  <Button
-                    type="submit"
-                    variant="outline"
-                    size="sm"
-                    disabled={updatingPassword || !newPassword || !confirmPassword}
-                  >
-                    {updatingPassword ? "Updating…" : "Update password"}
-                  </Button>
-                </div>
-              </form>
-
-              <div className="my-5 h-px bg-border" />
-
-              {/* Change email */}
-              <form onSubmit={updateEmail} className="space-y-3">
-                <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Change email
-                </div>
-                <p className="text-[11px] text-muted-foreground">
-                  We'll email a confirmation link to both your current and new
-                  address. The change takes effect once both are confirmed.
-                </p>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                  <div className="flex-1 space-y-1.5">
-                    <Label htmlFor="new-email" className="text-[11px] text-muted-foreground">
-                      New email
-                    </Label>
-                    <Input
-                      id="new-email"
-                      type="email"
-                      autoComplete="email"
-                      value={newEmail}
-                      onChange={(e) => setNewEmail(e.target.value)}
-                      placeholder={user?.email ?? "you@domain.com"}
-                    />
-                  </div>
-                  <Button
-                    type="submit"
-                    variant="outline"
-                    size="sm"
-                    disabled={updatingEmail || !newEmail}
-                    className="shrink-0"
-                  >
-                    <Mail className="mr-1.5 h-3.5 w-3.5" />
-                    {updatingEmail ? "Sending…" : "Send confirmation"}
-                  </Button>
-                </div>
-              </form>
-            </section>
-
-            <div className="flex justify-end pt-2">
-              <Button
-                onClick={save}
-                disabled={saving}
-                className="rounded-full bg-primary px-6 text-primary-foreground hover:bg-primary/90 ease-vision"
-              >
-                {saving ? "Saving…" : "Save changes"}
-              </Button>
-            </div>
-
-            {/* Danger zone */}
+            {/* All other settings — collapsed into dropdowns */}
             <Accordion type="multiple" className="space-y-3">
+              <AccordionItem
+                value="language"
+                className="rounded-2xl border border-border bg-card/40 px-6 backdrop-blur-md"
+              >
+                <AccordionTrigger className="py-4 text-sm font-medium text-foreground hover:no-underline [&[data-state=open]]:pb-3">
+                  <span className="flex items-center gap-2">
+                    <Languages className="h-3.5 w-3.5 text-muted-foreground" />
+                    Language
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className="pb-5">
+                  <p className="mb-4 text-xs text-muted-foreground">
+                    Vision will reply in this language and use it as a hint when transcribing voice messages.
+                  </p>
+                  <Select value={language} onValueChange={(v) => setLanguage(v as LanguageCode)}>
+                    <SelectTrigger className="w-full sm:w-72">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {LANGUAGE_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          <span className="flex items-center gap-2">
+                            <span>{opt.label}</span>
+                            {opt.value !== "auto" && (
+                              <span className="text-xs text-muted-foreground">— {opt.native}</span>
+                            )}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem
+                value="security"
+                className="rounded-2xl border border-border bg-card/40 px-6 backdrop-blur-md"
+              >
+                <AccordionTrigger className="py-4 text-sm font-medium text-foreground hover:no-underline [&[data-state=open]]:pb-3">
+                  <span className="flex items-center gap-2">
+                    <KeyRound className="h-3.5 w-3.5 text-muted-foreground" />
+                    Security
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className="pb-5">
+                  {/* Change password */}
+                  <form onSubmit={updatePassword} className="space-y-3">
+                    <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Change password
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="new-password" className="text-[11px] text-muted-foreground">
+                          New password
+                        </Label>
+                        <Input
+                          id="new-password"
+                          type="password"
+                          autoComplete="new-password"
+                          minLength={8}
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          placeholder="8+ characters"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="confirm-password" className="text-[11px] text-muted-foreground">
+                          Confirm
+                        </Label>
+                        <Input
+                          id="confirm-password"
+                          type="password"
+                          autoComplete="new-password"
+                          minLength={8}
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          placeholder="Repeat it"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end">
+                      <Button
+                        type="submit"
+                        variant="outline"
+                        size="sm"
+                        disabled={updatingPassword || !newPassword || !confirmPassword}
+                      >
+                        {updatingPassword ? "Updating…" : "Update password"}
+                      </Button>
+                    </div>
+                  </form>
+
+                  <div className="my-5 h-px bg-border" />
+
+                  {/* Change email */}
+                  <form onSubmit={updateEmail} className="space-y-3">
+                    <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Change email
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      We'll email a confirmation link to both your current and new
+                      address. The change takes effect once both are confirmed.
+                    </p>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                      <div className="flex-1 space-y-1.5">
+                        <Label htmlFor="new-email" className="text-[11px] text-muted-foreground">
+                          New email
+                        </Label>
+                        <Input
+                          id="new-email"
+                          type="email"
+                          autoComplete="email"
+                          value={newEmail}
+                          onChange={(e) => setNewEmail(e.target.value)}
+                          placeholder={user?.email ?? "you@domain.com"}
+                        />
+                      </div>
+                      <Button
+                        type="submit"
+                        variant="outline"
+                        size="sm"
+                        disabled={updatingEmail || !newEmail}
+                        className="shrink-0"
+                      >
+                        <Mail className="mr-1.5 h-3.5 w-3.5" />
+                        {updatingEmail ? "Sending…" : "Send confirmation"}
+                      </Button>
+                    </div>
+                  </form>
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem
+                value="onboarding"
+                className="rounded-2xl border border-border bg-card/40 px-6 backdrop-blur-md"
+              >
+                <AccordionTrigger className="py-4 text-sm font-medium text-foreground hover:no-underline [&[data-state=open]]:pb-3">
+                  <span className="flex items-center gap-2">
+                    <RotateCcw className="h-3.5 w-3.5 text-muted-foreground" />
+                    Re-run onboarding
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className="pb-5">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs text-muted-foreground">
+                      Walk through the intro flow again to reset your preferences.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        // Onboarding redirects to /chat if already completed, so we
+                        // have to flip the flag back off before navigating.
+                        await updateProfile({ onboarding_completed: false });
+                        navigate("/onboarding");
+                      }}
+                      className="shrink-0"
+                    >
+                      Re-run
+                    </Button>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
 
               <AccordionItem
                 value="danger"

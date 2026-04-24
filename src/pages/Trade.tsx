@@ -6,7 +6,6 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Menu } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { ConnectWalletButton } from "@/components/ConnectWalletButton";
-import { NotificationBell } from "@/components/NotificationBell";
 import { VisionLogo } from "@/components/VisionLogo";
 import { TradeSwap } from "@/components/trade/TradeSwap";
 import { TradeLimit } from "@/components/trade/TradeLimit";
@@ -112,10 +111,7 @@ const Trade = () => {
               Back to chat
             </Link>
           </div>
-          <div className="flex items-center gap-1.5">
-            <NotificationBell />
-            <ConnectWalletButton size="default" />
-          </div>
+          <ConnectWalletButton size="default" />
         </header>
 
         {/* Body */}

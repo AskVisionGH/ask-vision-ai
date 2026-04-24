@@ -8,7 +8,6 @@ import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { ProfileProvider, useProfile } from "@/hooks/useProfile";
 import { useWalletAutoLink } from "@/hooks/useWalletAutoLink";
 import { WalletMergePrompt } from "@/components/WalletMergePrompt";
-import { PostOrderNotificationPrompt } from "@/components/PostOrderNotificationPrompt";
 import Index from "./pages/Index.tsx";
 import Auth from "./pages/Auth.tsx";
 import ResetPassword from "./pages/ResetPassword.tsx";
@@ -63,7 +62,6 @@ const AppRoutes = () => {
         onAccept={walletLink.acceptMerge}
         onDismiss={walletLink.dismissMerge}
       />
-      <PostOrderNotificationPrompt />
     <Routes>
       <Route path="/" element={<Index />} />
       <Route path="/auth" element={<Auth />} />
