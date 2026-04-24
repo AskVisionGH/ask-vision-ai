@@ -120,7 +120,11 @@ const supaPost = async (fn: string, body: unknown, attempt = 0): Promise<any> =>
   return data;
 };
 
-export const TradeProBracket = () => {
+interface TradeProBracketProps {
+  expiryMs: number;
+}
+
+export const TradeProBracket = ({ expiryMs }: TradeProBracketProps) => {
   // Inputs
   const [inputToken, setInputToken] = useState<TokenMeta>(USDC_TOKEN);
   const [outputToken, setOutputToken] = useState<TokenMeta>(SOL_TOKEN);
@@ -133,8 +137,6 @@ export const TradeProBracket = () => {
   // Limit-entry trigger price
   const [entryPrice, setEntryPrice] = useState("");
   const [entrySide, setEntrySide] = useState<"above" | "below">("below");
-
-  const [expiryMs, setExpiryMs] = useState<number>(7 * 86_400_000);
 
   // Market price of the token we're tracking (output token's USD price)
   const [outputUsdPrice, setOutputUsdPrice] = useState<number | null>(null);
@@ -441,46 +443,7 @@ export const TradeProBracket = () => {
   return (
     <TooltipProvider delayDuration={150}>
       <div className="w-full max-w-[440px] space-y-4">
-        {/* Settings gear (sub-tabs are owned by the Pro container) */}
-        <div className="relative flex items-center justify-end">
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                className="ease-vision flex h-9 w-9 items-center justify-center rounded-full border border-border/60 bg-secondary/40 text-muted-foreground hover:bg-secondary hover:text-foreground"
-                aria-label="Order settings"
-              >
-                <SettingsIcon className="h-4 w-4" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-72">
-              <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                Order expiry
-              </p>
-              <div className="mt-3 grid grid-cols-3 gap-1.5">
-                {EXPIRY_PRESETS.map((p) => (
-                  <button
-                    key={p.label}
-                    type="button"
-                    onClick={() => setExpiryMs(p.ms)}
-                    className={cn(
-                      "ease-vision rounded-md border px-2 py-1.5 font-mono text-[11px]",
-                      expiryMs === p.ms
-                        ? "border-primary/60 bg-primary/10 text-foreground"
-                        : "border-border/60 bg-secondary/40 text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-              <p className="mt-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
-                Brackets auto-cancel after this period. Funds stay in your vault until withdrawn.
-              </p>
-            </PopoverContent>
-          </Popover>
-        </div>
-
+        {/* Settings + sub-tabs are owned by the Pro container */}
 
         {/* Card */}
         <div className="overflow-hidden rounded-2xl border border-border bg-card/60 backdrop-blur-sm shadow-soft">
