@@ -332,7 +332,52 @@ async function syncEthBridgeFees(
     });
   }
 
-  return await upsertFees(supabase, rows);
+  const inserted = await upsertFees(supabase, rows);
+
+  // Backfill USD on any existing ETH rows that were indexed before we
+  // started pricing inline (one-shot — cheap, idempotent).
+  if (ethUsd != null) {
+    await supabase
+      .from("treasury_fees")
+      .update({ amount_usd: 0 }) // placeholder so the .rpc below can work
+      .eq("chain", "ethereum")
+      .eq("asset_symbol", "ETH")
+      .is("amount_usd", null)
+      .select("id");
+    // Postgres can't do `amount * ethUsd` via the JS client in a single
+    // call without RPC, so fetch null rows and update them individually.
+    const { data: nullRows } = await supabase
+      .from("treasury_fees")
+      .select("id, amount")
+      .eq("chain", "ethereum")
+      .eq("asset_symbol", "ETH")
+      .eq("amount_usd", 0);
+    if (nullRows && nullRows.length > 0) {
+      for (const r of nullRows) {
+        await supabase
+          .from("treasury_fees")
+          .update({ amount_usd: Number(r.amount) * ethUsd })
+          .eq("id", r.id);
+      }
+    }
+  }
+
+  return inserted;
+}
+
+// Fetch ETH/USD spot price from CoinGecko (no API key needed for this endpoint).
+async function fetchEthUsdPrice(): Promise<number | null> {
+  try {
+    const resp = await fetch(
+      "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd",
+    );
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const price = data?.ethereum?.usd;
+    return typeof price === "number" ? price : null;
+  } catch {
+    return null;
+  }
 }
 
 // ---------------- Upsert helper ----------------
