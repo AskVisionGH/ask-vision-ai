@@ -138,6 +138,13 @@ export const AlertPreferences = () => {
           Categories
         </h3>
         <ToggleRow
+          label="Order fills"
+          description="Limit orders, DCA slices, TP/SL triggers."
+          checked={prefs.cat_order_fills}
+          onChange={(v) => void flip("cat_order_fills", v)}
+          disabled={disabled}
+        />
+        <ToggleRow
           label="Price movements"
           description="Sharp pumps, dumps, or level breaks on watched tokens."
           checked={prefs.cat_price}
@@ -152,13 +159,6 @@ export const AlertPreferences = () => {
           onChange={(v) => void flip("cat_wallet_activity", v)}
           disabled={disabled}
           comingSoon
-        />
-        <ToggleRow
-          label="Order fills"
-          description="Limit orders, DCA slices, TP/SL triggers."
-          checked={prefs.cat_order_fills}
-          onChange={(v) => void flip("cat_order_fills", v)}
-          disabled={disabled}
         />
         <ToggleRow
           label="News & sentiment"
