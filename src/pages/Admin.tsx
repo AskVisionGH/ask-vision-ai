@@ -614,6 +614,7 @@ const SOURCE_LABELS: Record<TreasuryFee["source_kind"], string> = {
 
 const TreasuryTab = () => {
   const [fees, setFees] = useState<TreasuryFee[]>([]);
+  const [namesByUser, setNamesByUser] = useState<Record<string, string | null>>({});
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [chainFilter, setChainFilter] = useState<"all" | "solana" | "ethereum">("all");
@@ -629,7 +630,26 @@ const TreasuryTab = () => {
     if (error) {
       toast({ title: "Failed to load treasury", description: error.message, variant: "destructive" });
     } else {
-      setFees((data ?? []) as TreasuryFee[]);
+      const rows = (data ?? []) as TreasuryFee[];
+      setFees(rows);
+      // Backfill display names for any fee tied to a known user. Admin RLS
+      // on profiles lets us read across all users in one shot.
+      const ids = Array.from(
+        new Set(rows.map((r) => r.related_user_id).filter((v): v is string => !!v)),
+      );
+      if (ids.length > 0) {
+        const { data: profs } = await supabase
+          .from("profiles")
+          .select("user_id, display_name")
+          .in("user_id", ids);
+        const map: Record<string, string | null> = {};
+        for (const p of (profs ?? []) as { user_id: string; display_name: string | null }[]) {
+          map[p.user_id] = p.display_name;
+        }
+        setNamesByUser(map);
+      } else {
+        setNamesByUser({});
+      }
     }
     setLoading(false);
   };
