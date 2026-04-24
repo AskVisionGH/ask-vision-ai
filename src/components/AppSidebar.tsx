@@ -79,7 +79,7 @@ export const AppSidebar = ({
             active={activePath === "/chat"}
           />
           <IconLink
-            to="/trade"
+            to="/trade?tab=trade"
             icon={<Repeat className="h-4 w-4" />}
             label="Trade"
             active={isTradeActive}
