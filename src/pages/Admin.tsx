@@ -77,6 +77,12 @@ const formatUsd = (n: number | null | undefined) =>
     : "—";
 
 const shortId = (id: string) => `${id.slice(0, 8)}…${id.slice(-4)}`;
+const shortEmail = (email: string) => {
+  const [local, domain] = email.split("@");
+  if (!domain) return email;
+  const shortLocal = local.length > 10 ? `${local.slice(0, 8)}…` : local;
+  return `${shortLocal}@${domain}`;
+};
 
 const CopyId = ({ value, label }: { value: string; label?: string }) => {
   const [copied, setCopied] = useState(false);
@@ -440,14 +446,7 @@ const UsersTab = () => {
                     </TableCell>
                     <TableCell className="text-xs">
                       {email ? (
-                        <a
-                          href={`mailto:${email}`}
-                          className="inline-flex items-center gap-1.5 text-primary hover:underline"
-                          title={email}
-                        >
-                          <Mail className="h-3 w-3" />
-                          <span className="max-w-[200px] truncate">{email}</span>
-                        </a>
+                        <CopyId value={email} label={shortEmail(email)} />
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
