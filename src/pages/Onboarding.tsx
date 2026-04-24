@@ -115,8 +115,18 @@ const Onboarding = () => {
     navigate("/chat", { replace: true });
   };
 
+  const [skipping, setSkipping] = useState(false);
   const skipAll = async () => {
-    await updateProfile({ onboarding_completed: true });
+    if (skipping || finishing) return;
+    setSkipping(true);
+    const ok = await updateProfile({ onboarding_completed: true });
+    if (!ok) {
+      setSkipping(false);
+      toast.error("Couldn't skip", {
+        description: "Please try again or finish the steps.",
+      });
+      return;
+    }
     navigate("/chat", { replace: true });
   };
 
