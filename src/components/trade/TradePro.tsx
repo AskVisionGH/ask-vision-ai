@@ -682,8 +682,8 @@ export const TradePro = ({ tab, onTabChange }: Props) => {
         </div>
 
         <p className="px-1 text-center font-mono text-[10px] leading-relaxed text-muted-foreground">
-          Pro brackets use Jupiter v2 vaults. You'll sign once to authenticate, then once per
-          deposit. Funds stay custodied by Privy until your bracket fills or you withdraw.
+          Pro brackets use a managed vault. You'll sign once to authenticate, then once per
+          deposit. Funds stay custodied until your bracket fills or you withdraw.
         </p>
 
         {/* Token picker */}
