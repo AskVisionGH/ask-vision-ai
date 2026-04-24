@@ -367,7 +367,7 @@ const OrderRow = ({
               <span className={cn(expired && "text-down")}>{expiry}</span>
             </span>
             {isPendingWithdraw && (
-              <span className="text-warning">Withdrawal pending</span>
+              <span className="text-warn">Withdrawal pending</span>
             )}
           </div>
         </div>
