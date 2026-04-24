@@ -34,6 +34,7 @@ import {
   type TokenMeta,
 } from "@/components/trade/TokenPickerDialog";
 import { useJupiterV2Auth } from "@/hooks/useJupiterV2Auth";
+import { ProOpenOrders } from "@/components/trade/ProOpenOrders";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -149,6 +150,7 @@ export const TradePro = ({ tab, onTabChange }: Props) => {
 
   const [pickerSide, setPickerSide] = useState<"in" | "out" | null>(null);
   const [phase, setPhase] = useState<Phase>({ name: "idle" });
+  const [ordersRefreshKey, setOrdersRefreshKey] = useState(0);
 
   const { publicKey, connected, signTransaction } = useWallet();
   const { setVisible } = useWalletModal();
@@ -337,6 +339,7 @@ export const TradePro = ({ tab, onTabChange }: Props) => {
 
       if (!mounted.current) return;
       setPhase({ name: "success", orderId, signature: txSignature, orderType });
+      setOrdersRefreshKey((x) => x + 1);
     } catch (e) {
       if (!mounted.current) return;
       setPhase({ name: "error", message: e instanceof Error ? e.message : "Something went wrong." });
@@ -353,6 +356,7 @@ export const TradePro = ({ tab, onTabChange }: Props) => {
     setSlPrice("");
     setEntryPrice("");
     setPhase({ name: "idle" });
+    setOrdersRefreshKey((x) => x + 1);
   };
 
   // ---- Success view ----
@@ -396,6 +400,7 @@ export const TradePro = ({ tab, onTabChange }: Props) => {
             </Button>
           </div>
         </div>
+        <ProOpenOrders refreshKey={ordersRefreshKey} />
       </div>
     );
   }
@@ -685,6 +690,9 @@ export const TradePro = ({ tab, onTabChange }: Props) => {
           Pro brackets use a managed vault. You'll sign once to authenticate, then once per
           deposit. Funds stay custodied until your bracket fills or you withdraw.
         </p>
+
+        {/* Open brackets */}
+        <ProOpenOrders refreshKey={ordersRefreshKey} />
 
         {/* Token picker */}
         <TokenPickerDialog
