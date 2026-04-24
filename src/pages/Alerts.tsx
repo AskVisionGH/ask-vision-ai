@@ -30,7 +30,7 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { VisionLogo } from "@/components/VisionLogo";
 import { AlertBell } from "@/components/AlertBell";
 import { ConnectWalletButton } from "@/components/ConnectWalletButton";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Menu } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
