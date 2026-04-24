@@ -6,7 +6,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Menu } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { ConnectWalletButton } from "@/components/ConnectWalletButton";
-import { NotificationBell } from "@/components/NotificationBell";
+import { AlertBell } from "@/components/AlertBell";
 import { VisionLogo } from "@/components/VisionLogo";
 import { TradeSwap } from "@/components/trade/TradeSwap";
 import { TradeLimit } from "@/components/trade/TradeLimit";
@@ -113,7 +113,7 @@ const Trade = () => {
             </Link>
           </div>
           <div className="flex items-center gap-1.5">
-            <NotificationBell />
+            <AlertBell />
             <ConnectWalletButton size="default" />
           </div>
         </header>
