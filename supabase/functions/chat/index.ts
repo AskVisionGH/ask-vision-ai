@@ -688,7 +688,7 @@ serve(async (req) => {
               } else {
                 result = { ok: true, name: cname, address: caddr };
               }
-              send("tool", {
+              pendingCards.push({
                 type: "save_contact_request",
                 data: { name: cname, address: caddr, error: result.error ?? null },
               });
