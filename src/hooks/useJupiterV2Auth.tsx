@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import bs58 from "bs58";
 import { supabase } from "@/integrations/supabase/client";
@@ -69,6 +69,18 @@ export const useJupiterV2Auth = () => {
   const { publicKey, signMessage } = useWallet();
   const inflight = useRef<Promise<string> | null>(null);
   const [signing, setSigning] = useState(false);
+  const [cachedToken, setCachedToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    const walletPubkey = publicKey?.toBase58();
+    if (!walletPubkey) {
+      setCachedToken(null);
+      return;
+    }
+
+    const cached = readCached();
+    setCachedToken(cached?.walletPubkey === walletPubkey ? cached.token : null);
+  }, [publicKey]);
 
   const ensureJwt = useCallback(async (): Promise<string> => {
     if (!publicKey) throw new Error("Connect your wallet to continue");
@@ -76,7 +88,10 @@ export const useJupiterV2Auth = () => {
 
     const walletPubkey = publicKey.toBase58();
     const cached = readCached();
-    if (cached && cached.walletPubkey === walletPubkey) return cached.token;
+    if (cached && cached.walletPubkey === walletPubkey) {
+      setCachedToken(cached.token);
+      return cached.token;
+    }
 
     if (inflight.current) return inflight.current;
 
@@ -104,6 +119,7 @@ export const useJupiterV2Auth = () => {
         const token: string = verified.token;
         if (!token) throw new Error("No token returned");
         writeCached({ token, walletPubkey, expiresAt: Date.now() + TTL_MS });
+        setCachedToken(token);
         return token;
       } finally {
         setSigning(false);
@@ -116,7 +132,8 @@ export const useJupiterV2Auth = () => {
 
   const reset = useCallback(() => {
     clearCached();
+    setCachedToken(null);
   }, []);
 
-  return { ensureJwt, reset, signing };
+  return { ensureJwt, reset, signing, cachedToken, hasCachedJwt: !!cachedToken };
 };
