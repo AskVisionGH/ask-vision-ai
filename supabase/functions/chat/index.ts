@@ -417,6 +417,18 @@ serve(async (req) => {
         );
       };
 
+      // Tool cards are buffered here and only flushed once the model starts
+      // streaming its post-tool framing text (or right before stream end).
+      // That gives the UI a smooth "text first, card slides in below" feel
+      // instead of "card pops in, then text appends above and shifts the card".
+      const pendingCards: Array<{ type: string; data: unknown }> = [];
+      const flushPendingCards = () => {
+        while (pendingCards.length > 0) {
+          const card = pendingCards.shift()!;
+          send("tool", card);
+        }
+      };
+
       // Track tools already invoked this turn so we never emit duplicate
       // cards if the model decides to call the same tool again.
       const emittedToolKeys = new Set<string>();
@@ -508,6 +520,10 @@ serve(async (req) => {
               if (!delta) continue;
 
               if (typeof delta.content === "string" && delta.content.length > 0) {
+                // First text token of this iteration — flush any buffered
+                // tool cards from the previous iteration so the UI shows the
+                // text first and then the card lands beneath it smoothly.
+                if (pendingCards.length > 0) flushPendingCards();
                 assistantText += delta.content;
                 send("delta", { text: delta.content });
               }
@@ -672,7 +688,7 @@ serve(async (req) => {
               } else {
                 result = { ok: true, name: cname, address: caddr };
               }
-              send("tool", {
+              pendingCards.push({
                 type: "save_contact_request",
                 data: { name: cname, address: caddr, error: result.error ?? null },
               });
@@ -772,10 +788,12 @@ serve(async (req) => {
               toolErrored = true;
             }
 
-            // Emit the tool card immediately so the user sees it before the
-            // model finishes writing its framing text — but only on success.
+            // Buffer the card — it will be flushed once the next iteration
+            // starts streaming framing text, or right before stream end. This
+            // makes the UI flow "text appears, card slides in below" instead
+            // of "card pops in, then text appends above and shifts it down".
             if (eventType && !hasError) {
-              send("tool", { type: eventType, data: result });
+              pendingCards.push({ type: eventType, data: result });
               cardEmitted = true;
             }
 
@@ -803,6 +821,9 @@ serve(async (req) => {
           if (isForcedFallbackTurn && cardEmitted) break;
         }
 
+        // Safety net: if the model never produced post-tool text (e.g. forced
+        // fallback or empty wrap-up), make sure buffered cards still ship.
+        flushPendingCards();
         send("done", {});
       } catch (e) {
         console.error("chat stream error:", e);
