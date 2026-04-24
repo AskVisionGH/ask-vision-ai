@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/select";
 import { UserAvatar } from "@/components/UserAvatar";
 import { DeleteAccountDialog } from "@/components/DeleteAccountDialog";
+import { NotificationsSettings } from "@/components/NotificationsSettings";
 import {
   Accordion,
   AccordionContent,
