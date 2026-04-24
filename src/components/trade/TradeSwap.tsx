@@ -677,7 +677,7 @@ export const TradeSwap = () => {
                 }
                 ctaAction?.();
               }}
-              disabled={ctaDisabled || (isBusy && phase.name !== "error")}
+              disabled={ctaDisabled || isBusy}
               className={cn(
                 "ease-vision h-12 w-full rounded-xl font-mono text-[12px] uppercase tracking-wider",
                 connected && !ctaDisabled && "bg-primary text-primary-foreground shadow-glow hover:bg-primary/90",
