@@ -292,34 +292,49 @@ export interface EarlyBuyersData {
   error?: string;
 }
 
-export interface SmartMoneyTrade {
-  id: string;
-  wallet: {
-    address: string;
-    label: string;
-    twitterHandle: string | null;
-    category: string | null;
-    isCurated: boolean;
-    isUserAdded: boolean;
-  };
-  side: "buy" | "sell" | "transfer" | "other";
+export interface SmartWalletMeta {
+  address: string;
+  label: string;
+  twitterHandle: string | null;
+  category: string | null;
+  isCurated: boolean;
+  isUserAdded: boolean;
+}
+
+export interface SmartMoneyWalletSummary {
+  wallet: SmartWalletMeta;
+  side: "buy" | "sell";
+  count: number;
+  totalUsd: number;
+  totalAmount: number;
+  latestTimestamp: number;
+  latestSignature: string;
+}
+
+export interface SmartMoneyTokenActivity {
   token: {
     symbol: string;
     name: string;
     address: string;
     logo: string | null;
     pairUrl: string | null;
-  } | null;
-  valueUsd: number | null;
-  amountUi: number | null;
-  timestamp: number;
-  signature: string;
-  source: string | null;
+    priceUsd: number | null;
+  };
+  netUsd: number;
+  buyUsd: number;
+  sellUsd: number;
+  buyerCount: number;
+  sellerCount: number;
+  totalTradeCount: number;
+  latestTimestamp: number;
+  wallets: SmartMoneyWalletSummary[];
 }
 
 export interface SmartMoneyActivityData {
-  trades: SmartMoneyTrade[];
+  tokens: SmartMoneyTokenActivity[];
   walletsTracked: number;
+  walletsActive: number;
+  totalTrades: number;
   windowHours: number;
   fetchedAt: number;
   error?: string;
