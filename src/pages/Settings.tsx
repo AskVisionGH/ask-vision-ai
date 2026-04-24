@@ -272,21 +272,20 @@ const Settings = () => {
                 </AccordionContent>
               </AccordionItem>
 
-              <AccordionItem
-                id="notifications"
-                value="notifications"
-                className="rounded-2xl border border-border bg-card/40 px-6 backdrop-blur-md"
-              >
-                <AccordionTrigger className="py-4 text-sm font-medium text-foreground hover:no-underline [&[data-state=open]]:pb-3">
-                  <span className="flex items-center gap-2">
-                    <Bell className="h-3.5 w-3.5 text-muted-foreground" />
-                    Notifications
-                  </span>
-                </AccordionTrigger>
-                <AccordionContent className="pb-5">
-                  <NotificationsSettings />
-                </AccordionContent>
-              </AccordionItem>
+              <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card/40 p-5 backdrop-blur-md sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0 flex items-start gap-2">
+                  <Bell className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" />
+                  <div>
+                    <h2 className="text-sm font-medium text-foreground">Alerts</h2>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Manage triggers, devices, and preferences on the Alerts page.
+                    </p>
+                  </div>
+                </div>
+                <Button asChild variant="outline" size="sm" className="shrink-0">
+                  <Link to="/alerts">Manage alerts</Link>
+                </Button>
+              </div>
 
               <AccordionItem
                 value="security"
