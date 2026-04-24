@@ -91,6 +91,7 @@ const Settings = () => {
       experience,
       interests,
       risk_tolerance: risk,
+      language,
     });
     setSaving(false);
     if (ok) toast.success("Profile saved");
