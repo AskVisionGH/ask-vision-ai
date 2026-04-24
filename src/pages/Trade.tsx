@@ -35,7 +35,19 @@ const Trade = () => {
   const { isAdmin } = useIsAdmin();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [tab, setTab] = useState<TradeTab>("trade");
+  const [tab, setTab] = useState<TradeTab>(() => {
+    const params = new URLSearchParams(location.search);
+    const t = params.get("tab");
+    if (t === "limit" || t === "pro" || t === "trade") return t;
+    return "trade";
+  });
+
+  // Honor ?tab= changes when navigating between deep-links from chat.
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const t = params.get("tab");
+    if (t === "limit" || t === "pro" || t === "trade") setTab(t);
+  }, [location.search]);
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;

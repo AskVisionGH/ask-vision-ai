@@ -15,6 +15,11 @@ import { SocialSentimentCard } from "@/components/SocialSentimentCard";
 import { NewsCard } from "@/components/NewsCard";
 import { EarlyBuyersCard, SmartMoneyActivityCard } from "@/components/SmartMoneyCard";
 import { RecentTxsCard, TokenPnLCard, WalletPnLCard } from "@/components/PnLCards";
+import { LimitOrderPreviewCard } from "@/components/LimitOrderPreviewCard";
+import { DcaPreviewCard } from "@/components/DcaPreviewCard";
+import { BracketPreviewCard } from "@/components/BracketPreviewCard";
+import { LadderPreviewCard } from "@/components/LadderPreviewCard";
+import { OpenOrdersCard } from "@/components/OpenOrdersCard";
 
 interface Props {
   message: ChatMessage;
@@ -195,6 +200,21 @@ export const ChatBubble = ({ message, onEdit, readOnly = false }: Props) => {
         }
         if (event.type === "token_pnl") {
           return <TokenPnLCard key={i} data={event.data} />;
+        }
+        if (event.type === "limit_quote") {
+          return <LimitOrderPreviewCard key={i} data={event.data} />;
+        }
+        if (event.type === "dca_quote") {
+          return <DcaPreviewCard key={i} data={event.data} />;
+        }
+        if (event.type === "bracket_quote") {
+          return <BracketPreviewCard key={i} data={event.data} />;
+        }
+        if (event.type === "ladder_quote") {
+          return <LadderPreviewCard key={i} data={event.data} />;
+        }
+        if (event.type === "open_orders") {
+          return <OpenOrdersCard key={i} data={event.data} />;
         }
         return null;
       })}
