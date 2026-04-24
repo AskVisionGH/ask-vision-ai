@@ -4,6 +4,7 @@ import {
   ArrowLeftRight,
   Bell,
   LogOut,
+  MessageSquare,
   MessageSquarePlus,
   PanelLeftClose,
   PanelLeftOpen,
