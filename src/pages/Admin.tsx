@@ -305,7 +305,15 @@ const StatsTab = () => {
         supabase.from("conversations").select("id, user_id, created_at").limit(10000),
         supabase.from("messages").select("id, user_id, created_at").limit(50000),
         supabase.from("wallet_links").select("user_id, wallet_address").limit(10000),
-        supabase.from("tx_events").select("kind, value_usd, created_at").limit(50000),
+        // Only count platform-originated transactions. Rows synced by the
+        // Helius webhook (any tracked-wallet activity, including external
+        // Raydium swaps and unrelated SOL transfers) are tagged
+        // metadata.via = "helius_webhook" and would otherwise inflate volume.
+        supabase
+          .from("tx_events")
+          .select("kind, value_usd, created_at")
+          .or("metadata->>via.is.null,metadata->>via.neq.helius_webhook")
+          .limit(50000),
         // Lifetime counters survive deletes (DB triggers increment on insert).
         supabase.from("app_counters").select("key, value"),
       ]);
