@@ -53,6 +53,7 @@ type TreasuryFee = {
   signature: string;
   from_address: string | null;
   block_time: string;
+  related_user_id: string | null;
   metadata: Record<string, unknown> | null;
 };
 
