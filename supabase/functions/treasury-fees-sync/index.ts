@@ -272,9 +272,10 @@ async function syncEthBridgeFees(
     return Array.isArray(data.result) ? (data.result as EtherscanTx[]) : [];
   };
 
-  const [nativeTxs, tokenTxs] = await Promise.all([
+  const [nativeTxs, tokenTxs, ethUsd] = await Promise.all([
     fetchPaged("txlist"),
     fetchPaged("tokentx"),
+    fetchEthUsdPrice(),
   ]);
 
   const rows: FeeRow[] = [];
@@ -295,11 +296,11 @@ async function syncEthBridgeFees(
       asset_symbol: "ETH",
       asset_address: null,
       amount,
-      amount_usd: null, // backfilled by separate price job; can be added later
+      amount_usd: ethUsd != null ? amount * ethUsd : null,
       signature: tx.hash,
       from_address: tx.from,
       block_time: new Date(Number(tx.timeStamp) * 1000).toISOString(),
-      metadata: { source: "etherscan", block: tx.blockNumber },
+      metadata: { source: "etherscan", block: tx.blockNumber, eth_usd: ethUsd },
     });
   }
 
@@ -331,7 +332,42 @@ async function syncEthBridgeFees(
     });
   }
 
-  return await upsertFees(supabase, rows);
+  const inserted = await upsertFees(supabase, rows);
+
+  // Backfill USD for ETH rows that were indexed before we priced inline.
+  if (ethUsd != null) {
+    const { data: nullRows } = await supabase
+      .from("treasury_fees")
+      .select("id, amount")
+      .eq("chain", "ethereum")
+      .eq("asset_symbol", "ETH")
+      .is("amount_usd", null);
+    if (nullRows && nullRows.length > 0) {
+      for (const r of nullRows) {
+        await supabase
+          .from("treasury_fees")
+          .update({ amount_usd: Number(r.amount) * ethUsd })
+          .eq("id", r.id);
+      }
+    }
+  }
+
+  return inserted;
+}
+
+// Fetch ETH/USD spot price from CoinGecko (no API key needed for this endpoint).
+async function fetchEthUsdPrice(): Promise<number | null> {
+  try {
+    const resp = await fetch(
+      "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd",
+    );
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const price = data?.ethereum?.usd;
+    return typeof price === "number" ? price : null;
+  } catch {
+    return null;
+  }
 }
 
 // ---------------- Upsert helper ----------------
