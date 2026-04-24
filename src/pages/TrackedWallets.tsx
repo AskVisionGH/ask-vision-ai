@@ -398,6 +398,8 @@ const TrackedWallets = () => {
             </section>
           </div>
         )}
+          </div>
+        </main>
       </div>
 
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
