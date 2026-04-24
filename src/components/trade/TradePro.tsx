@@ -63,7 +63,6 @@ const EXPIRY_PRESETS = [
 const MARKET_REFRESH_MS = 20_000;
 
 type EntryMode = "market" | "limit";
-type AdvancedMode = "tpsl" | "oco";
 
 type Phase =
   | { name: "idle" }
