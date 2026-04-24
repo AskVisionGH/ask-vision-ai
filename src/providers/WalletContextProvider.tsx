@@ -1,9 +1,13 @@
 import { ReactNode, useMemo } from "react";
 import { ConnectionProvider, WalletProvider } from "@solana/wallet-adapter-react";
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
+import { PhantomWalletAdapter } from "@solana/wallet-adapter-phantom";
+import { SolflareWalletAdapter } from "@solana/wallet-adapter-solflare";
+import { BackpackWalletAdapter } from "@solana/wallet-adapter-backpack";
+import { CoinbaseWalletAdapter } from "@solana/wallet-adapter-coinbase";
+import { TrustWalletAdapter } from "@solana/wallet-adapter-trust";
 
-// Default wallet adapters list is empty — Phantom, Solflare, Backpack
-// auto-register via the Wallet Standard browser API.
+// Modal styles must be imported once at the app root.
 import "@solana/wallet-adapter-react-ui/styles.css";
 
 interface Props {
@@ -32,11 +36,27 @@ export const WalletContextProvider = ({ children }: Props) => {
   const endpoint = useMemo(() => RPC_ENDPOINT, []);
   const config = useMemo(() => ({ commitment: "confirmed" as const, fetch: rpcFetch }), []);
 
+  // Explicit adapters surface install links for wallets the user doesn't have
+  // yet. Wallet Standard wallets (Phantom, Solflare, Backpack, Glow, OKX,
+  // Bitget, Magic Eden, Brave, etc.) auto-register on top of this list when
+  // installed, so the modal will show every available option.
+  const wallets = useMemo(
+    () => [
+      new PhantomWalletAdapter(),
+      new SolflareWalletAdapter(),
+      new BackpackWalletAdapter(),
+      new CoinbaseWalletAdapter(),
+      new TrustWalletAdapter(),
+    ],
+    [],
+  );
+
   return (
     <ConnectionProvider endpoint={endpoint} config={config}>
-      <WalletProvider wallets={[]} autoConnect>
+      <WalletProvider wallets={wallets} autoConnect>
         <WalletModalProvider>{children}</WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>
   );
 };
+
