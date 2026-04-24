@@ -451,6 +451,8 @@ const Chat = () => {
 
   return (
     <div className="relative flex h-screen bg-background text-foreground">
+      {/* One-time wallet prompt for email signups with no linked wallet. */}
+      <WalletOnboardingPrompt needsWallet={hasNoWallet === true} />
       <div className="pointer-events-none absolute inset-0 bg-aurora" aria-hidden />
 
       {/* Desktop sidebar */}
