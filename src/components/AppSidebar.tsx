@@ -178,6 +178,12 @@ export const AppSidebar = ({
         </div>
       </div>
 
+      {/* Spacer matches ChatSidebar's search bar height so the nav doesn't
+          jump vertically when switching between Chat and other pages. */}
+      <div className="shrink-0 border-b border-border/60 px-3 py-2" aria-hidden>
+        <div className="h-8" />
+      </div>
+
       <div className="shrink-0 px-2 py-2">
         <NavRow
           to="/chat"
