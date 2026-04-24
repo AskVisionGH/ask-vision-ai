@@ -10,7 +10,6 @@ import {
   Repeat,
   Settings as SettingsIcon,
   Shield,
-  Sparkles,
   Users,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -103,13 +102,9 @@ const Trade = () => {
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-4 py-8 sm:px-6 sm:py-12">
-          <div className="mx-auto flex w-full max-w-[440px] flex-col items-center">
-            <div className="mb-6 text-center">
-              <p className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-secondary/40 px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                <Sparkles className="h-3 w-3 text-primary" />
-                Powered by Jupiter
-              </p>
-              <h1 className="mt-3 text-2xl font-light tracking-tight text-foreground">
+          <div className="mx-auto flex w-full max-w-[520px] flex-col items-center">
+            <div className="mb-8 text-center">
+              <h1 className="text-2xl font-light tracking-tight text-foreground">
                 Trade
               </h1>
               <p className="mt-1 text-xs text-muted-foreground">
