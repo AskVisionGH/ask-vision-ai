@@ -58,13 +58,17 @@ const TOOLS = [
     function: {
       name: "get_wallet_balance",
       description:
-        "Fetch Solana wallet holdings (SOL + SPL tokens, USD values, total portfolio value). Defaults to the connected user's wallet. If the user pastes or mentions any other wallet address (base58, ~32-44 chars), pass it as the `address` argument so we look up THAT wallet, not the connected one.",
+        "Fetch Solana wallet holdings (SOL + SPL tokens, USD values, total portfolio value). Defaults to the connected user's wallet. If the user pastes or mentions any other wallet address (base58, ~32-44 chars), pass it as the `address` argument so we look up THAT wallet, not the connected one. Set `silent: true` ONLY when you're looking up the balance internally to compute an amount for a swap/transfer (e.g. user said 'all my USDC') — that suppresses the portfolio card so the user just sees the swap/transfer preview.",
       parameters: {
         type: "object",
         properties: {
           address: {
             type: "string",
             description: "Optional Solana wallet address to look up. Omit to use the connected user's wallet.",
+          },
+          silent: {
+            type: "boolean",
+            description: "If true, fetch the balance but DO NOT show the portfolio card to the user. Use only for internal balance lookups when computing 'all my X' / percentage amounts for a follow-up swap or transfer.",
           },
         },
         additionalProperties: false,
