@@ -281,6 +281,99 @@ const Settings = () => {
               </div>
             </section>
 
+            {/* Security: change password + change email */}
+            <section className="rounded-2xl border border-border bg-card/40 p-6 backdrop-blur-md">
+              <h2 className="mb-4 flex items-center gap-2 text-sm font-medium text-foreground">
+                <KeyRound className="h-3.5 w-3.5 text-muted-foreground" />
+                Security
+              </h2>
+
+              {/* Change password */}
+              <form onSubmit={updatePassword} className="space-y-3">
+                <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Change password
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="new-password" className="text-[11px] text-muted-foreground">
+                      New password
+                    </Label>
+                    <Input
+                      id="new-password"
+                      type="password"
+                      autoComplete="new-password"
+                      minLength={8}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="8+ characters"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="confirm-password" className="text-[11px] text-muted-foreground">
+                      Confirm
+                    </Label>
+                    <Input
+                      id="confirm-password"
+                      type="password"
+                      autoComplete="new-password"
+                      minLength={8}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Repeat it"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    type="submit"
+                    variant="outline"
+                    size="sm"
+                    disabled={updatingPassword || !newPassword || !confirmPassword}
+                  >
+                    {updatingPassword ? "Updating…" : "Update password"}
+                  </Button>
+                </div>
+              </form>
+
+              <div className="my-5 h-px bg-border" />
+
+              {/* Change email */}
+              <form onSubmit={updateEmail} className="space-y-3">
+                <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Change email
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  We'll email a confirmation link to both your current and new
+                  address. The change takes effect once both are confirmed.
+                </p>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                  <div className="flex-1 space-y-1.5">
+                    <Label htmlFor="new-email" className="text-[11px] text-muted-foreground">
+                      New email
+                    </Label>
+                    <Input
+                      id="new-email"
+                      type="email"
+                      autoComplete="email"
+                      value={newEmail}
+                      onChange={(e) => setNewEmail(e.target.value)}
+                      placeholder={user?.email ?? "you@domain.com"}
+                    />
+                  </div>
+                  <Button
+                    type="submit"
+                    variant="outline"
+                    size="sm"
+                    disabled={updatingEmail || !newEmail}
+                    className="shrink-0"
+                  >
+                    <Mail className="mr-1.5 h-3.5 w-3.5" />
+                    {updatingEmail ? "Sending…" : "Send confirmation"}
+                  </Button>
+                </div>
+              </form>
+            </section>
+
             <div className="flex justify-end pt-2">
               <Button
                 onClick={save}
