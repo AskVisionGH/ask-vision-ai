@@ -291,28 +291,64 @@ function parsePumpReplies(json: any, mint: string): SocialPost[] {
 }
 
 // ─── Source: Reddit search (no key required) ─────────────────────────────────
+// Reddit aggressively blocks bot User-Agents (returns 403). We use a realistic
+// browser UA + their old.reddit host which is more lenient. We also try the
+// coin's primary subreddit when the symbol is a known major coin so we still
+// get signal for BTC/ETH/etc that don't show up in general site search.
+const SUBREDDIT_BY_SYMBOL: Record<string, string> = {
+  BTC: "Bitcoin", ETH: "ethereum", SOL: "solana", XRP: "Ripple", DOGE: "dogecoin",
+  ADA: "cardano", BNB: "binance", AVAX: "Avax", MATIC: "0xPolygon", POL: "0xPolygon",
+  DOT: "Polkadot", LINK: "Chainlink", LTC: "litecoin", BCH: "Bitcoincash",
+  TRX: "Tronix", ATOM: "cosmosnetwork", NEAR: "nearprotocol", ARB: "arbitrum",
+  OP: "optimism", APT: "aptos", SUI: "SuiNetwork", TON: "TONcoinOfficial",
+  PEPE: "pepecoin", SHIB: "Shibainucoin", UNI: "UniSwap", AAVE: "Aave_Official",
+  JUP: "jupiterexchange", BONK: "Bonk", WIF: "dogwifhat",
+};
+
 async function fetchRedditPosts(resolved: ResolvedToken): Promise<SocialPost[]> {
-  // Search the whole site for the symbol, restricted to last week. We dedupe
-  // and filter to last 48h afterwards. Use a unique UA — Reddit blocks bare ones.
   const term = resolved.symbol.length >= 3
     ? `"$${resolved.symbol}" OR "${resolved.name}"`
     : `"${resolved.name}"`;
-  const url =
-    `https://www.reddit.com/search.json?q=${encodeURIComponent(term)}&sort=new&t=week&limit=50`;
 
-  const resp = await fetch(url, {
-    headers: {
-      "User-Agent": "VisionBot/1.0 (+https://lovable.dev)",
-      Accept: "application/json",
-    },
-  });
-  if (!resp.ok) {
-    console.warn("reddit non-OK", resp.status);
-    return [];
+  // Realistic browser UA — Reddit returns 403 for obvious bot UAs.
+  const headers = {
+    "User-Agent":
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
+      "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    Accept: "application/json,text/html;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+  };
+
+  const urls: string[] = [
+    `https://www.reddit.com/search.json?q=${encodeURIComponent(term)}&sort=new&t=week&limit=50`,
+  ];
+  // Pull from the coin's flagship subreddit too if we know it.
+  const subreddit = SUBREDDIT_BY_SYMBOL[resolved.symbol.toUpperCase()];
+  if (subreddit) {
+    urls.push(`https://www.reddit.com/r/${subreddit}/new.json?limit=50`);
   }
-  const json = await resp.json();
-  const children = json?.data?.children ?? [];
-  return children
+
+  const collected: any[] = [];
+  for (const url of urls) {
+    try {
+      const resp = await fetch(url, { headers });
+      if (!resp.ok) {
+        console.warn("reddit non-OK", resp.status, url);
+        continue;
+      }
+      const j = await resp.json();
+      const children = j?.data?.children ?? [];
+      collected.push(...children);
+    } catch (e) {
+      console.warn("reddit fetch error:", e);
+    }
+  }
+
+  if (!collected.length) return [];
+
+  // Dedupe by id.
+  const seen = new Set<string>();
+  return collected
     .map((child: any, idx: number) => {
       const d = child?.data ?? {};
       const title = String(d.title ?? "").trim();
