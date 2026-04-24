@@ -119,7 +119,7 @@ const Trade = () => {
                 {tab === "limit"
                   ? "Set a price. We'll fill automatically when the market hits it."
                   : tab === "pro"
-                    ? "Bracket orders with take-profit and stop-loss, powered by Jupiter v2."
+                    ? "Bracket orders with take-profit and stop-loss in a single placement."
                     : "Swap any Solana token at the best on-chain price."}
               </p>
             </div>
