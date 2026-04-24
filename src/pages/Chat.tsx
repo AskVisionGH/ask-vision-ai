@@ -120,6 +120,36 @@ const Chat = () => {
     return () => window.clearTimeout(handle);
   }, [searchQuery, user]);
 
+  // One-time check: does this user have any linked wallets? Drives the
+  // wallet-onboarding prompt. We only need a count, and we re-run on user
+  // change (e.g. account switch). The prompt itself dismisses on `connected`
+  // from the wallet adapter context, and `useWalletAutoLink` handles
+  // persisting the new row.
+  useEffect(() => {
+    if (!user) {
+      setHasNoWallet(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { count, error } = await supabase
+        .from("wallet_links")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id);
+      if (cancelled) return;
+      if (error) {
+        // Fail closed: don't show the prompt if we can't tell. Better to
+        // under-prompt than to nag a user who already has a wallet.
+        setHasNoWallet(false);
+        return;
+      }
+      setHasNoWallet((count ?? 0) === 0);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
   const selectConversation = (id: string) => {
     setSearchParams({ c: id });
     setMobileOpen(false);
