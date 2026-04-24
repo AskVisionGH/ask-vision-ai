@@ -65,8 +65,6 @@ serve(async (req) => {
     let feeAccount: string | undefined;
     if (referralAccount) {
       try {
-        const { PublicKey } = await import("https://esm.sh/@solana/web3.js@1.95.3");
-        const REFERRAL_PROGRAM = new PublicKey("REFER4ZgmyYx9c6He5XfaTMiGfdLwRnkV4RPp9t9iF3");
         const [pda] = PublicKey.findProgramAddressSync(
           [
             new TextEncoder().encode("referral_ata"),
