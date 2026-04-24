@@ -724,8 +724,9 @@ export const TradeProBracket = ({ expiryMs }: TradeProBracketProps) => {
         </div>
 
         <p className="px-1 text-center font-mono text-[10px] leading-relaxed text-muted-foreground">
-          Pro brackets use a managed vault. You'll sign once to authenticate, then once per
-          deposit. Funds stay custodied until your bracket fills or you withdraw.
+          Pro brackets use a managed vault. You'll sign once to authenticate, once for the 1%
+          platform fee, then once to deposit. Funds stay custodied until your bracket fills or
+          you withdraw.
         </p>
 
         {/* Open brackets */}
