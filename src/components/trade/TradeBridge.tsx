@@ -67,7 +67,7 @@ type Phase =
   | { name: "building" }
   | { name: "awaiting_signature" }
   | { name: "submitting" }
-  | { name: "bridging"; signature: string; startedAt: number }
+  | { name: "bridging"; signature: string; startedAt: number; estimatedSec: number | null }
   | { name: "success"; signature: string; durationMs: number; toAmountUi: number; toSymbol: string; destExplorer: string | null }
   | { name: "error"; message: string };
 
