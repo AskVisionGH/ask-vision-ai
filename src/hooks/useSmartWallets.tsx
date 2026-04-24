@@ -19,6 +19,14 @@ export interface CuratedWallet {
   label: string;
   twitter_handle: string | null;
   category: string | null;
+  /**
+   * Verification tag for the curated entry. We reuse the seed table's
+   * `notes` column for this:
+   *   - "verified"  → address sourced from a confident public reference
+   *   - "community" → widely circulated but not personally confirmed
+   * Anything else (or null) is treated as unverified.
+   */
+  notes: string | null;
 }
 
 export interface SmartWalletInput {
@@ -48,7 +56,7 @@ export const useSmartWallets = () => {
         : Promise.resolve({ data: [], error: null }),
       supabase
         .from("smart_wallets_global_seed")
-        .select("address, label, twitter_handle, category")
+        .select("address, label, twitter_handle, category, notes")
         .order("label", { ascending: true }),
     ]);
     if (!trackedResp.error && trackedResp.data) setTracked(trackedResp.data as SmartWalletRow[]);
