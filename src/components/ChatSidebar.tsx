@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
+  ArrowLeftRight,
   Bell,
   GripVertical,
   Link2,
@@ -14,6 +15,7 @@ import {
   Pin,
   PinOff,
   Radar,
+  Repeat,
   Search,
   Settings as SettingsIcon,
   Shield,
@@ -518,6 +520,30 @@ export const ChatSidebar = ({
         >
           <Bell className="h-3.5 w-3.5" />
           <span>Alerts</span>
+          <span className="ml-auto rounded-full border border-border/60 bg-secondary/40 px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
+            Soon
+          </span>
+        </button>
+        <button
+          type="button"
+          disabled
+          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-muted-foreground/50 ease-vision cursor-not-allowed"
+          aria-label="Trade (coming soon)"
+        >
+          <Repeat className="h-3.5 w-3.5" />
+          <span>Trade</span>
+          <span className="ml-auto rounded-full border border-border/60 bg-secondary/40 px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
+            Soon
+          </span>
+        </button>
+        <button
+          type="button"
+          disabled
+          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-muted-foreground/50 ease-vision cursor-not-allowed"
+          aria-label="Bridge (coming soon)"
+        >
+          <ArrowLeftRight className="h-3.5 w-3.5" />
+          <span>Bridge</span>
           <span className="ml-auto rounded-full border border-border/60 bg-secondary/40 px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
             Soon
           </span>
