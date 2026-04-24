@@ -35,6 +35,19 @@ const truncate = (a: string) => (a.length > 12 ? `${a.slice(0, 6)}…${a.slice(-
 
 const Contacts = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { user, signOut } = useAuth();
+  const { profile } = useProfile();
+  const { isAdmin } = useIsAdmin();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("vision:sidebar-collapsed") === "1";
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("vision:sidebar-collapsed", sidebarCollapsed ? "1" : "0");
+  }, [sidebarCollapsed]);
   const { contacts, loading, addContact, updateContact, deleteContact } = useContacts();
 
   const [dialogOpen, setDialogOpen] = useState(false);
