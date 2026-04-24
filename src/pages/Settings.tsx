@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/select";
 import { UserAvatar } from "@/components/UserAvatar";
 import { DeleteAccountDialog } from "@/components/DeleteAccountDialog";
+import { NotificationsSettings } from "@/components/NotificationsSettings";
 import {
   Accordion,
   AccordionContent,
@@ -248,9 +249,12 @@ const Settings = () => {
                       </span>
                     </SelectItem>
                   ))}
-                </SelectContent>
+              </SelectContent>
               </Select>
             </section>
+
+            {/* Notifications */}
+            <NotificationsSettings />
 
             {/* Re-run onboarding */}
             <section className="rounded-2xl border border-border bg-card/40 p-6 backdrop-blur-md">
