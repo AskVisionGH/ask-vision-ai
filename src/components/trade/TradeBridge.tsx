@@ -855,15 +855,28 @@ const BridgeTokenPickerDialog = ({
     return () => { cancelled = true; };
   }, [open, chain?.id]);
 
+  // Rank matches so an exact symbol hit (USDC) lands above tokens that just
+  // happen to contain the letters in their name (3Crv "DAI/USDC/USDT" pool).
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
     if (!term) return tokens;
-    return tokens.filter(
-      (t) =>
-        t.symbol.toLowerCase().includes(term) ||
-        t.name.toLowerCase().includes(term) ||
-        t.address.toLowerCase() === term,
-    );
+    const scored = tokens
+      .map((t) => {
+        const sym = t.symbol.toLowerCase();
+        const name = t.name.toLowerCase();
+        let score = 0;
+        if (t.address.toLowerCase() === term) score = 100;
+        else if (sym === term) score = 90;
+        else if (sym.startsWith(term)) score = 70;
+        else if (name === term) score = 60;
+        else if (name.startsWith(term)) score = 50;
+        else if (sym.includes(term)) score = 30;
+        else if (name.includes(term)) score = 10;
+        return { t, score };
+      })
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score);
+    return scored.map((x) => x.t);
   }, [q, tokens]);
 
   return (
