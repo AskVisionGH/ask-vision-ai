@@ -36,6 +36,7 @@ serve(async (req) => {
       fetchDecrypt(),
       fetchReddit(),
       fetchCoinGecko(),
+      fetchNitterSolana(),
     ]);
 
     const all: NewsItem[] = [];
@@ -202,6 +203,56 @@ async function fetchCoinGecko(): Promise<NewsItem[]> {
       !!x && mentionsSolana(`${x.title} ${x.summary ?? ""}`)
     )
     .slice(0, 6);
+  return items;
+}
+
+// --- Nitter: tweets from key Solana accounts (free, no key) ---
+const NITTER_INSTANCES = [
+  "https://nitter.net",
+  "https://nitter.privacydev.net",
+  "https://nitter.poast.org",
+  "https://nitter.kavin.rocks",
+  "https://nitter.cz",
+];
+const SOLANA_TWITTER_HANDLES = [
+  "solana", "JupiterExchange", "MagicEden", "aeyakovenko", "rajgokal",
+  "0xMert_", "weremeow", "phantom", "JitoSOL", "drift_protocol",
+];
+
+async function fetchNitterSolana(): Promise<NewsItem[]> {
+  const tasks = SOLANA_TWITTER_HANDLES.map((handle, i) => {
+    const instance = NITTER_INSTANCES[i % NITTER_INSTANCES.length];
+    return fetchWithTimeout(`${instance}/${handle}/rss`, 5000)
+      .then(async (r) => (r.ok ? parseNitterTweets(await r.text(), handle) : []))
+      .catch(() => [] as NewsItem[]);
+  });
+  const settled = await Promise.all(tasks);
+  return settled.flat().slice(0, 12);
+}
+
+function parseNitterTweets(xml: string, handle: string): NewsItem[] {
+  const items: NewsItem[] = [];
+  const itemRe = /<item[\s\S]*?<\/item>/gi;
+  const matches = xml.match(itemRe) ?? [];
+  for (const block of matches.slice(0, 5)) {
+    const title = decodeEntities(extract(block, "title"));
+    const link = extract(block, "link");
+    const pubDate = extract(block, "pubDate");
+    const desc = decodeEntities(extract(block, "description"));
+    if (!title || !link) continue;
+    const ts = pubDate ? Date.parse(pubDate) : NaN;
+    const xUrl = link.replace(/^https?:\/\/[^/]+\//, "https://x.com/").replace(/#m$/, "");
+    items.push({
+      id: `nitter-${handle}-${link}`,
+      title: title.length > 140 ? `${title.slice(0, 137)}…` : title,
+      url: xUrl,
+      source: `@${handle}`,
+      publishedAt: Number.isFinite(ts) ? ts : Date.now(),
+      summary: stripHtml(desc).slice(0, 240) || null,
+      thumbnail: null,
+      kind: "article",
+    });
+  }
   return items;
 }
 
