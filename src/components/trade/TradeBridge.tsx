@@ -389,7 +389,7 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
       const signature = submitted.signature as string;
       if (!signature) throw new Error("No signature returned from submit");
 
-      setPhase({ name: "bridging", signature, startedAt });
+      setPhase({ name: "bridging", signature, startedAt, estimatedSec: quote.executionDurationSec ?? null });
 
       // Poll LI.FI status until DONE / FAILED / timeout. The Solana sig is the
       // source-chain hash; LI.FI maps it to the destination-chain receive tx.
