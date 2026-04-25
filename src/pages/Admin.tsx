@@ -1283,16 +1283,79 @@ const TreasuryTab = () => {
 /* -------------------------------- Users tab ------------------------------- */
 
 const UsersTab = () => {
+  const { user } = useAuth();
+  const { isSuperAdmin } = useIsSuperAdmin();
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
   const [emails, setEmails] = useState<Record<string, string>>({});
   const [walletsByUser, setWalletsByUser] = useState<Record<string, WalletLink[]>>({});
+  // Set of user_ids that already hold an admin or super_admin role — used to
+  // hide / disable the "Make admin" menu item.
+  const [adminUserIds, setAdminUserIds] = useState<Set<string>>(new Set());
+  const [superAdminUserIds, setSuperAdminUserIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [resendingId, setResendingId] = useState<string | null>(null);
+  const [grantingId, setGrantingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  // Confirm-delete dialog: requires typing the user's display name or email.
+  const [deleteTarget, setDeleteTarget] = useState<ProfileRow | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
 
   // The two clickable-pill dialogs share open state via the focused user id.
   const [onboardingFor, setOnboardingFor] = useState<ProfileRow | null>(null);
   const [walletsFor, setWalletsFor] = useState<ProfileRow | null>(null);
+
+  const reloadRoles = async () => {
+    const { data } = await supabase.from("user_roles").select("user_id, role");
+    if (data) {
+      const admins = new Set<string>();
+      const supers = new Set<string>();
+      for (const r of data as { user_id: string; role: string }[]) {
+        if (r.role === "admin" || r.role === "super_admin") admins.add(r.user_id);
+        if (r.role === "super_admin") supers.add(r.user_id);
+      }
+      setAdminUserIds(admins);
+      setSuperAdminUserIds(supers);
+    }
+  };
+
+  const makeAdmin = async (p: ProfileRow) => {
+    setGrantingId(p.user_id);
+    const { error } = await supabase.from("user_roles").insert({ user_id: p.user_id, role: "admin" });
+    setGrantingId(null);
+    if (error) {
+      toast({ title: "Could not grant admin", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Admin granted", description: p.display_name ?? shortId(p.user_id) });
+    reloadRoles();
+  };
+
+  const deleteUser = async () => {
+    if (!deleteTarget) return;
+    setDeletingId(deleteTarget.user_id);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-delete-user", {
+        body: { userId: deleteTarget.user_id },
+      });
+      if (error) throw error;
+      if (data && typeof data === "object" && "error" in data && data.error) {
+        throw new Error(String(data.error));
+      }
+      toast({ title: "User deleted", description: deleteTarget.display_name ?? shortId(deleteTarget.user_id) });
+      setProfiles((prev) => prev.filter((row) => row.user_id !== deleteTarget.user_id));
+      setDeleteTarget(null);
+      setDeleteConfirm("");
+    } catch (e) {
+      toast({
+        title: "Delete failed",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const resendWelcome = async (p: ProfileRow) => {
     const email = emails[p.user_id];
