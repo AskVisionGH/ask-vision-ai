@@ -151,46 +151,44 @@ async function runSweep(trigger: "cron" | "manual"): Promise<Response> {
       );
     }
 
-    // 2. Discover referral token accounts on-chain.
+    // 2. Discover referral token accounts via the SDK.
     //
-    // The Jupiter referral.jup.ag/api/.../token-accounts endpoint was
-    // disabled in late 2025 ("This endpoint is disabled. Please contact us
-    // on discord for assistance."), so we go straight to RPC. The referral
-    // account PDA owns its referral token accounts, so getTokenAccountsByOwner
-    // gives us the same list the API used to return — for both classic SPL
-    // and Token-2022 mints.
+    // The Jupiter referral.jup.ag/api/.../token-accounts REST endpoint was
+    // disabled in late 2025. The accounts themselves are PDAs derived from
+    // ["referral_ata", referralAccount, mint] and are owned by the
+    // REFER4Zg... program (NOT by the referral account), so a plain
+    // getTokenAccountsByOwner against the referral account returns nothing.
+    //
+    // The SDK's getReferralTokenAccountsWithStrategy queries the program's
+    // accounts via getProgramAccounts + cross-references mints, so it gives
+    // us back the same shape the disabled REST API used to return.
     const heliusRpc = `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`;
     const connection = new Connection(heliusRpc, "confirmed");
-    const referralPubkey = new PublicKey(REFERRAL_ACCOUNT_PUBKEY);
 
-    const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
-    const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+    const provider = new ReferralProvider(connection);
+    const discovered = await provider.getReferralTokenAccountsWithStrategy(
+      REFERRAL_ACCOUNT_PUBKEY,
+      { type: "token-list", tokenList: "strict" } as any,
+    ).catch((e) => {
+      console.warn("getReferralTokenAccountsWithStrategy failed, continuing without dust check:", e);
+      return null;
+    });
 
-    const [splAccts, t22Accts] = await Promise.all([
-      connection.getParsedTokenAccountsByOwner(referralPubkey, { programId: TOKEN_PROGRAM_ID }),
-      connection.getParsedTokenAccountsByOwner(referralPubkey, { programId: TOKEN_2022_PROGRAM_ID })
-        .catch(() => ({ value: [] as Array<{ pubkey: PublicKey; account: { data: any } }> })),
-    ]);
+    type RawAcct = { pubkey: { toBase58: () => string } | string; account: { mint: any; amount: bigint | string } };
+    const flat: RawAcct[] = discovered
+      ? [...(discovered.tokenAccounts ?? []), ...(discovered.token2022Accounts ?? [])]
+      : [];
 
-    const balances = [...splAccts.value, ...t22Accts.value].map((a) => {
-      const info = (a.account.data as any).parsed?.info;
-      const tokenAmount = info?.tokenAmount;
+    const balances = flat.map((a) => {
+      const pubkeyStr = typeof a.pubkey === "string" ? a.pubkey : a.pubkey.toBase58();
+      const mintStr = typeof a.account.mint === "string" ? a.account.mint : a.account.mint?.toBase58?.() ?? String(a.account.mint);
+      const amountStr = String(a.account.amount ?? "0");
       return {
-        ta: { pubkey: a.pubkey.toBase58(), mint: info?.mint as string },
-        balance: tokenAmount
-          ? {
-              amount: tokenAmount.amount as string,
-              decimals: tokenAmount.decimals as number,
-              uiAmountString: tokenAmount.uiAmountString as string,
-            }
-          : null,
+        ta: { pubkey: pubkeyStr, mint: mintStr },
+        balance: { amount: amountStr, decimals: 0, uiAmountString: amountStr },
       };
-    }).filter((b) => b.ta.mint);
+    }).filter((b) => b.ta.mint && b.balance.amount !== "0");
 
-    if (balances.length === 0) {
-      await finalize({ status: "skipped_dust", accounts_scanned: 0, total_value_usd: 0 });
-      return json({ ok: true, status: "skipped_dust", reason: "No referral token accounts exist yet" });
-    }
 
     const accountInfos: TokenAccountInfo[] = [];
     const mintMetaCache = new Map<string, { decimals: number; symbol: string }>();
