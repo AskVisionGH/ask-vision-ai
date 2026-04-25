@@ -151,6 +151,46 @@ async function fetchMintMeta(
   return meta;
 }
 
+async function fetchTargetReferralBalances(
+  connection: Connection,
+  provider: ReferralProvider,
+  referralAccountPubKey: PublicKey,
+  mints: string[],
+): Promise<Array<{ pubkey: string; mint: string; amountRaw: bigint }>> {
+  const targets = mints.map((mint) => ({
+    mint,
+    pubkey: provider.getReferralTokenAccountPubKey({
+      referralAccountPubKey,
+      mint: new PublicKey(mint),
+    }),
+  }));
+
+  const infos = await connection.getMultipleAccountsInfo(
+    targets.map((target) => target.pubkey),
+    "confirmed",
+  );
+
+  return targets.flatMap((target, idx) => {
+    const info = infos[idx];
+    if (!info) return [];
+
+    try {
+      const decoded = AccountLayout.decode(new Uint8Array(info.data));
+      const amountRaw = BigInt(String(decoded.amount));
+      if (amountRaw === 0n) return [];
+
+      return [{
+        pubkey: target.pubkey.toBase58(),
+        mint: target.mint,
+        amountRaw,
+      }];
+    } catch (error) {
+      console.warn("Failed to decode referral token account", target.mint, error);
+      return [];
+    }
+  });
+}
+
 async function runSweep(trigger: "cron" | "manual"): Promise<Response> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
