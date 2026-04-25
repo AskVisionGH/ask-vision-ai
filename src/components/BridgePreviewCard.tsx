@@ -521,12 +521,7 @@ interface BridgeSideProps {
 const BridgeSide = ({ chain, token, align, approx }: BridgeSideProps) => (
   <div className={cn("flex flex-col gap-1.5", align === "right" && "items-end text-right")}>
     <div className={cn("flex items-center gap-2", align === "right" && "flex-row-reverse")}>
-      <TokenLogo
-        src={token.logo}
-        symbol={token.symbol}
-        size={32}
-        className="ring-1 ring-border"
-      />
+      <TokenLogo logo={token.logo} symbol={token.symbol} size={32} />
       <div className={cn("flex min-w-0 flex-col", align === "right" && "items-end")}>
         <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
           {chain.name}
