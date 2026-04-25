@@ -131,7 +131,7 @@ export const ChatBubble = ({ message, onEdit, readOnly = false }: Props) => {
               </div>
             </div>
           ) : (
-            <p className="whitespace-pre-wrap font-mono text-[13px]">{message.content}</p>
+            <p className="whitespace-pre-wrap break-words font-mono text-[13px] [overflow-wrap:anywhere]">{message.content}</p>
           )}
         </div>
       </div>

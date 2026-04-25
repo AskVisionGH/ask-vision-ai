@@ -43,7 +43,39 @@ async function resolveToken(input: string): Promise<TokenMeta | null> {
     return await fetchMeta(mint);
   }
 
-  // Free-text search via DexScreener; pick most liquid Solana base token
+  // Ticker search — Jupiter v2 has the broadest Solana coverage (incl.
+  // memecoins like BOME) and exposes liquidity/volume + an `isVerified`
+  // flag we can rank by. Same approach as the /trade Token Picker.
+  try {
+    const jupResp = await fetch(
+      `https://lite-api.jup.ag/tokens/v2/search?query=${encodeURIComponent(cleaned)}`,
+    );
+    if (jupResp.ok) {
+      const arr = await jupResp.json();
+      const list = Array.isArray(arr) ? arr : [];
+      // Prefer exact symbol match first, then verified, then liquidity/volume.
+      const scored = list
+        .filter((t: any) => t && t.id)
+        .map((t: any) => {
+          const sym = String(t.symbol ?? "").toUpperCase();
+          const exact = sym === upper ? 1 : 0;
+          const verified = t.isVerified || t.tags?.includes?.("verified") ? 1 : 0;
+          const liq = Number(t.liquidity ?? 0);
+          const vol = Number(t.stats24h?.buyVolume ?? 0) + Number(t.stats24h?.sellVolume ?? 0);
+          const mc = Number(t.mcap ?? t.fdv ?? 0);
+          return { t, exact, verified, score: liq * 2 + vol + mc * 0.1 };
+        })
+        .sort((a, b) => {
+          if (b.exact !== a.exact) return b.exact - a.exact;
+          if (b.verified !== a.verified) return b.verified - a.verified;
+          return b.score - a.score;
+        });
+      const top = scored[0]?.t;
+      if (top?.id) return await fetchMeta(top.id);
+    }
+  } catch (_) { /* fall through to DexScreener */ }
+
+  // DexScreener fallback for anything Jupiter doesn't index.
   const resp = await fetch(
     `https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(cleaned)}`,
   );
