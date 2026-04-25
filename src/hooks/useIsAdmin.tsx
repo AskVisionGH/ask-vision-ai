@@ -17,14 +17,15 @@ export const useIsAdmin = () => {
 
     let cancelled = false;
     (async () => {
+      // Super admins implicitly have admin access — no separate `admin` row
+      // needed. Treat either role as admin so we can keep one row per user.
       const { data, error } = await supabase
         .from("user_roles")
         .select("role")
         .eq("user_id", user.id)
-        .eq("role", "admin")
-        .maybeSingle();
+        .in("role", ["admin", "super_admin"]);
       if (cancelled) return;
-      setIsAdmin(!error && !!data);
+      setIsAdmin(!error && !!data && data.length > 0);
       setLoading(false);
     })();
 
