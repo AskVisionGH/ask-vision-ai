@@ -119,11 +119,27 @@ serve(async (req) => {
     for (const wallet of due) {
       try {
         const trades = await fetchWalletTrades(wallet, HELIUS_API_KEY, cutoffSec);
-        if (trades.length > 0) {
-          // Upsert (idempotent on the unique constraint we created).
+        // A single tx can show up twice in the swap events (e.g. multi-leg
+        // routes). Dedupe by the same key as the unique index so the
+        // upsert can't collide with itself.
+        const dedupedMap = new Map<string, TradeRow>();
+        for (const t of trades) {
+          const k = `${t.wallet_address}|${t.signature}|${t.token_mint}|${t.side}`;
+          const existing = dedupedMap.get(k);
+          if (!existing) {
+            dedupedMap.set(k, t);
+          } else {
+            // Merge: sum amounts, keep the larger USD value if either is null.
+            existing.token_amount = Number(existing.token_amount) + Number(t.token_amount);
+            if (existing.value_usd == null) existing.value_usd = t.value_usd;
+            else if (t.value_usd != null) existing.value_usd += t.value_usd;
+          }
+        }
+        const deduped = [...dedupedMap.values()];
+        if (deduped.length > 0) {
           const { error } = await supabase
             .from("smart_money_trades")
-            .upsert(trades, { onConflict: "wallet_address,signature,token_mint,side" });
+            .upsert(deduped, { onConflict: "wallet_address,signature,token_mint,side" });
           if (error) {
             console.error(`[smart-money-sync] upsert error for ${wallet.address}`, error);
             walletsErrored++;
@@ -131,9 +147,9 @@ serve(async (req) => {
             continue;
           }
         }
-        totalTrades += trades.length;
+        totalTrades += deduped.length;
         walletsProcessed++;
-        await touchState(supabase, wallet.address, null, trades.length);
+        await touchState(supabase, wallet.address, null, deduped.length);
       } catch (e) {
         walletsErrored++;
         const msg = e instanceof Error ? e.message : String(e);
