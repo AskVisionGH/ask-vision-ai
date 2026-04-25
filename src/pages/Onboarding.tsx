@@ -108,11 +108,42 @@ const Onboarding = () => {
   const trimmedName = name.trim();
   const isNameValid = trimmedName.length >= 2 && trimmedName.length <= 60;
 
+  const submitEmail = async (): Promise<boolean> => {
+    const target = email.trim().toLowerCase();
+    if (!target.includes("@") || target.length < 5) {
+      toast.error("Enter a valid email");
+      return false;
+    }
+    setSavingEmail(true);
+    // Supabase emails the new address with a confirm link; once clicked it
+    // becomes the user's primary email and our welcome trigger fires.
+    const { error } = await supabase.auth.updateUser(
+      { email: target },
+      { emailRedirectTo: `${window.location.origin}/chat` },
+    );
+    setSavingEmail(false);
+    if (error) {
+      toast.error("Couldn't save email", { description: error.message });
+      return false;
+    }
+    setEmailSubmitted(true);
+    toast.success("Confirm your email", {
+      description: `We sent a confirmation link to ${target}.`,
+    });
+    return true;
+  };
+
   const goNext = async () => {
     // Persist the per-step value so partial onboarding still saves.
     if (step === "welcome") {
       if (!isNameValid) return; // guard — button is also disabled
       await updateProfile({ display_name: trimmedName });
+    } else if (step === "email") {
+      // Skip the API call if the user already kicked off the confirm flow.
+      if (!emailSubmitted) {
+        const ok = await submitEmail();
+        if (!ok) return;
+      }
     } else if (step === "experience") {
       await updateProfile({ experience });
     } else if (step === "interests") {
@@ -121,12 +152,12 @@ const Onboarding = () => {
     if (isLast) {
       advance("finish");
     } else {
-      advance(STEPS[stepIndex + 1]);
+      advance(steps[stepIndex + 1]);
     }
   };
 
   const goBack = () => {
-    if (stepIndex > 0) advance(STEPS[stepIndex - 1]);
+    if (stepIndex > 0) advance(steps[stepIndex - 1]);
   };
 
   const finish = async () => {
