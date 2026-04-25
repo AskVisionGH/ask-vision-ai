@@ -133,6 +133,19 @@ export const TokenChartCard = ({ data: initial }: Props) => {
 
   const isUp = (data.priceChangePct ?? 0) >= 0;
 
+  const zoom = useCallback(
+    (delta: number) => {
+      setView((v) => {
+        const total = data.candles.length;
+        if (!total) return v;
+        const nextCount = Math.max(MIN_VISIBLE, Math.min(MAX_VISIBLE, Math.min(total, v.count + delta)));
+        const nextEnd = Math.min(total, Math.max(nextCount, v.end));
+        return { end: nextEnd, count: nextCount };
+      });
+    },
+    [data.candles.length],
+  );
+
   if (initial.error) {
     return (
       <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
