@@ -1,5 +1,5 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { ArrowRight, Camera, Check, ChevronLeft, Mail, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -36,10 +36,15 @@ const STEP_LABELS: Record<Step, string> = {
 
 const Onboarding = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // When the user re-runs onboarding from Settings we skip the "welcome"
+  // step (display name + avatar) — they've already set those, and the
+  // intent of re-running is to update preferences, not rename themselves.
+  const isRerun = searchParams.get("rerun") === "1";
   const { user } = useAuth();
   const { profile, loading, updateProfile, uploadAvatar } = useProfile();
 
-  const [step, setStep] = useState<Step>("welcome");
+  const [step, setStep] = useState<Step>(isRerun ? "experience" : "welcome");
   const [name, setName] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [experience, setExperience] = useState<CryptoExperience | null>(null);
@@ -79,13 +84,16 @@ const Onboarding = () => {
   }, [loading, profile, navigate]);
 
   // Step list is dynamic: only show the email step when we actually need one.
-  const steps = useMemo<Step[]>(
-    () =>
-      needsRealEmail
-        ? ["welcome", "email", "experience", "interests", "risk"]
-        : ["welcome", "experience", "interests", "risk"],
-    [needsRealEmail],
-  );
+  const steps = useMemo<Step[]>(() => {
+    const base: Step[] = isRerun
+      ? ["experience", "interests", "risk"]
+      : ["welcome", "experience", "interests", "risk"];
+    // Inject the email step right after welcome (or at the start on rerun)
+    // for wallet-only users who still need to attach a real inbox.
+    if (!needsRealEmail) return base;
+    if (isRerun) return ["email", ...base];
+    return ["welcome", "email", "experience", "interests", "risk"];
+  }, [needsRealEmail, isRerun]);
   const stepIndex = steps.indexOf(step);
   const isLast = stepIndex === steps.length - 1;
   const progress = ((stepIndex + 1) / steps.length) * 100;

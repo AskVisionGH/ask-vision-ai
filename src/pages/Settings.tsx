@@ -408,7 +408,7 @@ const Settings = () => {
                         // Onboarding redirects to /chat if already completed, so we
                         // have to flip the flag back off before navigating.
                         await updateProfile({ onboarding_completed: false });
-                        navigate("/onboarding");
+                        navigate("/onboarding?rerun=1");
                       }}
                       className="shrink-0"
                     >
