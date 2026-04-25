@@ -75,15 +75,18 @@ const fmtTime = (t: number, interval: ChartInterval): string => {
   return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
 };
 
-const PERIOD_LABEL: Record<ChartInterval, string> = {
-  "5m": "12h",
-  "15m": "2d",
-  "1h": "7d",
-  "4h": "30d",
-  "1d": "6m",
-};
+const periodLabel = (iv: ChartInterval): string => INTERVAL_DISPLAY[iv] ?? "";
 
-const periodLabel = (iv: ChartInterval): string => PERIOD_LABEL[iv] ?? "";
+/**
+ * Price change over the selected timeframe = open→close of the most recent
+ * candle (so 5m shows the last 5min change, 1d shows the last day, etc).
+ * Falls back to the server-provided window-wide pct when no candles are loaded.
+ */
+const lastBarChangePct = (data: TokenChartData): number | null => {
+  const last = data.candles[data.candles.length - 1];
+  if (last && last.o) return ((last.c - last.o) / last.o) * 100;
+  return data.priceChangePct ?? null;
+};
 
 interface ViewState {
   /** Index of the right-most visible candle (exclusive). */
