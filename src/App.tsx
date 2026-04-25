@@ -18,7 +18,7 @@ import SharedChat from "./pages/SharedChat.tsx";
 import Onboarding from "./pages/Onboarding.tsx";
 import Settings from "./pages/Settings.tsx";
 import Contacts from "./pages/Contacts.tsx";
-import TrackedWallets from "./pages/TrackedWallets.tsx";
+// TrackedWallets page kept in the codebase for future re-enable; route is hidden for now.
 import Admin from "./pages/Admin.tsx";
 import Trade from "./pages/Trade.tsx";
 import Alerts from "./pages/Alerts.tsx";
