@@ -104,11 +104,12 @@ const NOISE_ADDRESSES = new Set<string>([
 const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const ACTIVE_CATEGORIES = new Set(["trader", "kol"]);
 const LOW_PRIORITY_CATEGORIES = new Set(["founder"]);
-const MAX_TRACKED_WALLETS = 24;
-const PINNED_WALLETS = 8;
+const MAX_TRACKED_WALLETS = 12;
+const PINNED_WALLETS = 6;
 const ROTATION_WINDOW_MS = 2 * 60 * 60 * 1000;
-const HELIUS_BATCH_SIZE = 3;
+const HELIUS_BATCH_SIZE = 1;
 const HELIUS_RETRY_DELAYS_MS = [250, 700, 1400];
+const TRADE_CACHE_TTL_MS = 5 * 60 * 1000;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Handler
@@ -455,6 +456,7 @@ interface BirdeyeTrader {
 }
 
 let birdeyeCache: { fetchedAt: number; traders: BirdeyeTrader[] } | null = null;
+let tradeCache = new Map<string, { fetchedAt: number; trades: any[] }>();
 const BIRDEYE_TTL_MS = 6 * 60 * 60 * 1000; // 6h
 
 async function fetchBirdeyeTopTraders(): Promise<BirdeyeTrader[]> {
