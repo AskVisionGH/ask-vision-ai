@@ -7,10 +7,6 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────────────────────────────────────
-
 interface WalletMeta {
   address: string;
   label: string;
@@ -21,25 +17,12 @@ interface WalletMeta {
   isUserAdded: boolean;
 }
 
-interface RawTrade {
-  wallet: WalletMeta;
-  side: "buy" | "sell";
-  tokenMint: string;
-  tokenAmount: number;
-  /** Best-effort USD value at trade time. */
-  valueUsd: number | null;
-  timestamp: number;
-  signature: string;
-  source: string | null;
-}
-
 interface WalletTradeSummary {
   wallet: WalletMeta;
   side: "buy" | "sell";
   count: number;
   totalUsd: number;
   totalAmount: number;
-  /** Most recent trade in this group — drives the tx link. */
   latestTimestamp: number;
   latestSignature: string;
 }
@@ -60,60 +43,31 @@ interface TokenActivity {
   sellerCount: number;
   totalTradeCount: number;
   latestTimestamp: number;
-  /** All wallet-level summaries for this token, sorted by USD desc. */
   wallets: WalletTradeSummary[];
 }
 
-interface ActivityResponse {
-  tokens: TokenActivity[];
-  walletsTracked: number;
-  walletsActive: number;
-  totalTrades: number;
-  windowHours: number;
-  fetchedAt: number;
-  error?: string;
+interface TradeRow {
+  wallet_address: string;
+  wallet_label: string;
+  wallet_twitter_handle: string | null;
+  wallet_category: string | null;
+  wallet_notes: string | null;
+  wallet_is_curated: boolean;
+  side: "buy" | "sell";
+  token_mint: string;
+  token_amount: number;
+  value_usd: number | null;
+  signature: string;
+  block_time: string;
+  source: string | null;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Filter lists
-// ─────────────────────────────────────────────────────────────────────────────
 
 const SOL_MINT = "So11111111111111111111111111111111111111112";
 const STABLE_MINTS = new Set([
-  "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
-  "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", // USDT
-  "USDH1SM1ojwWUga67PGrgFWUHibbjqMvuMaDkRJTgkX",  // USDH
-  "BoZoQQRAmYkr5iJhqo7DChAs7DPDwEZ5cv1vkYC9yzJB", // pyUSD-style mistakes
+  "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+  "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+  "USDH1SM1ojwWUga67PGrgFWUHibbjqMvuMaDkRJTgkX",
 ]);
-
-/**
- * Aggregator/router program addresses that often show up as the *receiver*
- * when a tracked wallet routes a swap through them. These are noise — the
- * tracked wallet is the actor, not these. We filter trades whose wallet
- * matches one of these (defensive — should never happen) and we filter
- * tokens whose mint matches (also defensive).
- */
-const NOISE_ADDRESSES = new Set<string>([
-  "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",  // Jupiter v6 program
-  "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB",  // Jupiter v4
-  "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8", // Raydium AMM v4
-  "9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP", // Raydium CLMM
-  "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",   // Orca whirlpool
-]);
-
-const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
-const ACTIVE_CATEGORIES = new Set(["trader", "kol"]);
-const LOW_PRIORITY_CATEGORIES = new Set(["founder"]);
-const MAX_TRACKED_WALLETS = 12;
-const PINNED_WALLETS = 6;
-const ROTATION_WINDOW_MS = 2 * 60 * 60 * 1000;
-const HELIUS_BATCH_SIZE = 1;
-const HELIUS_RETRY_DELAYS_MS = [250, 700, 1400];
-const TRADE_CACHE_TTL_MS = 5 * 60 * 1000;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Handler
-// ─────────────────────────────────────────────────────────────────────────────
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -125,9 +79,6 @@ serve(async (req) => {
     return json({ error: "Invalid JSON body" }, 400);
   }
 
-  const HELIUS_API_KEY = Deno.env.get("HELIUS_API_KEY");
-  if (!HELIUS_API_KEY) return json({ error: "HELIUS_API_KEY not configured" }, 500);
-
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
   const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!SUPABASE_URL || !SERVICE_KEY) return json({ error: "Backend misconfigured" }, 500);
@@ -137,108 +88,117 @@ serve(async (req) => {
   const windowHours = Number.isFinite(requested) && requested > 0 && requested <= 168
     ? Math.floor(requested)
     : 24;
-  const windowSec = windowHours * 3600;
-  const cutoff = Math.floor(Date.now() / 1000) - windowSec;
+  const cutoff = new Date(Date.now() - windowHours * 3600 * 1000).toISOString();
+  const fetchedAt = Date.now();
 
   try {
-    // 1. Load tracked wallet roster (curated + user)
-    const wallets = await loadWallets(supabase, body.userId ?? null);
-    if (wallets.size === 0) {
+    // 1. Pull all trades inside the window in one query. Cap at 5000 to
+    //    keep memory bounded; for 7d * ~150 wallets this is more than
+    //    enough headroom.
+    const { data: trades, error } = await supabase
+      .from("smart_money_trades")
+      .select("*")
+      .gte("block_time", cutoff)
+      .order("block_time", { ascending: false })
+      .limit(5000);
+
+    if (error) {
+      console.error("[smart-money-activity] DB error", error);
       return json({
-        tokens: [],
-        walletsTracked: 0,
-        walletsActive: 0,
-        totalTrades: 0,
-        windowHours,
-        fetchedAt: Date.now(),
-        error: "No wallets to track yet.",
+        tokens: [], walletsTracked: 0, walletsActive: 0, totalTrades: 0,
+        windowHours, fetchedAt, error: "Couldn't fetch smart-money activity right now.",
       });
     }
 
-    // 2. Select wallets. Keep user-added + verified wallets pinned, then rotate
-    //    through the broader trader/KOL pool so we don't query the same low-
-    //    signal addresses every request.
-    const sortedWallets = selectWallets(wallets, Date.now());
+    const rows = (trades ?? []) as TradeRow[];
 
-    // 3. Fetch wallet activity with a conservative concurrency limit so we
-    //    don't get Helius 429s and collapse to an empty result set.
-    const rawTrades: RawTrade[] = [];
-    for (let i = 0; i < sortedWallets.length; i += HELIUS_BATCH_SIZE) {
-      const batch = sortedWallets.slice(i, i + HELIUS_BATCH_SIZE);
-      const results = await Promise.allSettled(
-        batch.map((meta) => fetchWalletTrades(meta, HELIUS_API_KEY, cutoff, windowHours)),
-      );
-      for (const r of results) {
-        if (r.status === "fulfilled") rawTrades.push(...r.value);
-      }
-      if (i + HELIUS_BATCH_SIZE < sortedWallets.length) {
-        await sleep(150);
-      }
+    // 2. Identify which user-added wallets exist so we can tag them.
+    const userWalletSet = new Set<string>();
+    if (body.userId) {
+      const { data: usr } = await supabase
+        .from("smart_wallets")
+        .select("address")
+        .eq("user_id", body.userId);
+      for (const r of usr ?? []) userWalletSet.add(r.address);
     }
 
-    // 4. Filter noise: skip pure SOL/stable transfers (they have no token side
-    //    with a real mint) and aggregator pubkeys (defensive).
-    const meaningful = rawTrades.filter((t) => {
-      if (!t.tokenMint) return false;
-      if (t.tokenMint === SOL_MINT) return false;
-      if (STABLE_MINTS.has(t.tokenMint)) return false;
-      if (NOISE_ADDRESSES.has(t.tokenMint)) return false;
-      return true;
-    });
+    // 3. Filter noise.
+    const meaningful = rows.filter((t) =>
+      t.token_mint &&
+      t.token_mint !== SOL_MINT &&
+      !STABLE_MINTS.has(t.token_mint),
+    );
 
-    // 5. Backfill USD for trades that don't have it (token-out swaps where
-    //    the input wasn't SOL/stable).
-    const mintsNeedingPrice = new Set<string>();
-    for (const t of meaningful) {
-      if (t.valueUsd == null && t.tokenAmount > 0) mintsNeedingPrice.add(t.tokenMint);
+    if (meaningful.length === 0) {
+      // Total wallets known to the system (rough denominator for the UI).
+      const { count: walletsTracked } = await supabase
+        .from("smart_money_sync_state")
+        .select("wallet_address", { count: "exact", head: true });
+      return json({
+        tokens: [], walletsTracked: walletsTracked ?? 0, walletsActive: 0,
+        totalTrades: 0, windowHours, fetchedAt,
+      });
     }
-    const tokenInfo = await lookupTokens([...mintsNeedingPrice, ...new Set(meaningful.map((t) => t.tokenMint))]);
 
+    // 4. Hydrate token info (symbol, name, logo, price) via DexScreener.
+    const uniqueMints = [...new Set(meaningful.map((t) => t.token_mint))];
+    const tokenInfo = await lookupTokens(uniqueMints);
+
+    // 5. Backfill USD where the trade row has no price (e.g. token-for-token
+    //    swap that didn't touch SOL/stable).
     for (const t of meaningful) {
-      if (t.valueUsd == null) {
-        const info = tokenInfo.get(t.tokenMint);
-        if (info?.priceUsd != null && t.tokenAmount > 0) {
-          t.valueUsd = info.priceUsd * t.tokenAmount;
+      if (t.value_usd == null) {
+        const info = tokenInfo.get(t.token_mint);
+        if (info?.priceUsd != null && t.token_amount > 0) {
+          t.value_usd = info.priceUsd * t.token_amount;
         }
       }
     }
 
     // 6. Group by token, then by wallet+side.
-    const byToken = new Map<string, RawTrade[]>();
+    const byToken = new Map<string, TradeRow[]>();
     for (const t of meaningful) {
-      const list = byToken.get(t.tokenMint) ?? [];
+      const list = byToken.get(t.token_mint) ?? [];
       list.push(t);
-      byToken.set(t.tokenMint, list);
+      byToken.set(t.token_mint, list);
     }
 
     const tokens: TokenActivity[] = [];
-    for (const [mint, trades] of byToken) {
+    for (const [mint, group] of byToken) {
       const info = tokenInfo.get(mint);
-      if (!info) continue; // token didn't resolve, skip rather than show "?"
+      if (!info) continue;
 
-      // Group by wallet+side
-      const groupKey = (t: RawTrade) => `${t.wallet.address}|${t.side}`;
       const groups = new Map<string, WalletTradeSummary>();
-      for (const t of trades) {
-        const k = groupKey(t);
+      for (const t of group) {
+        const meta: WalletMeta = {
+          address: t.wallet_address,
+          label: t.wallet_label,
+          twitterHandle: t.wallet_twitter_handle,
+          category: t.wallet_category,
+          notes: t.wallet_notes,
+          isCurated: t.wallet_is_curated,
+          isUserAdded: userWalletSet.has(t.wallet_address),
+        };
+        const k = `${t.wallet_address}|${t.side}`;
+        const ts = new Date(t.block_time).getTime();
         const existing = groups.get(k);
         if (!existing) {
           groups.set(k, {
-            wallet: t.wallet,
+            wallet: meta,
             side: t.side,
             count: 1,
-            totalUsd: t.valueUsd ?? 0,
-            totalAmount: t.tokenAmount,
-            latestTimestamp: t.timestamp,
+            totalUsd: t.value_usd ?? 0,
+            totalAmount: Number(t.token_amount),
+            latestTimestamp: ts,
             latestSignature: t.signature,
           });
           continue;
         }
         existing.count += 1;
-        existing.totalUsd += t.valueUsd ?? 0;
-        existing.totalAmount += t.tokenAmount;
-        if (t.timestamp > existing.latestTimestamp) {
-          existing.latestTimestamp = t.timestamp;
+        existing.totalUsd += t.value_usd ?? 0;
+        existing.totalAmount += Number(t.token_amount);
+        if (ts > existing.latestTimestamp) {
+          existing.latestTimestamp = ts;
           existing.latestSignature = t.signature;
         }
       }
@@ -271,35 +231,33 @@ serve(async (req) => {
       });
     }
 
-    // 7. Rank tokens by total notional traded (|net| + a tiebreaker on
-    //    count of distinct wallets, so a token traded by 5 wallets ranks
-    //    above a token traded by 1 with the same notional).
+    // 7. Rank: |net| weighted by distinct-wallet count.
     tokens.sort((a, b) => {
       const aScore = Math.abs(a.netUsd) + (a.buyerCount + a.sellerCount) * 100;
       const bScore = Math.abs(b.netUsd) + (b.buyerCount + b.sellerCount) * 100;
       return bScore - aScore;
     });
 
-    const walletsActive = new Set(meaningful.map((t) => t.wallet.address)).size;
+    const walletsActive = new Set(meaningful.map((t) => t.wallet_address)).size;
 
-    const response: ActivityResponse = {
+    // Total roster size (for the "X/Y wallets active" copy in the UI).
+    const { count: walletsTracked } = await supabase
+      .from("smart_money_sync_state")
+      .select("wallet_address", { count: "exact", head: true });
+
+    return json({
       tokens: tokens.slice(0, 20),
-      walletsTracked: sortedWallets.length,
+      walletsTracked: walletsTracked ?? walletsActive,
       walletsActive,
       totalTrades: meaningful.length,
       windowHours,
-      fetchedAt: Date.now(),
-    };
-    return json(response);
+      fetchedAt,
+    });
   } catch (e) {
     console.error("[smart-money-activity] fatal", e);
     return json({
-      tokens: [],
-      walletsTracked: 0,
-      walletsActive: 0,
-      totalTrades: 0,
-      windowHours,
-      fetchedAt: Date.now(),
+      tokens: [], walletsTracked: 0, walletsActive: 0, totalTrades: 0,
+      windowHours, fetchedAt,
       error: "Couldn't fetch smart-money activity right now.",
     });
   }
@@ -310,352 +268,6 @@ function json(body: unknown, status = 200) {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Wallet roster
-// ─────────────────────────────────────────────────────────────────────────────
-
-async function loadWallets(supabase: ReturnType<typeof createClient>, userId: string | null) {
-  const wallets = new Map<string, WalletMeta>();
-
-  // 1. Curated seed (always present).
-  const { data: curated } = await supabase
-    .from("smart_wallets_global_seed")
-    .select("address, label, twitter_handle, category, notes");
-
-  for (const row of curated ?? []) {
-    wallets.set(row.address, {
-      address: row.address,
-      label: row.label,
-      twitterHandle: row.twitter_handle,
-      category: row.category,
-      notes: row.notes,
-      isCurated: true,
-      isUserAdded: false,
-    });
-  }
-
-  // 2. Live top-traders from Birdeye (this-week PnL leaders). This keeps
-  //    the roster fresh as the market rotates without us having to
-  //    re-curate the seed by hand. Cached for 6h to avoid burning API quota.
-  const birdeyeTraders = await fetchBirdeyeTopTraders();
-  for (const trader of birdeyeTraders) {
-    if (wallets.has(trader.address)) continue;
-    wallets.set(trader.address, {
-      address: trader.address,
-      label: trader.label,
-      twitterHandle: null,
-      category: "trader",
-      notes: "live_feed",
-      isCurated: true,
-      isUserAdded: false,
-    });
-  }
-
-  // 3. User-added wallets (highest priority).
-  if (userId) {
-    const { data: usr } = await supabase
-      .from("smart_wallets")
-      .select("address, label, twitter_handle")
-      .eq("user_id", userId);
-    for (const row of usr ?? []) {
-      const existing = wallets.get(row.address);
-      if (existing) {
-        existing.isUserAdded = true;
-      } else {
-        wallets.set(row.address, {
-          address: row.address,
-          label: row.label,
-          twitterHandle: row.twitter_handle,
-          category: null,
-          notes: null,
-          isCurated: false,
-          isUserAdded: true,
-        });
-      }
-    }
-  }
-
-  return wallets;
-}
-
-function selectWallets(wallets: Map<string, WalletMeta>, now: number) {
-  const eligible = [...wallets.values()]
-    .filter((w) => BASE58_RE.test(w.address))
-    .filter((w) => !NOISE_ADDRESSES.has(w.address))
-    .filter((w) => w.isUserAdded || ACTIVE_CATEGORIES.has(w.category ?? ""));
-
-  const pinned = eligible
-    .filter((w) => w.isUserAdded || w.notes === "verified" || w.notes === "live_feed")
-    .sort(compareWalletPriority)
-    .slice(0, PINNED_WALLETS);
-
-  const pinnedSet = new Set(pinned.map((w) => w.address));
-  const rotatingPool = eligible
-    .filter((w) => !pinnedSet.has(w.address))
-    .sort((a, b) => {
-      const bucketDiff = walletRotationBucket(a.address, now) - walletRotationBucket(b.address, now);
-      if (bucketDiff !== 0) return bucketDiff;
-      return compareWalletPriority(a, b);
-    });
-
-  const rotated = [...pinned, ...rotatingPool].slice(0, MAX_TRACKED_WALLETS);
-  const fallback = [...wallets.values()]
-    .filter((w) => BASE58_RE.test(w.address))
-    .filter((w) => !pinnedSet.has(w.address))
-    .filter((w) => !NOISE_ADDRESSES.has(w.address))
-    .filter((w) => LOW_PRIORITY_CATEGORIES.has(w.category ?? ""))
-    .sort(compareWalletPriority);
-
-  for (const wallet of fallback) {
-    if (rotated.length >= MAX_TRACKED_WALLETS) break;
-    rotated.push(wallet);
-  }
-
-  return rotated;
-}
-
-function compareWalletPriority(a: WalletMeta, b: WalletMeta) {
-  const score = (wallet: WalletMeta) => {
-    let total = 0;
-    if (wallet.isUserAdded) total += 8;
-    if (wallet.notes === "verified") total += 6;
-    if (wallet.notes === "live_feed") total += 5;
-    if (wallet.category === "trader") total += 3;
-    if (wallet.category === "kol") total += 2;
-    return total;
-  };
-
-  return score(b) - score(a) || a.label.localeCompare(b.label);
-}
-
-function walletRotationBucket(address: string, now: number) {
-  const window = Math.floor(now / ROTATION_WINDOW_MS);
-  return (stableHash(address) + window) % 1000;
-}
-
-function stableHash(input: string) {
-  let hash = 0;
-  for (let i = 0; i < input.length; i++) {
-    hash = (hash * 31 + input.charCodeAt(i)) % 2147483647;
-  }
-  return hash;
-}
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Birdeye top-traders feed
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface BirdeyeTrader {
-  address: string;
-  label: string;
-  pnl: number;
-}
-
-let birdeyeCache: { fetchedAt: number; traders: BirdeyeTrader[] } | null = null;
-let tradeCache = new Map<string, { fetchedAt: number; trades: any[] }>();
-const BIRDEYE_TTL_MS = 6 * 60 * 60 * 1000; // 6h
-
-async function fetchBirdeyeTopTraders(): Promise<BirdeyeTrader[]> {
-  const now = Date.now();
-  if (birdeyeCache && now - birdeyeCache.fetchedAt < BIRDEYE_TTL_MS) {
-    return birdeyeCache.traders;
-  }
-
-  const apiKey = Deno.env.get("BIRDEYE_API_KEY");
-  if (!apiKey) return [];
-
-  // Pull a single weekly leaders page to avoid burning quota on low-value
-  // secondary requests when the provider is already rate-limiting.
-  const traders: BirdeyeTrader[] = [];
-  const seen = new Set<string>();
-
-  for (const type of ["1W"] as const) {
-    try {
-      const url =
-        `https://public-api.birdeye.so/trader/gainers-losers` +
-        `?type=${type}&sort_by=PnL&sort_type=desc&offset=0&limit=10`;
-      const resp = await fetch(url, {
-        headers: {
-          Accept: "application/json",
-          "X-API-KEY": apiKey,
-          "x-chain": "solana",
-        },
-      });
-      if (!resp.ok) {
-        console.error(`[smart-money-activity] Birdeye ${type} HTTP`, resp.status);
-        continue;
-      }
-      const data = await resp.json();
-      const items = data?.data?.items;
-      if (!Array.isArray(items)) continue;
-      for (const it of items) {
-        if (!it?.address || seen.has(it.address)) continue;
-        seen.add(it.address);
-        traders.push({
-          address: it.address,
-          label: `Top trader (${type === "1W" ? "7d" : "1d"})`,
-          pnl: Number(it?.pnl ?? 0),
-        });
-      }
-    } catch (e) {
-      console.error(`[smart-money-activity] Birdeye ${type} error`, e);
-    }
-  }
-
-  birdeyeCache = { fetchedAt: now, traders };
-  return traders;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Per-wallet trade extraction from Helius
-// ─────────────────────────────────────────────────────────────────────────────
-
-async function fetchWalletTrades(
-  meta: WalletMeta,
-  apiKey: string,
-  cutoff: number,
-  windowHours: number,
-): Promise<RawTrade[]> {
-  const txs = await fetchEnhancedTxs(meta.address, apiKey, cutoff, windowHours);
-  const out: RawTrade[] = [];
-
-  for (const tx of txs) {
-    const ts = typeof tx?.timestamp === "number" ? tx.timestamp : 0;
-    if (ts < cutoff) continue;
-
-    const swap = tx?.events?.swap;
-    if (!swap) continue;
-
-    const outSide = pickSwapSide(swap.tokenOutputs, swap.nativeOutput, meta.address);
-    const inSide = pickSwapSide(swap.tokenInputs, swap.nativeInput, meta.address);
-
-    let side: "buy" | "sell" | null = null;
-    let tokenSide: { mint: string; amount: number } | undefined;
-
-    if (outSide && outSide.mint !== SOL_MINT && !STABLE_MINTS.has(outSide.mint)) {
-      side = "buy";
-      tokenSide = outSide;
-    } else if (inSide && inSide.mint !== SOL_MINT && !STABLE_MINTS.has(inSide.mint)) {
-      side = "sell";
-      tokenSide = inSide;
-    }
-
-    if (!side || !tokenSide || !tx?.signature) continue;
-
-    out.push({
-      wallet: meta,
-      side,
-      tokenMint: tokenSide.mint,
-      tokenAmount: tokenSide.amount,
-      valueUsd: computeSwapUsd(inSide, outSide),
-      timestamp: ts * 1000,
-      signature: tx.signature,
-      source: typeof tx?.source === "string" ? tx.source : null,
-    });
-  }
-
-  return out;
-}
-
-async function fetchEnhancedTxs(
-  address: string,
-  apiKey: string,
-  cutoff: number,
-  windowHours: number,
-): Promise<any[]> {
-  const cacheKey = `${address}:${windowHours}`;
-  const cached = tradeCache.get(cacheKey);
-  if (cached && Date.now() - cached.fetchedAt < TRADE_CACHE_TTL_MS) {
-    return cached.trades.filter((t) => (t.timestamp ?? 0) >= cutoff);
-  }
-
-  const out: any[] = [];
-  let before: string | null = null;
-  const PER_PAGE = 50;
-  const MAX_PAGES = windowHours <= 24 ? 1 : 2;
-
-  for (let page = 0; page < MAX_PAGES; page++) {
-    const url = new URL(`https://api.helius.xyz/v0/addresses/${address}/transactions`);
-    url.searchParams.set("api-key", apiKey);
-    url.searchParams.set("limit", String(PER_PAGE));
-    if (before) url.searchParams.set("before", before);
-
-    const resp = await fetchWithRetry(url.toString());
-    if (!resp.ok) {
-      console.error("[smart-money-activity] Helius enhanced txs error:", resp.status);
-      break;
-    }
-
-    const data = await resp.json();
-    if (!Array.isArray(data) || data.length === 0) break;
-
-    out.push(...data);
-    before = data[data.length - 1]?.signature ?? null;
-    const oldestTs = data[data.length - 1]?.timestamp ?? 0;
-    if (!before || oldestTs < cutoff) break;
-  }
-
-  tradeCache.set(cacheKey, { fetchedAt: Date.now(), trades: out });
-  return out.filter((t) => (t.timestamp ?? 0) >= cutoff);
-}
-
-async function fetchWithRetry(url: string) {
-  let lastResp: Response | null = null;
-
-  for (let attempt = 0; attempt <= HELIUS_RETRY_DELAYS_MS.length; attempt++) {
-    const resp = await fetch(url);
-    if (resp.status !== 429) return resp;
-    lastResp = resp;
-    const delay = HELIUS_RETRY_DELAYS_MS[attempt];
-    if (delay == null) break;
-    await sleep(delay);
-  }
-
-  return lastResp ?? fetch(url);
-}
-
-function pickSwapSide(
-  tokenSide: any[] | undefined,
-  nativeSide: any,
-  owner: string,
-): { mint: string; amount: number } | undefined {
-  if (Array.isArray(tokenSide) && tokenSide.length > 0) {
-    const involvingOwner = tokenSide.filter((t) =>
-      t?.userAccount === owner || t?.fromUserAccount === owner || t?.toUserAccount === owner,
-    );
-    const candidates = involvingOwner.length > 0 ? involvingOwner : tokenSide;
-
-    for (const t of candidates) {
-      const raw = Number(t?.rawTokenAmount?.tokenAmount ?? 0);
-      const decimals = Number(t?.rawTokenAmount?.decimals ?? 0);
-      const uiAmount = Number(t?.tokenAmount?.uiAmount ?? t?.tokenAmount ?? 0);
-      const amount = raw > 0 ? raw / Math.pow(10, decimals) : uiAmount;
-      if (!Number.isFinite(amount) || amount <= 0 || !t?.mint) continue;
-      return { mint: t.mint, amount };
-    }
-  }
-
-  const nativeRaw = Number(nativeSide?.amount ?? nativeSide ?? 0);
-  if (Number.isFinite(nativeRaw) && nativeRaw > 0) {
-    return { mint: SOL_MINT, amount: nativeRaw / 1e9 };
-  }
-
-  return undefined;
-}
-
-function computeSwapUsd(
-  inSide: { mint: string; amount: number } | undefined,
-  outSide: { mint: string; amount: number } | undefined,
-): number | null {
-  if (inSide && STABLE_MINTS.has(inSide.mint)) return inSide.amount;
-  if (outSide && STABLE_MINTS.has(outSide.mint)) return outSide.amount;
-  if (inSide?.mint === SOL_MINT) return inSide.amount * 150;
-  if (outSide?.mint === SOL_MINT) return outSide.amount * 150;
-  return null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -673,7 +285,6 @@ interface TokenInfo {
 async function lookupTokens(mints: string[]): Promise<Map<string, TokenInfo>> {
   const out = new Map<string, TokenInfo>();
   const unique = [...new Set(mints)];
-  // DexScreener supports up to 30 mints per /tokens/ batch call.
   const chunkSize = 30;
   for (let i = 0; i < unique.length; i += chunkSize) {
     const chunk = unique.slice(i, i + chunkSize);
@@ -682,7 +293,6 @@ async function lookupTokens(mints: string[]): Promise<Map<string, TokenInfo>> {
       if (!resp.ok) continue;
       const data = await resp.json();
       const pairs = Array.isArray(data?.pairs) ? data.pairs : [];
-      // For each mint, pick the highest-liquidity Solana pair.
       const byMint = new Map<string, any[]>();
       for (const p of pairs) {
         if (p?.chainId !== "solana") continue;

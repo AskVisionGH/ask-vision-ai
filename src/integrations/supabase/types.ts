@@ -484,6 +484,90 @@ export type Database = {
         }
         Relationships: []
       }
+      smart_money_sync_state: {
+        Row: {
+          consecutive_failures: number
+          last_error: string | null
+          last_signature: string | null
+          last_synced_at: string
+          trades_last_sync: number
+          updated_at: string
+          wallet_address: string
+        }
+        Insert: {
+          consecutive_failures?: number
+          last_error?: string | null
+          last_signature?: string | null
+          last_synced_at?: string
+          trades_last_sync?: number
+          updated_at?: string
+          wallet_address: string
+        }
+        Update: {
+          consecutive_failures?: number
+          last_error?: string | null
+          last_signature?: string | null
+          last_synced_at?: string
+          trades_last_sync?: number
+          updated_at?: string
+          wallet_address?: string
+        }
+        Relationships: []
+      }
+      smart_money_trades: {
+        Row: {
+          block_time: string
+          created_at: string
+          id: string
+          side: string
+          signature: string
+          source: string | null
+          token_amount: number
+          token_mint: string
+          value_usd: number | null
+          wallet_address: string
+          wallet_category: string | null
+          wallet_is_curated: boolean
+          wallet_label: string
+          wallet_notes: string | null
+          wallet_twitter_handle: string | null
+        }
+        Insert: {
+          block_time: string
+          created_at?: string
+          id?: string
+          side: string
+          signature: string
+          source?: string | null
+          token_amount: number
+          token_mint: string
+          value_usd?: number | null
+          wallet_address: string
+          wallet_category?: string | null
+          wallet_is_curated?: boolean
+          wallet_label: string
+          wallet_notes?: string | null
+          wallet_twitter_handle?: string | null
+        }
+        Update: {
+          block_time?: string
+          created_at?: string
+          id?: string
+          side?: string
+          signature?: string
+          source?: string | null
+          token_amount?: number
+          token_mint?: string
+          value_usd?: number | null
+          wallet_address?: string
+          wallet_category?: string | null
+          wallet_is_curated?: boolean
+          wallet_label?: string
+          wallet_notes?: string | null
+          wallet_twitter_handle?: string | null
+        }
+        Relationships: []
+      }
       smart_wallets: {
         Row: {
           address: string
