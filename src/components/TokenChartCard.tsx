@@ -154,7 +154,8 @@ export const TokenChartCard = ({ data: initial }: Props) => {
     };
   }, [interval, data.address, data.symbol, data.interval]);
 
-  const isUp = (data.priceChangePct ?? 0) >= 0;
+  const tfChangePct = lastBarChangePct(data);
+  const isUp = (tfChangePct ?? 0) >= 0;
 
   const zoom = useCallback(
     (delta: number) => {
