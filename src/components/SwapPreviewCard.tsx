@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, RefreshCw, Loader2, CheckCircle2, ExternalLink, AlertCircle, Info } from "lucide-react";
+import { ArrowRight, RefreshCw, Loader2, CheckCircle2, ExternalLink, AlertCircle, Info, XCircle } from "lucide-react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { VersionedTransaction } from "@solana/web3.js";
 import { cn } from "@/lib/utils";
