@@ -851,12 +851,13 @@ const EmailsTab = () => {
 
   useEffect(() => {
     load();
-    // Poll while the tab is open so newly-sent emails show up without
-    // a manual refresh. 15s is frequent enough for a live feel without
-    // hammering the DB.
-    const id = window.setInterval(load, 15000);
+    // Hourly background refresh; admins can hit Refresh for an immediate update.
+    const id = window.setInterval(load, 60 * 60 * 1000);
     return () => window.clearInterval(id);
   }, [range]);
+
+  // Reset to first page whenever filters/range change.
+  useEffect(() => { setPage(1); }, [range, templateFilter, statusFilter]);
 
   // Deduplicate by message_id, keeping latest row (rows are already DESC).
   const deduped = useMemo(() => {
