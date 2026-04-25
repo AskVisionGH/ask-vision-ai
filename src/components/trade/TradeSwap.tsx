@@ -340,7 +340,13 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
       try {
         signed = await signTransaction(tx);
       } catch {
-        if (mounted.current) setPhase({ name: "error", message: "Cancelled — try again." });
+        if (mounted.current) setPhase({
+          name: "cancelled",
+          inUi: quote.input.amountUi,
+          inSymbol: quote.input.symbol,
+          outUi: quote.output.amountUi,
+          outSymbol: quote.output.symbol,
+        });
         return;
       }
 
