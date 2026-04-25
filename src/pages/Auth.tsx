@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SEO } from "@/components/SEO";
 import { cn } from "@/lib/utils";
 
 const GoogleGlyph = () => (
@@ -154,6 +155,11 @@ const Auth = () => {
 
   return (
     <main className="relative grid min-h-screen grid-cols-1 overflow-hidden bg-background text-foreground lg:grid-cols-2">
+      <SEO
+        title="Sign in to Vision"
+        description="Sign in or create your Vision account. The AI crypto assistant — swap, send, and explore on-chain through one conversation."
+        canonicalPath="/auth"
+      />
       {/* Left: branded panel */}
       <aside className="relative hidden flex-col justify-between overflow-hidden border-r border-border/60 p-10 lg:flex">
         <div className="pointer-events-none absolute inset-0 bg-aurora" aria-hidden />
