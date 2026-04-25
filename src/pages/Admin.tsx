@@ -1786,7 +1786,7 @@ const RolesTab = () => {
               onChange={(e) => setNewUserId(e.target.value)}
               className="font-mono text-xs"
             />
-            <Button onClick={grant} disabled={granting || !newUserId.trim()}>
+            <Button onClick={openConfirm} disabled={granting || !newUserId.trim()}>
               {granting ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Shield className="mr-1 h-3.5 w-3.5" />}
               Grant
             </Button>
