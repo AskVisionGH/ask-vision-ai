@@ -204,7 +204,8 @@ async function loadAllWallets(supabase: any): Promise<WalletMeta[]> {
 }
 
 async function touchState(
-  supabase: ReturnType<typeof createClient>,
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
   address: string,
   error: string | null,
   tradesCount: number,
