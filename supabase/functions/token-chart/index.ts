@@ -71,12 +71,12 @@ serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     const queryRaw = typeof body.query === "string" ? body.query : "";
-    const intervalRaw = typeof body.interval === "string" ? body.interval : "15m";
-    const interval: Interval = (["5m", "15m", "1h", "4h", "1d"] as Interval[]).includes(
-      intervalRaw as Interval,
-    )
+    const intervalRaw = typeof body.interval === "string" ? body.interval : "1h";
+    const interval: Interval = (
+      ["5m", "30m", "1h", "4h", "1d", "1w", "1mo"] as Interval[]
+    ).includes(intervalRaw as Interval)
       ? (intervalRaw as Interval)
-      : "15m";
+      : "1h";
 
     if (!queryRaw) return json({ error: "query required" }, 400);
 
