@@ -36,7 +36,7 @@ const EMAIL_TEMPLATES: Record<string, React.ComponentType<any>> = {
 }
 
 // Configuration
-const SITE_NAME = "ask-vision-ai"
+const SITE_NAME = "Vision"
 const SENDER_DOMAIN = "notify.askvision.ai"
 const ROOT_DOMAIN = "askvision.ai"
 const FROM_DOMAIN = "askvision.ai" // Domain shown in From address (may be root or sender subdomain)
