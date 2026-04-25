@@ -216,7 +216,9 @@ export const ChatComposer = ({
             placeholder={placeholder}
             rows={1}
             className={cn(
-              "relative min-h-[24px] flex-1 resize-none bg-transparent font-mono text-[13px] leading-relaxed text-foreground outline-none",
+              // 16px on mobile prevents iOS Safari from auto-zooming on focus;
+              // shrink to 13px from sm: upward to keep the desktop aesthetic.
+              "relative min-h-[24px] flex-1 resize-none bg-transparent font-mono text-[16px] leading-relaxed text-foreground outline-none sm:text-[13px]",
               "placeholder:text-muted-foreground/60",
             )}
           />
