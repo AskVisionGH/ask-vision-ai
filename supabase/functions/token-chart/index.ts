@@ -29,14 +29,26 @@ const KNOWN_MINTS: Record<string, string> = {
 
 type Interval = "5m" | "30m" | "1h" | "4h" | "1d" | "1w" | "1mo";
 
-const INTERVAL_GT: Record<Interval, { timeframe: "minute" | "hour" | "day"; aggregate: number }> = {
-  "5m":  { timeframe: "minute", aggregate: 5 },
-  "30m": { timeframe: "minute", aggregate: 30 },
-  "1h":  { timeframe: "hour",   aggregate: 1 },
-  "4h":  { timeframe: "hour",   aggregate: 4 },
-  "1d":  { timeframe: "day",    aggregate: 1 },
-  "1w":  { timeframe: "day",    aggregate: 7 },
-  "1mo": { timeframe: "day",    aggregate: 30 },
+/**
+ * GeckoTerminal only natively supports certain (timeframe, aggregate) pairs:
+ *   minute → 1, 5, 15
+ *   hour   → 1, 4, 12
+ *   day    → 1
+ * For any interval that isn't a native pair (30m, 1w, 1mo) we fetch the next
+ * finer native bar and re-bucket client-side. `bucketSecs` defines the target
+ * bucket width.
+ */
+const INTERVAL_GT: Record<
+  Interval,
+  { timeframe: "minute" | "hour" | "day"; aggregate: number; bucketSecs: number; fetchMultiplier: number }
+> = {
+  "5m":  { timeframe: "minute", aggregate: 5,  bucketSecs: 5 * 60,            fetchMultiplier: 1 },
+  "30m": { timeframe: "minute", aggregate: 15, bucketSecs: 30 * 60,           fetchMultiplier: 2 },
+  "1h":  { timeframe: "hour",   aggregate: 1,  bucketSecs: 60 * 60,           fetchMultiplier: 1 },
+  "4h":  { timeframe: "hour",   aggregate: 4,  bucketSecs: 4 * 60 * 60,       fetchMultiplier: 1 },
+  "1d":  { timeframe: "day",    aggregate: 1,  bucketSecs: 24 * 60 * 60,      fetchMultiplier: 1 },
+  "1w":  { timeframe: "day",    aggregate: 1,  bucketSecs: 7 * 24 * 60 * 60,  fetchMultiplier: 7 },
+  "1mo": { timeframe: "day",    aggregate: 1,  bucketSecs: 30 * 24 * 60 * 60, fetchMultiplier: 30 },
 };
 
 const INTERVAL_BARS: Record<Interval, number> = {
@@ -147,21 +159,22 @@ serve(async (req) => {
     pairs.sort((a: any, b: any) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0));
     const top = pairs[0];
 
-    const { timeframe, aggregate } = INTERVAL_GT[interval];
+    const { timeframe, aggregate, bucketSecs, fetchMultiplier } = INTERVAL_GT[interval];
     const wanted = INTERVAL_BARS[interval];
+    const fetchLimit = Math.min(1000, wanted * fetchMultiplier);
 
     let candles: Candle[] = [];
     try {
       const gtUrl =
         `https://api.geckoterminal.com/api/v2/networks/solana/pools/${top.pairAddress}` +
-        `/ohlcv/${timeframe}?aggregate=${aggregate}&limit=${wanted}&currency=usd`;
+        `/ohlcv/${timeframe}?aggregate=${aggregate}&limit=${fetchLimit}&currency=usd`;
       const gtResp = await fetch(gtUrl, {
         headers: { Accept: "application/json;version=20230302", "User-Agent": "VisionBot/1.0" },
       });
       if (gtResp.ok) {
         const gtJson = await gtResp.json();
         const arr = gtJson?.data?.attributes?.ohlcv_list ?? [];
-        candles = arr
+        const raw: Candle[] = arr
           .map((row: number[]) => ({
             t: Number(row[0]),
             o: Number(row[1]),
@@ -172,6 +185,8 @@ serve(async (req) => {
           }))
           .filter((c: Candle) => c.t > 0 && c.c > 0)
           .sort((a: Candle, b: Candle) => a.t - b.t);
+
+        candles = fetchMultiplier > 1 ? rebucketCandles(raw, bucketSecs) : raw;
       } else {
         console.error("GeckoTerminal returned non-OK:", gtResp.status, await gtResp.text());
       }
@@ -227,4 +242,30 @@ function json(body: unknown, status = 200) {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
+}
+
+/**
+ * Coalesce finer OHLC bars into wider buckets. Used when GeckoTerminal doesn't
+ * natively support the requested aggregate (30m, 1w, 1mo).
+ */
+function rebucketCandles(bars: Candle[], bucketSecs: number): Candle[] {
+  if (!bars.length) return [];
+  const out: Candle[] = [];
+  let cur: Candle | null = null;
+  let curStart = 0;
+  for (const b of bars) {
+    const start = Math.floor(b.t / bucketSecs) * bucketSecs;
+    if (cur === null || start !== curStart) {
+      if (cur) out.push(cur);
+      curStart = start;
+      cur = { t: start, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v };
+    } else {
+      cur.h = Math.max(cur.h, b.h);
+      cur.l = Math.min(cur.l, b.l);
+      cur.c = b.c;
+      cur.v += b.v;
+    }
+  }
+  if (cur) out.push(cur);
+  return out;
 }
