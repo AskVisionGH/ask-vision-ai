@@ -159,21 +159,22 @@ serve(async (req) => {
     pairs.sort((a: any, b: any) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0));
     const top = pairs[0];
 
-    const { timeframe, aggregate } = INTERVAL_GT[interval];
+    const { timeframe, aggregate, bucketSecs, fetchMultiplier } = INTERVAL_GT[interval];
     const wanted = INTERVAL_BARS[interval];
+    const fetchLimit = Math.min(1000, wanted * fetchMultiplier);
 
     let candles: Candle[] = [];
     try {
       const gtUrl =
         `https://api.geckoterminal.com/api/v2/networks/solana/pools/${top.pairAddress}` +
-        `/ohlcv/${timeframe}?aggregate=${aggregate}&limit=${wanted}&currency=usd`;
+        `/ohlcv/${timeframe}?aggregate=${aggregate}&limit=${fetchLimit}&currency=usd`;
       const gtResp = await fetch(gtUrl, {
         headers: { Accept: "application/json;version=20230302", "User-Agent": "VisionBot/1.0" },
       });
       if (gtResp.ok) {
         const gtJson = await gtResp.json();
         const arr = gtJson?.data?.attributes?.ohlcv_list ?? [];
-        candles = arr
+        const raw: Candle[] = arr
           .map((row: number[]) => ({
             t: Number(row[0]),
             o: Number(row[1]),
@@ -184,6 +185,8 @@ serve(async (req) => {
           }))
           .filter((c: Candle) => c.t > 0 && c.c > 0)
           .sort((a: Candle, b: Candle) => a.t - b.t);
+
+        candles = fetchMultiplier > 1 ? rebucketCandles(raw, bucketSecs) : raw;
       } else {
         console.error("GeckoTerminal returned non-OK:", gtResp.status, await gtResp.text());
       }
