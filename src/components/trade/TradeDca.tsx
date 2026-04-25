@@ -311,7 +311,7 @@ export const TradeDca = () => {
       try {
         signed = await signTransaction(tx);
       } catch {
-        if (mounted.current) setPhase({ name: "error", message: "Cancelled — try again." });
+        if (mounted.current) setPhase({ name: "cancelled" });
         return;
       }
       const signedB64 = btoa(String.fromCharCode(...signed.serialize()));
