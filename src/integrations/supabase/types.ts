@@ -460,6 +460,33 @@ export type Database = {
         }
         Relationships: []
       }
+      role_audit_log: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          id: string
+          role: string
+          target_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          id?: string
+          role: string
+          target_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          id?: string
+          role?: string
+          target_id?: string
+        }
+        Relationships: []
+      }
       siws_nonces: {
         Row: {
           consumed: boolean
@@ -852,9 +879,38 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      admin_stats_summary: {
+        Row: {
+          onboarded_users: number | null
+          refreshed_at: string | null
+          total_conversations: number | null
+          total_messages: number | null
+          total_treasury_usd: number | null
+          total_txs: number | null
+          total_users: number | null
+          total_volume_usd: number | null
+          total_wallet_links: number | null
+          unique_linked_wallets: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      admin_get_stats_summary: {
+        Args: never
+        Returns: {
+          onboarded_users: number
+          refreshed_at: string
+          total_conversations: number
+          total_messages: number
+          total_treasury_usd: number
+          total_txs: number
+          total_users: number
+          total_volume_usd: number
+          total_wallet_links: number
+          unique_linked_wallets: number
+        }[]
+      }
       admin_get_user_emails: {
         Args: { _user_ids: string[] }
         Returns: {
@@ -878,6 +934,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_admin_or_super: { Args: { _user_id: string }; Returns: boolean }
       move_to_dlq: {
         Args: {
           dlq_name: string
@@ -895,6 +952,7 @@ export type Database = {
           read_ct: number
         }[]
       }
+      refresh_admin_stats_summary: { Args: never; Returns: undefined }
     }
     Enums: {
       alert_rule_kind: "price" | "wallet_activity" | "portfolio_pnl"
