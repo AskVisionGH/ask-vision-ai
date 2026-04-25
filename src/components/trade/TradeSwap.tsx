@@ -75,6 +75,7 @@ type Phase =
   | { name: "submitting" }
   | { name: "confirming"; signature: string; startedAt: number }
   | { name: "success"; signature: string; durationMs: number; outUi: number; outSymbol: string; inUi: number; inSymbol: string }
+  | { name: "cancelled"; inUi: number; inSymbol: string; outUi: number; outSymbol: string }
   | { name: "error"; message: string };
 
 const fmtUsd = (n: number | null | undefined) => {
