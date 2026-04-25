@@ -574,22 +574,22 @@ const Chat = () => {
 
             {isThinking && (
               <div
-                className="flex items-center gap-2 px-1 text-foreground"
+                className="flex items-center gap-6 px-1 text-foreground"
                 aria-label="Vision is thinking"
                 role="status"
               >
-                <VisionLogo
-                  size={9}
-                  className="animate-pulse text-foreground drop-shadow-[0_0_6px_hsl(var(--primary-glow)/0.9)] [animation-delay:0ms]"
-                />
-                <VisionLogo
-                  size={9}
-                  className="animate-pulse text-foreground drop-shadow-[0_0_6px_hsl(var(--primary-glow)/0.9)] [animation-delay:200ms]"
-                />
-                <VisionLogo
-                  size={9}
-                  className="animate-pulse text-foreground drop-shadow-[0_0_6px_hsl(var(--primary-glow)/0.9)] [animation-delay:400ms]"
-                />
+                <div className="flex items-center gap-2">
+                  <VisionLoader variant="vertex-orbit" size={22} />
+                  <span className="font-mono text-[10px] tracking-widest uppercase text-muted-foreground/60">
+                    vertex orbit
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <VisionLoader variant="self-draw" size={22} />
+                  <span className="font-mono text-[10px] tracking-widest uppercase text-muted-foreground/60">
+                    self-draw
+                  </span>
+                </div>
               </div>
             )}
           </div>
