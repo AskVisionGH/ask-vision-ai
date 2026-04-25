@@ -444,6 +444,36 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
     );
   }
 
+  // ---------- Cancelled view ----------
+  if (phase.name === "cancelled") {
+    return (
+      <div className="ease-vision animate-fade-up w-full max-w-[440px] overflow-hidden rounded-2xl border border-border/60 bg-card/60 backdrop-blur-sm">
+        <div className="flex flex-col items-center gap-4 p-8 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-muted-foreground/30 bg-muted/30">
+            <XCircle className="h-7 w-7 text-muted-foreground" />
+          </div>
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              Swap cancelled
+            </p>
+            <p className="mt-2 font-mono text-sm text-foreground">
+              {fmtAmount(phase.inUi)} {phase.inSymbol} → {fmtAmount(phase.outUi)} {phase.outSymbol}
+            </p>
+            <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+              No funds were moved.
+            </p>
+          </div>
+          <Button
+            onClick={resetSwap}
+            className="ease-vision mt-2 w-full font-mono text-[11px] uppercase tracking-wider"
+          >
+            New swap
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   // ---------- CTA computation ----------
   const isBusy =
     phase.name === "building" ||
