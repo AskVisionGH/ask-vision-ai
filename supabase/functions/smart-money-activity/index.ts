@@ -321,7 +321,7 @@ async function loadWallets(supabase: ReturnType<typeof createClient>, userId: st
   // 1. Curated seed (always present).
   const { data: curated } = await supabase
     .from("smart_wallets_global_seed")
-    .select("address, label, twitter_handle, category");
+    .select("address, label, twitter_handle, category, notes");
 
   for (const row of curated ?? []) {
     wallets.set(row.address, {
@@ -329,6 +329,7 @@ async function loadWallets(supabase: ReturnType<typeof createClient>, userId: st
       label: row.label,
       twitterHandle: row.twitter_handle,
       category: row.category,
+      notes: row.notes,
       isCurated: true,
       isUserAdded: false,
     });
@@ -345,6 +346,7 @@ async function loadWallets(supabase: ReturnType<typeof createClient>, userId: st
       label: trader.label,
       twitterHandle: null,
       category: "trader",
+        notes: "live_feed",
       isCurated: true,
       isUserAdded: false,
     });
@@ -366,6 +368,7 @@ async function loadWallets(supabase: ReturnType<typeof createClient>, userId: st
           label: row.label,
           twitterHandle: row.twitter_handle,
           category: null,
+          notes: null,
           isCurated: false,
           isUserAdded: true,
         });
@@ -375,6 +378,71 @@ async function loadWallets(supabase: ReturnType<typeof createClient>, userId: st
 
   return wallets;
 }
+
+function selectWallets(wallets: Map<string, WalletMeta>, now: number) {
+  const eligible = [...wallets.values()]
+    .filter((w) => BASE58_RE.test(w.address))
+    .filter((w) => !NOISE_ADDRESSES.has(w.address))
+    .filter((w) => w.isUserAdded || ACTIVE_CATEGORIES.has(w.category ?? ""));
+
+  const pinned = eligible
+    .filter((w) => w.isUserAdded || w.notes === "verified" || w.notes === "live_feed")
+    .sort(compareWalletPriority)
+    .slice(0, PINNED_WALLETS);
+
+  const pinnedSet = new Set(pinned.map((w) => w.address));
+  const rotatingPool = eligible
+    .filter((w) => !pinnedSet.has(w.address))
+    .sort((a, b) => {
+      const bucketDiff = walletRotationBucket(a.address, now) - walletRotationBucket(b.address, now);
+      if (bucketDiff !== 0) return bucketDiff;
+      return compareWalletPriority(a, b);
+    });
+
+  const rotated = [...pinned, ...rotatingPool].slice(0, MAX_TRACKED_WALLETS);
+  const fallback = [...wallets.values()]
+    .filter((w) => BASE58_RE.test(w.address))
+    .filter((w) => !pinnedSet.has(w.address))
+    .filter((w) => !NOISE_ADDRESSES.has(w.address))
+    .filter((w) => LOW_PRIORITY_CATEGORIES.has(w.category ?? ""))
+    .sort(compareWalletPriority);
+
+  for (const wallet of fallback) {
+    if (rotated.length >= MAX_TRACKED_WALLETS) break;
+    rotated.push(wallet);
+  }
+
+  return rotated;
+}
+
+function compareWalletPriority(a: WalletMeta, b: WalletMeta) {
+  const score = (wallet: WalletMeta) => {
+    let total = 0;
+    if (wallet.isUserAdded) total += 8;
+    if (wallet.notes === "verified") total += 6;
+    if (wallet.notes === "live_feed") total += 5;
+    if (wallet.category === "trader") total += 3;
+    if (wallet.category === "kol") total += 2;
+    return total;
+  };
+
+  return score(b) - score(a) || a.label.localeCompare(b.label);
+}
+
+function walletRotationBucket(address: string, now: number) {
+  const window = Math.floor(now / ROTATION_WINDOW_MS);
+  return (stableHash(address) + window) % 1000;
+}
+
+function stableHash(input: string) {
+  let hash = 0;
+  for (let i = 0; i < input.length; i++) {
+    hash = (hash * 31 + input.charCodeAt(i)) % 2147483647;
+  }
+  return hash;
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Birdeye top-traders feed
