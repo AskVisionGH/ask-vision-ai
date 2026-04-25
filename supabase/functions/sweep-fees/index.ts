@@ -42,7 +42,7 @@ async function isAdminCaller(req: Request, supabaseUrl: string, anonKey: string,
   }
 }
 import { Connection, Keypair, PublicKey, VersionedTransaction } from "npm:@solana/web3.js@1.95.3";
-import { MintLayout, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from "npm:@solana/spl-token@0.4.8";
+import { AccountLayout, MintLayout } from "npm:@solana/spl-token@0.4.8";
 import { ReferralProvider } from "npm:@jup-ag/referral-sdk@0.3.0";
 import bs58 from "https://esm.sh/bs58@5.0.0";
 
@@ -59,6 +59,8 @@ const KNOWN_TOKEN_META: Record<string, { decimals: number; symbol: string }> = {
   So11111111111111111111111111111111111111112: { decimals: 9, symbol: "SOL" },
   EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v: { decimals: 6, symbol: "USDC" },
 };
+
+const TARGET_SWEEP_MINTS = Object.keys(KNOWN_TOKEN_META);
 
 interface TokenAccountInfo {
   pubkey: string;
@@ -106,28 +108,28 @@ async function fetchPricesUsd(mints: string[]): Promise<Map<string, number>> {
 
 async function fetchMintMeta(
   connection: Connection,
-  mints: Array<{ mint: string; programId: PublicKey }>,
+  mints: string[],
 ): Promise<Map<string, { decimals: number; symbol: string }>> {
-  const unique = Array.from(new Map(mints.map((item) => [item.mint, item])).values());
+  const unique = Array.from(new Set(mints));
   const meta = new Map<string, { decimals: number; symbol: string }>();
 
-  for (const item of unique) {
-    const known = KNOWN_TOKEN_META[item.mint];
-    if (known) meta.set(item.mint, known);
+  for (const mint of unique) {
+    const known = KNOWN_TOKEN_META[mint];
+    if (known) meta.set(mint, known);
   }
 
-  const unknown = unique.filter((item) => !meta.has(item.mint));
+  const unknown = unique.filter((mint) => !meta.has(mint));
   if (unknown.length === 0) return meta;
 
   for (let i = 0; i < unknown.length; i += 100) {
     const chunk = unknown.slice(i, i + 100);
     const infos = await connection.getMultipleAccountsInfo(
-      chunk.map((item) => new PublicKey(item.mint)),
+      chunk.map((mint) => new PublicKey(mint)),
       "confirmed",
     );
 
     infos.forEach((info, idx) => {
-      const { mint } = chunk[idx];
+      const mint = chunk[idx];
       const fallback = { decimals: 0, symbol: `${mint.slice(0, 4)}…${mint.slice(-4)}` };
       if (!info) {
         meta.set(mint, fallback);
@@ -147,6 +149,46 @@ async function fetchMintMeta(
   }
 
   return meta;
+}
+
+async function fetchTargetReferralBalances(
+  connection: Connection,
+  provider: ReferralProvider,
+  referralAccountPubKey: PublicKey,
+  mints: string[],
+): Promise<Array<{ pubkey: string; mint: string; amountRaw: bigint }>> {
+  const targets = mints.map((mint) => ({
+    mint,
+    pubkey: provider.getReferralTokenAccountPubKey({
+      referralAccountPubKey,
+      mint: new PublicKey(mint),
+    }),
+  }));
+
+  const infos = await connection.getMultipleAccountsInfo(
+    targets.map((target) => target.pubkey),
+    "confirmed",
+  );
+
+  return targets.flatMap((target, idx) => {
+    const info = infos[idx];
+    if (!info) return [];
+
+    try {
+      const decoded = AccountLayout.decode(new Uint8Array(info.data));
+      const amountRaw = BigInt(String(decoded.amount));
+      if (amountRaw === 0n) return [];
+
+      return [{
+        pubkey: target.pubkey.toBase58(),
+        mint: target.mint,
+        amountRaw,
+      }];
+    } catch (error) {
+      console.warn("Failed to decode referral token account", target.mint, error);
+      return [];
+    }
+  });
 }
 
 async function runSweep(trigger: "cron" | "manual"): Promise<Response> {
@@ -203,53 +245,32 @@ async function runSweep(trigger: "cron" | "manual"): Promise<Response> {
       );
     }
 
-    // 2. Discover referral token accounts via the SDK.
-    //
-    // The Jupiter referral.jup.ag/api/.../token-accounts REST endpoint was
-    // disabled in late 2025. The accounts themselves are PDAs derived from
-    // ["referral_ata", referralAccount, mint] and are owned by the
-    // REFER4Zg... program (NOT by the referral account), so a plain
-    // getTokenAccountsByOwner against the referral account returns nothing.
-    //
-    // The SDK's getReferralTokenAccountsWithStrategy queries the program's
-    // accounts via getProgramAccounts + cross-references mints, so it gives
-    // us back the same shape the disabled REST API used to return.
+    // 2. Look up the specific referral token accounts we actually care about.
+    // Vision only configures SOL + USDC fee collection today, so we can derive
+    // those PDA addresses directly and avoid the SDK's broad account scans,
+    // which have been overloading the RPC account indexer.
     const heliusRpc = `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`;
     const connection = new Connection(heliusRpc, "confirmed");
 
     const provider = new ReferralProvider(connection);
-    const discovered = await provider.getReferralTokenAccountsV2(referralAccountPubkey).catch((e) => {
-      console.warn("getReferralTokenAccountsV2 failed, continuing without dust check:", e);
-      return null;
-    });
-
-    type RawAcct = { pubkey: { toBase58: () => string } | string; account: { mint: any; amount: bigint | string } };
-    const flat: RawAcct[] = discovered
-      ? [...(discovered.tokenAccounts ?? []), ...(discovered.token2022Accounts ?? [])]
-      : [];
-
-    const balances = flat.map((a, idx) => {
-      const pubkeyStr = typeof a.pubkey === "string" ? a.pubkey : a.pubkey.toBase58();
-      const mintStr = typeof a.account.mint === "string" ? a.account.mint : a.account.mint?.toBase58?.() ?? String(a.account.mint);
-      const amountStr = String(a.account.amount ?? "0");
-      return {
-        programId: idx < (discovered?.tokenAccounts?.length ?? 0) ? TOKEN_PROGRAM_ID : TOKEN_2022_PROGRAM_ID,
-        ta: { pubkey: pubkeyStr, mint: mintStr },
-        balance: { amount: amountStr },
-      };
-    }).filter((b) => b.ta.mint && b.balance.amount !== "0");
+    const referralAccount = new PublicKey(referralAccountPubkey);
+    const balances = await fetchTargetReferralBalances(
+      connection,
+      provider,
+      referralAccount,
+      TARGET_SWEEP_MINTS,
+    );
 
 
     const accountInfos: TokenAccountInfo[] = [];
-    const mintMeta = await fetchMintMeta(connection, balances.map(({ ta, programId }) => ({ mint: ta.mint, programId })));
+    const mintMeta = await fetchMintMeta(connection, balances.map((balance) => balance.mint));
 
-    for (const { ta, balance } of balances) {
-      if (!balance || Number(balance.amount) === 0) continue;
-      const meta = mintMeta.get(ta.mint) ?? { decimals: 0, symbol: `${ta.mint.slice(0, 4)}…${ta.mint.slice(-4)}` };
-      const amountRaw = Number(balance.amount);
+    for (const balance of balances) {
+      const meta = mintMeta.get(balance.mint) ?? { decimals: 0, symbol: `${balance.mint.slice(0, 4)}…${balance.mint.slice(-4)}` };
+      const amountRaw = Number(balance.amountRaw);
       accountInfos.push({
-        pubkey: ta.pubkey,
-        mint: ta.mint,
+        pubkey: balance.pubkey,
+        mint: balance.mint,
         amountUi: amountRaw / Math.pow(10, meta.decimals),
         decimals: meta.decimals,
         symbol: meta.symbol,
@@ -295,11 +316,20 @@ async function runSweep(trigger: "cron" | "manual"): Promise<Response> {
       });
     }
 
-    // 5. Build claim transactions via Jupiter SDK (reuse the provider from
-    // the discovery step above).
-    const claimTxs: VersionedTransaction[] = await provider.claimAllV2({
-      payerPubKey: treasuryKp.publicKey,
-      referralAccountPubKey: new PublicKey(referralAccountPubkey),
+    // 5. Build claim transactions only for mints that actually have non-zero
+    // balances instead of asking the SDK to scan every referral token account.
+    const claimTxs = (await Promise.all(
+      balances.map((balance) => provider.claim({
+        payerPubKey: treasuryKp.publicKey,
+        referralAccountPubKey: referralAccount,
+        mint: new PublicKey(balance.mint),
+      })),
+    )) as VersionedTransaction[];
+
+    console.log("sweep-fees targeted-balances", {
+      referralAccountPubkey,
+      balances: balances.map((balance) => ({ mint: balance.mint, amountRaw: balance.amountRaw.toString() })),
+      claimTxs: claimTxs.length,
     });
 
     if (claimTxs.length === 0) {
