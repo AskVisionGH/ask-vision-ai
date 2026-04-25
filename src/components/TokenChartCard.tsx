@@ -616,10 +616,9 @@ const CandleChart = ({ candles, interval, view, setView, isUp }: ChartProps) => 
           const top = Math.min(yO, yC);
           const bodyH = Math.max(1, Math.abs(yC - yO));
           const color = up ? "hsl(var(--up))" : "hsl(var(--down))";
-          const filter = up ? "url(#candle-glow-up)" : "url(#candle-glow-down)";
           return (
-            <g key={`${c.t}-${i}`} filter={filter}>
-              <line x1={cx} x2={cx} y1={yH} y2={yL} stroke={color} strokeWidth={1} strokeOpacity={0.85} />
+            <g key={`${c.t}-${i}`}>
+              {/* Soft glow underlay (blurred body only) */}
               <rect
                 x={cx - candleW / 2}
                 y={top}
@@ -627,7 +626,19 @@ const CandleChart = ({ candles, interval, view, setView, isUp }: ChartProps) => 
                 height={bodyH}
                 fill={color}
                 rx={1.5}
-                opacity={0.95}
+                opacity={0.35}
+                filter="url(#candle-glow)"
+              />
+              {/* Crisp wick */}
+              <line x1={cx} x2={cx} y1={yH} y2={yL} stroke={color} strokeWidth={1} strokeOpacity={0.9} />
+              {/* Crisp body */}
+              <rect
+                x={cx - candleW / 2}
+                y={top}
+                width={candleW}
+                height={bodyH}
+                fill={color}
+                rx={1.5}
               />
             </g>
           );
