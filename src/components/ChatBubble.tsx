@@ -20,6 +20,7 @@ import { DcaPreviewCard } from "@/components/DcaPreviewCard";
 import { BracketPreviewCard } from "@/components/BracketPreviewCard";
 import { LadderPreviewCard } from "@/components/LadderPreviewCard";
 import { OpenOrdersCard } from "@/components/OpenOrdersCard";
+import { BridgePreviewCard } from "@/components/BridgePreviewCard";
 
 interface Props {
   message: ChatMessage;
