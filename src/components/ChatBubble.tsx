@@ -217,6 +217,9 @@ export const ChatBubble = ({ message, onEdit, readOnly = false }: Props) => {
         if (event.type === "open_orders") {
           return <OpenOrdersCard key={i} data={event.data} />;
         }
+        if (event.type === "bridge_quote") {
+          return <BridgePreviewCard key={i} data={event.data} />;
+        }
         return null;
       })}
     </div>
