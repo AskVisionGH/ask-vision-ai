@@ -1191,19 +1191,13 @@ const TreasuryTab = () => {
               </PopoverContent>
             </Popover>
           )}
-          <Button size="sm" variant="outline" onClick={triggerSweep} disabled={sweeping || syncing || loading}>
-            {sweeping ? (
-              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-            ) : null}
-            Sweep now
-          </Button>
-          <Button size="sm" onClick={triggerSync} disabled={syncing || loading || sweeping}>
-            {syncing || loading ? (
+          <Button size="sm" onClick={triggerSweep} disabled={sweeping || syncing || loading}>
+            {sweeping || syncing || loading ? (
               <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
             ) : (
               <RefreshCw className="mr-1 h-3.5 w-3.5" />
             )}
-            Refresh
+            {sweeping ? "Sweeping…" : syncing ? "Refreshing…" : "Sweep + Refresh"}
           </Button>
         </div>
       </div>
