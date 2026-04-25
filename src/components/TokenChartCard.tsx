@@ -366,10 +366,13 @@ const PAD_RIGHT = 8;
 
 const CandleChart = ({ candles, interval, view, setView, isUp }: ChartProps) => {
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const svgRef = useRef<SVGSVGElement | null>(null);
   const [box, setBox] = useState({ w: 600, h: 280 });
   const [hover, setHover] = useState<{ x: number; y: number; idx: number } | null>(null);
   const dragRef = useRef<{ startX: number; startEnd: number; dragged: boolean } | null>(null);
   const pinchRef = useRef<{ startDist: number; startCount: number } | null>(null);
+  const totalRef = useRef(candles.length);
+  totalRef.current = candles.length;
 
   // Track size with ResizeObserver.
   useEffect(() => {
@@ -480,16 +483,26 @@ const CandleChart = ({ candles, interval, view, setView, isUp }: ChartProps) => 
     dragRef.current = null;
   };
 
-  const handleWheel = (e: React.WheelEvent<SVGSVGElement>) => {
-    if (Math.abs(e.deltaY) < 1) return;
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? 6 : -6;
-    setView((v) => {
-      const nextCount = Math.max(MIN_VISIBLE, Math.min(MAX_VISIBLE, Math.min(total, v.count + delta)));
-      const nextEnd = Math.min(total, Math.max(nextCount, v.end));
-      return { end: nextEnd, count: nextCount };
-    });
-  };
+  // Native non-passive wheel listener so we can preventDefault and stop the
+  // page from scrolling while the cursor is over the chart. React's synthetic
+  // onWheel is passive in modern React.
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaY) < 1) return;
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? 6 : -6;
+      const total = totalRef.current;
+      setView((v) => {
+        const nextCount = Math.max(MIN_VISIBLE, Math.min(MAX_VISIBLE, Math.min(total, v.count + delta)));
+        const nextEnd = Math.min(total, Math.max(nextCount, v.end));
+        return { end: nextEnd, count: nextCount };
+      });
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [setView]);
 
   // Touch pinch zoom.
   const touchesRef = useRef<Map<number, { x: number; y: number }>>(new Map());
@@ -536,6 +549,7 @@ const CandleChart = ({ candles, interval, view, setView, isUp }: ChartProps) => 
   return (
     <div ref={wrapRef} className="relative h-64 w-full select-none px-2 py-3 sm:h-72">
       <svg
+        ref={svgRef}
         viewBox={`0 0 ${box.w} ${box.h}`}
         width="100%"
         height="100%"
@@ -548,7 +562,6 @@ const CandleChart = ({ candles, interval, view, setView, isUp }: ChartProps) => 
           setHover(null);
           dragRef.current = null;
         }}
-        onWheel={handleWheel}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -559,19 +572,8 @@ const CandleChart = ({ candles, interval, view, setView, isUp }: ChartProps) => 
             <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity="0.06" />
             <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity="0" />
           </linearGradient>
-          <filter id="candle-glow-up" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="1.2" result="b" />
-            <feMerge>
-              <feMergeNode in="b" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-          <filter id="candle-glow-down" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="1.2" result="b" />
-            <feMerge>
-              <feMergeNode in="b" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
+          <filter id="candle-glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="1.6" />
           </filter>
         </defs>
 
@@ -627,10 +629,9 @@ const CandleChart = ({ candles, interval, view, setView, isUp }: ChartProps) => 
           const top = Math.min(yO, yC);
           const bodyH = Math.max(1, Math.abs(yC - yO));
           const color = up ? "hsl(var(--up))" : "hsl(var(--down))";
-          const filter = up ? "url(#candle-glow-up)" : "url(#candle-glow-down)";
           return (
-            <g key={`${c.t}-${i}`} filter={filter}>
-              <line x1={cx} x2={cx} y1={yH} y2={yL} stroke={color} strokeWidth={1} strokeOpacity={0.85} />
+            <g key={`${c.t}-${i}`}>
+              {/* Soft glow underlay (blurred body only) */}
               <rect
                 x={cx - candleW / 2}
                 y={top}
@@ -638,7 +639,19 @@ const CandleChart = ({ candles, interval, view, setView, isUp }: ChartProps) => 
                 height={bodyH}
                 fill={color}
                 rx={1.5}
-                opacity={0.95}
+                opacity={0.35}
+                filter="url(#candle-glow)"
+              />
+              {/* Crisp wick */}
+              <line x1={cx} x2={cx} y1={yH} y2={yL} stroke={color} strokeWidth={1} strokeOpacity={0.9} />
+              {/* Crisp body */}
+              <rect
+                x={cx - candleW / 2}
+                y={top}
+                width={candleW}
+                height={bodyH}
+                fill={color}
+                rx={1.5}
               />
             </g>
           );
