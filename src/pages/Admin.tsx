@@ -741,6 +741,190 @@ const StatsTab = () => {
   );
 };
 
+/* ------------------------------- Emails tab ------------------------------- */
+
+type EmailLogRow = {
+  id: string;
+  message_id: string | null;
+  template_name: string;
+  recipient_email: string;
+  status: string;
+  error_message: string | null;
+  created_at: string;
+};
+
+const EMAIL_RANGE_OPTIONS: { value: "1d" | "7d" | "30d"; label: string }[] = [
+  { value: "1d", label: "Last 24h" },
+  { value: "7d", label: "Last 7 days" },
+  { value: "30d", label: "Last 30 days" },
+];
+
+const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+  sent: "default",
+  pending: "secondary",
+  failed: "destructive",
+  dlq: "destructive",
+  bounced: "destructive",
+  complained: "destructive",
+  suppressed: "outline",
+};
+
+const EmailsTab = () => {
+  const [rows, setRows] = useState<EmailLogRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [range, setRange] = useState<"1d" | "7d" | "30d">("7d");
+  const [templateFilter, setTemplateFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+
+  const load = async () => {
+    setLoading(true);
+    const days = range === "1d" ? 1 : range === "7d" ? 7 : 30;
+    const from = new Date(Date.now() - days * 86400000).toISOString();
+    const { data, error } = await supabase
+      .from("email_send_log")
+      .select("id, message_id, template_name, recipient_email, status, error_message, created_at")
+      .gte("created_at", from)
+      .order("created_at", { ascending: false })
+      .limit(2000);
+    if (error) {
+      toast({ title: "Failed to load emails", description: error.message, variant: "destructive" });
+    } else {
+      setRows((data ?? []) as EmailLogRow[]);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, [range]);
+
+  // Deduplicate by message_id, keeping latest row (rows are already DESC).
+  const deduped = useMemo(() => {
+    const seen = new Set<string>();
+    const out: EmailLogRow[] = [];
+    for (const r of rows) {
+      const key = r.message_id ?? r.id;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(r);
+    }
+    return out;
+  }, [rows]);
+
+  const templates = useMemo(
+    () => Array.from(new Set(deduped.map((r) => r.template_name))).sort(),
+    [deduped],
+  );
+
+  const filtered = useMemo(() => {
+    return deduped.filter((r) => {
+      if (templateFilter !== "all" && r.template_name !== templateFilter) return false;
+      if (statusFilter !== "all" && r.status !== statusFilter) return false;
+      return true;
+    });
+  }, [deduped, templateFilter, statusFilter]);
+
+  const stats = useMemo(() => ({
+    total: deduped.length,
+    sent: deduped.filter((r) => r.status === "sent").length,
+    failed: deduped.filter((r) => ["failed", "dlq", "bounced", "complained"].includes(r.status)).length,
+    suppressed: deduped.filter((r) => r.status === "suppressed").length,
+  }), [deduped]);
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-4">
+        <StatCard icon={Mail} label="Total" value={stats.total.toLocaleString()} />
+        <StatCard icon={MailCheck} label="Sent" value={stats.sent.toLocaleString()} />
+        <StatCard icon={AlertTriangle} label="Failed" value={stats.failed.toLocaleString()} />
+        <StatCard icon={ShieldOff} label="Suppressed" value={stats.suppressed.toLocaleString()} />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Select value={range} onValueChange={(v: "1d" | "7d" | "30d") => setRange(v)}>
+          <SelectTrigger className="h-8 w-[140px] text-xs"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {EMAIL_RANGE_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={templateFilter} onValueChange={setTemplateFilter}>
+          <SelectTrigger className="h-8 w-[180px] text-xs"><SelectValue placeholder="All templates" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all" className="text-xs">All templates</SelectItem>
+            {templates.map((t) => (
+              <SelectItem key={t} value={t} className="text-xs">{t}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="h-8 w-[140px] text-xs"><SelectValue placeholder="All statuses" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all" className="text-xs">All statuses</SelectItem>
+            <SelectItem value="sent" className="text-xs">Sent</SelectItem>
+            <SelectItem value="pending" className="text-xs">Pending</SelectItem>
+            <SelectItem value="failed" className="text-xs">Failed</SelectItem>
+            <SelectItem value="dlq" className="text-xs">DLQ</SelectItem>
+            <SelectItem value="suppressed" className="text-xs">Suppressed</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button variant="outline" size="sm" onClick={load} className="ml-auto h-8">
+          <RefreshCw className="mr-1 h-3.5 w-3.5" /> Refresh
+        </Button>
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>When</TableHead>
+                <TableHead>Template</TableHead>
+                <TableHead>Recipient</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Error</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="py-10 text-center">
+                    <Loader2 className="mx-auto h-4 w-4 animate-spin text-muted-foreground" />
+                  </TableCell>
+                </TableRow>
+              ) : filtered.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                    No emails in this range.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filtered.slice(0, 200).map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell className="text-xs">{format(new Date(r.created_at), "MMM d HH:mm")}</TableCell>
+                    <TableCell className="text-xs font-medium">{r.template_name}</TableCell>
+                    <TableCell className="text-xs">{shortEmail(r.recipient_email)}</TableCell>
+                    <TableCell>
+                      <Badge variant={STATUS_VARIANT[r.status] ?? "outline"} className="text-xs">{r.status}</Badge>
+                    </TableCell>
+                    <TableCell className="max-w-[280px] truncate text-xs text-muted-foreground" title={r.error_message ?? ""}>
+                      {r.error_message ?? "—"}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+      {filtered.length > 200 ? (
+        <p className="text-center text-xs text-muted-foreground">
+          Showing 200 of {filtered.length}. Narrow your filters to see more.
+        </p>
+      ) : null}
+    </div>
+  );
+};
+
 /* ------------------------------ Treasury tab ------------------------------ */
 
 const SOURCE_LABELS: Record<TreasuryFee["source_kind"], string> = {
