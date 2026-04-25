@@ -464,6 +464,7 @@ export const TransferPreviewCard = ({ data: initial }: Props) => {
 
   const isError = phase.name === "error";
   const errorMsg = isError ? (phase as Extract<Phase, { name: "error" }>).message : "";
+  const isCancelled = isError && (phase as Extract<Phase, { name: "error" }>).cancelled === true;
 
   const totalSolCost = data.token.isNative
     ? data.amountUi + data.estNetworkFeeSol + data.ataCreationFeeSol
