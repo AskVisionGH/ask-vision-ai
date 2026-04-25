@@ -167,7 +167,8 @@ serve(async (req) => {
 // Wallet roster (no user-specific filter — sync everything the system knows)
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function loadAllWallets(supabase: ReturnType<typeof createClient>): Promise<WalletMeta[]> {
+// deno-lint-ignore no-explicit-any
+async function loadAllWallets(supabase: any): Promise<WalletMeta[]> {
   const out = new Map<string, WalletMeta>();
 
   const { data: curated } = await supabase
