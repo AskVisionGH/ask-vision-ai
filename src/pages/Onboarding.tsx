@@ -411,6 +411,7 @@ const Onboarding = () => {
               </div>
             )}
 
+            {step === "experience" && (
               <div className="space-y-6">
                 <div>
                   <h2 className="text-xl font-light tracking-tight sm:text-2xl">
