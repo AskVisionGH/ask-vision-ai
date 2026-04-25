@@ -124,7 +124,7 @@ async function fetchMintMeta(
   for (let i = 0; i < unknown.length; i += 100) {
     const chunk = unknown.slice(i, i + 100);
     const infos = await connection.getMultipleAccountsInfo(
-      chunk.map((item) => new PublicKey(item.mint)),
+      chunk.map((mint) => new PublicKey(mint)),
       "confirmed",
     );
 
