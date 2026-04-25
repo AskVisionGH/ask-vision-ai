@@ -75,12 +75,39 @@ const indexFeesFn = inngest.createFunction(
   },
 );
 
+// Pre-syncs smart-money wallet trades into the `smart_money_trades` table
+// every 5 minutes. The chat-facing `smart-money-activity` reads from that
+// table instead of calling Helius live, so user requests are fast and
+// never blocked by upstream rate limits.
+const smartMoneySyncFn = inngest.createFunction(
+  { id: "smart-money-sync", name: "Sync smart-money wallet trades", retries: 0 },
+  { cron: "*/5 * * * *" },
+  async ({ step }) => {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    if (!supabaseUrl) throw new Error("SUPABASE_URL not configured");
+    const result = await step.run("invoke-smart-money-sync", async () => {
+      try {
+        const resp = await fetch(`${supabaseUrl}/functions/v1/smart-money-sync`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ trigger: "cron" }),
+        });
+        const data = await resp.json().catch(() => ({}));
+        return { ok: resp.ok, status: resp.status, data };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+    return { ok: true, result };
+  },
+);
+
 // Supabase Edge Functions rewrite the request path — `servePath` must match
 // the deployed function URL exactly so Inngest's introspection works.
 Deno.serve(
   serve({
     client: inngest,
-    functions: [sweepFn, indexFeesFn],
+    functions: [sweepFn, indexFeesFn, smartMoneySyncFn],
     servePath: "/functions/v1/inngest-sweep-cron",
   }),
 );
