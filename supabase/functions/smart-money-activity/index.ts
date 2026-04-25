@@ -468,12 +468,12 @@ async function fetchBirdeyeTopTraders(): Promise<BirdeyeTrader[]> {
   const apiKey = Deno.env.get("BIRDEYE_API_KEY");
   if (!apiKey) return [];
 
-  // Pull both gainers (this week) and yesterday for breadth. 10 per call is
-  // the max — we make two calls to get up to ~20 unique traders.
+  // Pull a single weekly leaders page to avoid burning quota on low-value
+  // secondary requests when the provider is already rate-limiting.
   const traders: BirdeyeTrader[] = [];
   const seen = new Set<string>();
 
-  for (const type of ["1W", "yesterday"] as const) {
+  for (const type of ["1W"] as const) {
     try {
       const url =
         `https://public-api.birdeye.so/trader/gainers-losers` +
@@ -567,6 +567,12 @@ async function fetchEnhancedTxs(
   cutoff: number,
   windowHours: number,
 ): Promise<any[]> {
+  const cacheKey = `${address}:${windowHours}`;
+  const cached = tradeCache.get(cacheKey);
+  if (cached && Date.now() - cached.fetchedAt < TRADE_CACHE_TTL_MS) {
+    return cached.trades.filter((t) => (t.timestamp ?? 0) >= cutoff);
+  }
+
   const out: any[] = [];
   let before: string | null = null;
   const PER_PAGE = 50;
@@ -593,6 +599,7 @@ async function fetchEnhancedTxs(
     if (!before || oldestTs < cutoff) break;
   }
 
+  tradeCache.set(cacheKey, { fetchedAt: Date.now(), trades: out });
   return out.filter((t) => (t.timestamp ?? 0) >= cutoff);
 }
 
