@@ -65,6 +65,16 @@ const fmtTime = (t: number, interval: ChartInterval): string => {
   return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
 };
 
+const PERIOD_LABEL: Record<ChartInterval, string> = {
+  "5m": "12h",
+  "15m": "2d",
+  "1h": "7d",
+  "4h": "30d",
+  "1d": "6m",
+};
+
+const periodLabel = (iv: ChartInterval): string => PERIOD_LABEL[iv] ?? "";
+
 interface ViewState {
   /** Index of the right-most visible candle (exclusive). */
   end: number;
@@ -204,14 +214,15 @@ export const TokenChartCard = ({ data: initial }: Props) => {
           {data.priceChangePct != null && (
             <div
               className={cn(
-                "flex items-center gap-1 rounded-full border px-2.5 py-1 font-mono text-[11px]",
+                "flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-mono text-[11px]",
                 isUp
                   ? "border-up/30 bg-up/10 text-up"
                   : "border-down/30 bg-down/10 text-down",
               )}
             >
               {isUp ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-              {fmtPct(data.priceChangePct)}
+              <span>{fmtPct(data.priceChangePct)}</span>
+              <span className="opacity-60">· {periodLabel(data.interval)}</span>
             </div>
           )}
         </div>
