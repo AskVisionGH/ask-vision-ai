@@ -997,13 +997,26 @@ serve(async (req) => {
 
             // When a tool errors, append a strict instruction so the model
             // writes ONE brief explanation and stops — no second paraphrase.
+            const isSmartMoneyEmpty =
+              name === "get_smart_money_activity" &&
+              !hasError &&
+              result &&
+              typeof result === "object" &&
+              Array.isArray(result.tokens) &&
+              result.tokens.length === 0;
+
             const toolPayload = hasError
               ? {
                   error: result.error,
                   instructions:
                     "Write exactly ONE short, friendly sentence telling the user what couldn't be done and stop. Do not repeat yourself. Do not call any more tools.",
                 }
-              : result;
+              : isSmartMoneyEmpty
+                ? {
+                    ...result,
+                    instructions: `Reply with exactly this sentence and nothing else: None of the tracked wallets made a trade in the last ${result.windowHours ?? 24}h — try a longer window.`,
+                  }
+                : result;
 
             conversation.push({
               role: "tool",
