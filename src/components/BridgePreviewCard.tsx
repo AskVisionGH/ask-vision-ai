@@ -305,6 +305,7 @@ export const BridgePreviewCard = ({ data }: Props) => {
     phase.name === "bridging";
   const isError = phase.name === "error";
   const errorMsg = isError ? (phase as Extract<Phase, { name: "error" }>).message : "";
+  const isCancelled = isError && (phase as Extract<Phase, { name: "error" }>).cancelled === true;
 
   const busyLabel =
     phase.name === "building"
