@@ -1649,25 +1649,44 @@ const WalletsDialog = ({
 
 /* -------------------------------- Roles tab ------------------------------- */
 
+type AuditRow = {
+  id: string;
+  actor_id: string | null;
+  target_id: string;
+  role: string;
+  action: string;
+  created_at: string;
+};
+
 const RolesTab = () => {
   const { user } = useAuth();
   const { isSuperAdmin, loading: superLoading } = useIsSuperAdmin();
   const [roles, setRoles] = useState<RoleRow[]>([]);
+  const [audit, setAudit] = useState<AuditRow[]>([]);
   const [nameByUserId, setNameByUserId] = useState<Record<string, string | null>>({});
+  const [emailByUserId, setEmailByUserId] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [granting, setGranting] = useState(false);
   const [newUserId, setNewUserId] = useState("");
+  // Typed-confirm dialog state — admin must type the matching user id to
+  // confirm. Stops fat-finger promotions caused by clipboard slip-ups.
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
 
   const load = async () => {
     setLoading(true);
-    const [rolesRes, profilesRes] = await Promise.all([
+    const [rolesRes, profilesRes, auditRes] = await Promise.all([
       supabase.from("user_roles").select("*").order("created_at", { ascending: false }),
       supabase.from("profiles").select("user_id, display_name"),
+      supabase.from("role_audit_log").select("*").order("created_at", { ascending: false }).limit(50),
     ]);
     if (rolesRes.error) {
       toast({ title: "Failed to load roles", description: rolesRes.error.message, variant: "destructive" });
     } else {
       setRoles((rolesRes.data ?? []) as RoleRow[]);
+    }
+    if (!auditRes.error && auditRes.data) {
+      setAudit(auditRes.data as AuditRow[]);
     }
     if (!profilesRes.error && profilesRes.data) {
       const map: Record<string, string | null> = {};
@@ -1676,6 +1695,23 @@ const RolesTab = () => {
       }
       setNameByUserId(map);
     }
+    // Hydrate emails for actor/target chips on the audit log.
+    const ids = Array.from(
+      new Set([
+        ...((rolesRes.data ?? []) as RoleRow[]).map((r) => r.user_id),
+        ...((auditRes.data ?? []) as AuditRow[]).flatMap((a) => [a.actor_id, a.target_id].filter((v): v is string => !!v)),
+      ]),
+    );
+    if (ids.length > 0) {
+      const { data: emails } = await supabase.rpc("admin_get_user_emails", { _user_ids: ids });
+      if (emails) {
+        const m: Record<string, string> = {};
+        for (const r of emails as { user_id: string; email: string | null }[]) {
+          if (r.email) m[r.user_id] = r.email;
+        }
+        setEmailByUserId(m);
+      }
+    }
     setLoading(false);
   };
 
@@ -1683,17 +1719,26 @@ const RolesTab = () => {
     load();
   }, []);
 
+  const openConfirm = () => {
+    const id = newUserId.trim();
+    if (!id) return;
+    setConfirmText("");
+    setConfirmOpen(true);
+  };
+
   const grant = async () => {
     const id = newUserId.trim();
     if (!id) return;
     setGranting(true);
     const { error } = await supabase.from("user_roles").insert({ user_id: id, role: "admin" });
     setGranting(false);
+    setConfirmOpen(false);
     if (error) {
       toast({ title: "Could not grant", description: error.message, variant: "destructive" });
       return;
     }
     setNewUserId("");
+    setConfirmText("");
     toast({ title: "Admin granted" });
     load();
   };
@@ -1715,6 +1760,12 @@ const RolesTab = () => {
     toast({ title: "Role revoked" });
     load();
   };
+
+  // Preview chunk for typed confirmation — show last 6 chars of pasted ID
+  // along with the matching user's name/email if known.
+  const targetName = nameByUserId[newUserId.trim()] ?? null;
+  const targetEmail = emailByUserId[newUserId.trim()] ?? null;
+  const confirmExpected = newUserId.trim().slice(-6);
 
   return (
     <div className="space-y-4">
