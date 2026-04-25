@@ -255,8 +255,8 @@ async function runSweep(trigger: "cron" | "manual"): Promise<Response> {
       });
     }
 
-    // 5. Build claim transactions via Jupiter SDK
-    const provider = new ReferralProvider(connection);
+    // 5. Build claim transactions via Jupiter SDK (reuse the provider from
+    // the discovery step above).
     const claimTxs: VersionedTransaction[] = await provider.claimAllV2({
       payerPubKey: treasuryKp.publicKey,
       referralAccountPubKey: new PublicKey(REFERRAL_ACCOUNT_PUBKEY),
