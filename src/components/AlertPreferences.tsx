@@ -153,7 +153,7 @@ export const AlertPreferences = () => {
             !push.supported
               ? "Not supported on this browser."
               : push.permission === "denied"
-                ? "Blocked by browser — allow notifications in site settings."
+                ? "Blocked — tap to see how to re-enable."
                 : "Desktop + mobile browser notifications."
           }
           checked={prefs.channel_web_push && push.subscribed}
