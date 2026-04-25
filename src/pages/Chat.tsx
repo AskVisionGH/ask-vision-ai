@@ -575,22 +575,11 @@ const Chat = () => {
 
             {isThinking && (
               <div
-                className="flex items-center gap-6 px-1 text-foreground"
+                className="flex items-center gap-2 px-1 text-foreground"
                 aria-label="Vision is thinking"
                 role="status"
               >
-                <div className="flex items-center gap-2">
-                  <VisionLoader variant="vertex-orbit" size={22} />
-                  <span className="font-mono text-[10px] tracking-widest uppercase text-muted-foreground/60">
-                    vertex orbit
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <VisionLoader variant="self-draw" size={22} />
-                  <span className="font-mono text-[10px] tracking-widest uppercase text-muted-foreground/60">
-                    self-draw
-                  </span>
-                </div>
+                <VisionLoader variant="self-draw" size={22} />
               </div>
             )}
           </div>
