@@ -216,7 +216,28 @@ export const SwapPreviewCard = ({ data: initial }: Props) => {
     } catch (e) {
       if (!mounted.current) return;
       const message = e instanceof Error ? e.message : "Something went wrong.";
-      setPhase({ name: "error", message });
+      // Detect wallet rejection patterns from any layer (wallet adapter,
+      // wallet-standard, mobile deep-link, etc.) so we always show the
+      // friendly "cancelled" banner instead of a red error.
+      const lower = message.toLowerCase();
+      const isReject =
+        lower.includes("user rejected") ||
+        lower.includes("user denied") ||
+        lower.includes("rejected the request") ||
+        lower.includes("request rejected") ||
+        lower.includes("declined") ||
+        lower.includes("cancelled") ||
+        lower.includes("canceled") ||
+        (e as { code?: number })?.code === 4001;
+      if (isReject) {
+        setPhase({
+          name: "error",
+          message: "Cancelled — try again or adjust the amount.",
+          cancelled: true,
+        });
+      } else {
+        setPhase({ name: "error", message });
+      }
     }
   };
 

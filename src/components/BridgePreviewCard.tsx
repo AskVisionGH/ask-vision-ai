@@ -247,7 +247,21 @@ export const BridgePreviewCard = ({ data }: Props) => {
     } catch (e) {
       if (!mounted.current) return;
       const message = e instanceof Error ? e.message : "Something went wrong.";
-      setPhase({ name: "error", message });
+      const lower = message.toLowerCase();
+      const isReject =
+        lower.includes("user rejected") ||
+        lower.includes("user denied") ||
+        lower.includes("rejected the request") ||
+        lower.includes("request rejected") ||
+        lower.includes("declined") ||
+        lower.includes("cancelled") ||
+        lower.includes("canceled") ||
+        (e as { code?: number })?.code === 4001;
+      if (isReject) {
+        setPhase({ name: "error", message: "Cancelled — try again or adjust the amount.", cancelled: true });
+      } else {
+        setPhase({ name: "error", message });
+      }
     }
   };
 
