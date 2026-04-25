@@ -1,7 +1,8 @@
-import { ChangeEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowRight, Camera, Check, ChevronLeft, Sparkles } from "lucide-react";
+import { ArrowRight, Camera, Check, ChevronLeft, Mail, Sparkles } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import {
   CryptoExperience,
@@ -13,6 +14,7 @@ import {
   INTEREST_OPTIONS,
   RISK_OPTIONS,
 } from "@/lib/profile-options";
+import { isWalletSyntheticEmail } from "@/lib/wallet-email";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,11 +22,13 @@ import { UserAvatar } from "@/components/UserAvatar";
 import { VisionLogo } from "@/components/VisionLogo";
 import { cn } from "@/lib/utils";
 
-const STEPS = ["welcome", "experience", "interests", "risk"] as const;
-type Step = (typeof STEPS)[number];
+// "email" is conditionally injected right after "welcome" for wallet-only
+// accounts that signed in via SIWS and don't yet have a real inbox attached.
+type Step = "welcome" | "email" | "experience" | "interests" | "risk";
 
 const STEP_LABELS: Record<Step, string> = {
   welcome: "About you",
+  email: "Email",
   experience: "Experience",
   interests: "Interests",
   risk: "Risk",
@@ -46,6 +50,17 @@ const Onboarding = () => {
   const [transitioning, setTransitioning] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Wallet-only signups have a synthetic `<wallet>@wallet.vision.local` email
+  // attached to the auth user. We surface a dedicated step asking them to
+  // attach a real inbox so they can receive welcome / receipt / alert emails.
+  const needsRealEmail = isWalletSyntheticEmail(user?.email);
+  const [email, setEmail] = useState("");
+  const [savingEmail, setSavingEmail] = useState(false);
+  // Once we successfully kick off Supabase's confirm-link flow we mark this
+  // step "satisfied" locally so the user can move on without waiting for the
+  // confirmation click — the address change finalizes whenever they click it.
+  const [emailSubmitted, setEmailSubmitted] = useState(false);
+
   // Hydrate any existing values so re-running onboarding pre-fills.
   useEffect(() => {
     if (!profile) return;
@@ -63,9 +78,17 @@ const Onboarding = () => {
     }
   }, [loading, profile, navigate]);
 
-  const stepIndex = STEPS.indexOf(step);
-  const isLast = stepIndex === STEPS.length - 1;
-  const progress = ((stepIndex + 1) / STEPS.length) * 100;
+  // Step list is dynamic: only show the email step when we actually need one.
+  const steps = useMemo<Step[]>(
+    () =>
+      needsRealEmail
+        ? ["welcome", "email", "experience", "interests", "risk"]
+        : ["welcome", "experience", "interests", "risk"],
+    [needsRealEmail],
+  );
+  const stepIndex = steps.indexOf(step);
+  const isLast = stepIndex === steps.length - 1;
+  const progress = ((stepIndex + 1) / steps.length) * 100;
 
   // Brief fade between steps so the transition feels intentional rather than snappy.
   const advance = (next: Step | "finish") => {
@@ -85,11 +108,42 @@ const Onboarding = () => {
   const trimmedName = name.trim();
   const isNameValid = trimmedName.length >= 2 && trimmedName.length <= 60;
 
+  const submitEmail = async (): Promise<boolean> => {
+    const target = email.trim().toLowerCase();
+    if (!target.includes("@") || target.length < 5) {
+      toast.error("Enter a valid email");
+      return false;
+    }
+    setSavingEmail(true);
+    // Supabase emails the new address with a confirm link; once clicked it
+    // becomes the user's primary email and our welcome trigger fires.
+    const { error } = await supabase.auth.updateUser(
+      { email: target },
+      { emailRedirectTo: `${window.location.origin}/chat` },
+    );
+    setSavingEmail(false);
+    if (error) {
+      toast.error("Couldn't save email", { description: error.message });
+      return false;
+    }
+    setEmailSubmitted(true);
+    toast.success("Confirm your email", {
+      description: `We sent a confirmation link to ${target}.`,
+    });
+    return true;
+  };
+
   const goNext = async () => {
     // Persist the per-step value so partial onboarding still saves.
     if (step === "welcome") {
       if (!isNameValid) return; // guard — button is also disabled
       await updateProfile({ display_name: trimmedName });
+    } else if (step === "email") {
+      // Skip the API call if the user already kicked off the confirm flow.
+      if (!emailSubmitted) {
+        const ok = await submitEmail();
+        if (!ok) return;
+      }
     } else if (step === "experience") {
       await updateProfile({ experience });
     } else if (step === "interests") {
@@ -98,12 +152,12 @@ const Onboarding = () => {
     if (isLast) {
       advance("finish");
     } else {
-      advance(STEPS[stepIndex + 1]);
+      advance(steps[stepIndex + 1]);
     }
   };
 
   const goBack = () => {
-    if (stepIndex > 0) advance(STEPS[stepIndex - 1]);
+    if (stepIndex > 0) advance(steps[stepIndex - 1]);
   };
 
   const finish = async () => {
@@ -130,6 +184,15 @@ const Onboarding = () => {
       toast.error("Pick a display name first", {
         description: "It's the only thing we need before you head in.",
       });
+      return;
+    }
+    // Wallet-only accounts must attach a real email — they can't skip past it
+    // without giving us a way to reach them.
+    if (needsRealEmail && !emailSubmitted) {
+      toast.error("Add an email first", {
+        description: "We need somewhere to send receipts and alerts.",
+      });
+      setStep("email");
       return;
     }
     setSkipping(true);
@@ -172,9 +235,11 @@ const Onboarding = () => {
   };
 
   // Disable Continue when the current step requires a choice but none made.
+  const isEmailValid = email.trim().includes("@") && email.trim().length >= 5;
   const canContinue = (() => {
-    if (transitioning || finishing || savingAvatar) return false;
+    if (transitioning || finishing || savingAvatar || savingEmail) return false;
     if (step === "welcome") return isNameValid;
+    if (step === "email") return emailSubmitted || isEmailValid;
     if (step === "experience") return experience !== null;
     if (step === "risk") return risk !== null;
     return true;
@@ -209,7 +274,7 @@ const Onboarding = () => {
         {/* Progress: smooth bar + numbered step */}
         <div className="mb-2 flex items-center justify-between font-mono text-[10px] tracking-widest uppercase text-muted-foreground/70">
           <span>
-            Step {stepIndex + 1} of {STEPS.length} · {STEP_LABELS[step]}
+            Step {stepIndex + 1} of {steps.length} · {STEP_LABELS[step]}
           </span>
           <span>{Math.round(progress)}%</span>
         </div>
@@ -291,6 +356,58 @@ const Onboarding = () => {
                 {savingAvatar && (
                   <p className="text-xs text-muted-foreground">Uploading…</p>
                 )}
+              </div>
+            )}
+
+            {step === "email" && (
+              <div className="space-y-6">
+                <div>
+                  <div className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-[10px] uppercase tracking-widest text-primary">
+                    <Mail className="h-3 w-3" />
+                    One more thing
+                  </div>
+                  <h2 className="text-xl font-light tracking-tight sm:text-2xl">
+                    Where can we <span className="font-serif-italic text-primary">reach</span> you?
+                  </h2>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    You signed in with a wallet — we still need an email for receipts,
+                    price alerts, and account recovery. We'll send a quick confirmation link.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label
+                    htmlFor="onboarding-email"
+                    className="text-xs uppercase tracking-wider text-muted-foreground"
+                  >
+                    Email <span className="text-primary">*</span>
+                  </Label>
+                  <Input
+                    id="onboarding-email"
+                    type="email"
+                    inputMode="email"
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      // Editing after a submit means they want to send a new
+                      // confirm link — clear the satisfied flag so Continue
+                      // re-triggers the API call.
+                      if (emailSubmitted) setEmailSubmitted(false);
+                    }}
+                    placeholder="you@example.com"
+                    disabled={savingEmail}
+                  />
+                  {emailSubmitted ? (
+                    <p className="text-[11px] text-primary">
+                      Confirmation link sent. Check your inbox — you can keep going in the meantime.
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-muted-foreground/70">
+                      We never share this. Used only for product emails you've enabled.
+                    </p>
+                  )}
+                </div>
               </div>
             )}
 
