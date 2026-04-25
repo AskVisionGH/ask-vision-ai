@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowLeftRight, BarChart3, CalendarIcon, Check, Copy, Extern
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
+import { useIsSuperAdmin } from "@/hooks/useIsSuperAdmin";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
