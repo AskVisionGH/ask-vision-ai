@@ -457,7 +457,7 @@ const StatsTab = () => {
 
   const stats: StatsData | null = useMemo(() => {
     if (!raw) return null;
-    const { profiles, conversations, messages, wallets, txs, counters } = raw;
+    const { profiles, conversations, messages, wallets, txs, counters, summary } = raw;
 
     // Earliest known timestamp anchors "All time" sparkline.
     const allTimes = [
@@ -474,11 +474,15 @@ const StatsTab = () => {
       return t >= from && t <= to;
     };
 
+    // Lifetime totals: prefer the cached summary (authoritative count from
+    // the materialized view) and fall back to row counts / counters.
     const totalConversationsEver = Math.max(
+      summary?.total_conversations ?? 0,
       counters.conversations_created_total ?? 0,
       conversations.length,
     );
     const totalMessagesEver = Math.max(
+      summary?.total_messages ?? 0,
       counters.messages_created_total ?? 0,
       messages.length,
     );
