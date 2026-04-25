@@ -1,13 +1,13 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { toast } from "sonner";
 import { Apple, Copy, ExternalLink, Mail, ShieldAlert, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
 import { useAuth } from "@/hooks/useAuth";
 import { signInWithSolana } from "@/lib/siws";
+import { useWalletPicker } from "@/components/WalletPicker";
 import { VisionLogo } from "@/components/VisionLogo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,7 +30,7 @@ const Auth = () => {
   const navigate = useNavigate();
   const { session, loading } = useAuth();
   const { publicKey, signMessage, connected, disconnect } = useWallet();
-  const { setVisible } = useWalletModal();
+  const { open: openWalletPicker, Picker } = useWalletPicker();
 
   const [tab, setTab] = useState<"email" | "wallet">("email");
   const [mode, setMode] = useState<"signin" | "signup">("signin");
@@ -151,7 +151,7 @@ const Auth = () => {
     if (!connected || !publicKey || !signMessage) {
       // Open the wallet picker, then auto-sign once a wallet connects.
       setPendingSign(true);
-      setVisible(true);
+      openWalletPicker();
       return;
     }
     void runWalletSignature();
@@ -437,6 +437,7 @@ const Auth = () => {
           <p className="mt-8 text-center font-mono text-[10px] tracking-widest uppercase text-muted-foreground/50 lg:text-left">
             By continuing you agree to our terms.
           </p>
+          {Picker}
         </div>
       </section>
     </main>
