@@ -1556,26 +1556,46 @@ const UsersTab = () => {
                       <CopyId value={p.user_id} />
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => resendWelcome(p)}
-                        disabled={!email || isResending}
-                        title={
-                          email
-                            ? "Resend the welcome email"
-                            : isSynthetic
-                              ? "Wallet-only account — no email on file"
-                              : "No email on file"
-                        }
-                      >
-                        {isResending ? (
-                          <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <MailPlus className="mr-1 h-3.5 w-3.5" />
-                        )}
-                        Resend welcome
-                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" disabled={busy}>
+                            {busy ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <MoreHorizontal className="h-4 w-4" />
+                            )}
+                            <span className="sr-only">Open user actions</span>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuItem
+                            onClick={() => resendWelcome(p)}
+                            disabled={!email}
+                          >
+                            <MailPlus className="mr-2 h-3.5 w-3.5" />
+                            Resend welcome
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => makeAdmin(p)}
+                            disabled={!isSuperAdmin || isAlreadyAdmin}
+                          >
+                            <Shield className="mr-2 h-3.5 w-3.5" />
+                            {isAlreadyAdmin ? "Already admin" : "Make admin"}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setDeleteConfirm("");
+                              setDeleteTarget(p);
+                            }}
+                            disabled={!isSuperAdmin || isSelf || isTargetSuperAdmin}
+                            className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                          >
+                            <Trash2 className="mr-2 h-3.5 w-3.5" />
+                            Delete user
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 );
