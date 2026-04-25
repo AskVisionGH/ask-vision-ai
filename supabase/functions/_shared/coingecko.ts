@@ -242,21 +242,23 @@ export interface CgCandle {
  */
 export async function fetchCgCandles(
   coin: CgCoin,
-  interval: "5m" | "15m" | "1h" | "4h" | "1d",
+  interval: "5m" | "30m" | "1h" | "4h" | "1d" | "1w" | "1mo",
 ): Promise<CgCandle[]> {
   // Map our interval → coingecko params + target bucket size in seconds.
   const cfg: Record<typeof interval, { days: number; bucketSecs: number }> = {
     "5m":  { days: 1,   bucketSecs: 5 * 60 },
-    "15m": { days: 1,   bucketSecs: 15 * 60 },
+    "30m": { days: 1,   bucketSecs: 30 * 60 },
     "1h":  { days: 7,   bucketSecs: 60 * 60 },
     "4h":  { days: 30,  bucketSecs: 4 * 60 * 60 },
     "1d":  { days: 180, bucketSecs: 24 * 60 * 60 },
+    "1w":  { days: 365, bucketSecs: 7 * 24 * 60 * 60 },
+    "1mo": { days: 365, bucketSecs: 30 * 24 * 60 * 60 },
   };
   const { days, bucketSecs } = cfg[interval];
 
-  // For 1h, 4h, 1d we use the /ohlc endpoint (real OHLC, no synth).
-  // For 5m/15m we have to re-bucket /market_chart minute data.
-  if (interval === "1h" || interval === "4h" || interval === "1d") {
+  // For 1h, 4h, 1d, 1w, 1mo we use the /ohlc endpoint (real OHLC, no synth).
+  // For 5m/30m we have to re-bucket /market_chart minute data.
+  if (interval === "1h" || interval === "4h" || interval === "1d" || interval === "1w" || interval === "1mo") {
     try {
       const resp = await fetch(
         `${CG_BASE}/coins/${coin.id}/ohlc?vs_currency=usd&days=${days}`,
