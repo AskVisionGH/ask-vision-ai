@@ -16,6 +16,7 @@ interface WalletMeta {
   label: string;
   twitterHandle: string | null;
   category: string | null;
+  notes: string | null;
   isCurated: boolean;
   isUserAdded: boolean;
 }
@@ -101,6 +102,14 @@ const NOISE_ADDRESSES = new Set<string>([
 ]);
 
 const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+const ACTIVE_CATEGORIES = new Set(["trader", "kol"]);
+const LOW_PRIORITY_CATEGORIES = new Set(["founder"]);
+const MAX_TRACKED_WALLETS = 12;
+const PINNED_WALLETS = 6;
+const ROTATION_WINDOW_MS = 2 * 60 * 60 * 1000;
+const HELIUS_BATCH_SIZE = 1;
+const HELIUS_RETRY_DELAYS_MS = [250, 700, 1400];
+const TRADE_CACHE_TTL_MS = 5 * 60 * 1000;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Handler
@@ -146,31 +155,24 @@ serve(async (req) => {
       });
     }
 
-    // 2. Sample wallets. Prioritize user-added, then curated traders/KOLs/founders.
-    //    Skip categories that don't actively trade (protocol treasuries,
-    //    market makers, VCs) and filter out invalid placeholder addresses.
-    const NON_TRADING_CATEGORIES = new Set(["protocol", "mm", "vc"]);
-    const sortedWallets = [...wallets.values()]
-      .filter((w) => BASE58_RE.test(w.address))
-      .filter((w) => !NOISE_ADDRESSES.has(w.address))
-      .filter((w) => w.isUserAdded || !NON_TRADING_CATEGORIES.has(w.category ?? ""))
-      .sort((a, b) => {
-        const aScore = (a.isUserAdded ? 2 : 0) + (a.isCurated ? 1 : 0);
-        const bScore = (b.isUserAdded ? 2 : 0) + (b.isCurated ? 1 : 0);
-        return bScore - aScore;
-      })
-      .slice(0, 18);
+    // 2. Select wallets. Keep user-added + verified wallets pinned, then rotate
+    //    through the broader trader/KOL pool so we don't query the same low-
+    //    signal addresses every request.
+    const sortedWallets = selectWallets(wallets, Date.now());
 
     // 3. Fetch wallet activity with a conservative concurrency limit so we
     //    don't get Helius 429s and collapse to an empty result set.
     const rawTrades: RawTrade[] = [];
-    for (let i = 0; i < sortedWallets.length; i += 6) {
-      const batch = sortedWallets.slice(i, i + 6);
+    for (let i = 0; i < sortedWallets.length; i += HELIUS_BATCH_SIZE) {
+      const batch = sortedWallets.slice(i, i + HELIUS_BATCH_SIZE);
       const results = await Promise.allSettled(
-        batch.map((meta) => fetchWalletTrades(meta, HELIUS_API_KEY, cutoff)),
+        batch.map((meta) => fetchWalletTrades(meta, HELIUS_API_KEY, cutoff, windowHours)),
       );
       for (const r of results) {
         if (r.status === "fulfilled") rawTrades.push(...r.value);
+      }
+      if (i + HELIUS_BATCH_SIZE < sortedWallets.length) {
+        await sleep(150);
       }
     }
 
@@ -320,7 +322,7 @@ async function loadWallets(supabase: ReturnType<typeof createClient>, userId: st
   // 1. Curated seed (always present).
   const { data: curated } = await supabase
     .from("smart_wallets_global_seed")
-    .select("address, label, twitter_handle, category");
+    .select("address, label, twitter_handle, category, notes");
 
   for (const row of curated ?? []) {
     wallets.set(row.address, {
@@ -328,6 +330,7 @@ async function loadWallets(supabase: ReturnType<typeof createClient>, userId: st
       label: row.label,
       twitterHandle: row.twitter_handle,
       category: row.category,
+      notes: row.notes,
       isCurated: true,
       isUserAdded: false,
     });
@@ -344,6 +347,7 @@ async function loadWallets(supabase: ReturnType<typeof createClient>, userId: st
       label: trader.label,
       twitterHandle: null,
       category: "trader",
+      notes: "live_feed",
       isCurated: true,
       isUserAdded: false,
     });
@@ -365,6 +369,7 @@ async function loadWallets(supabase: ReturnType<typeof createClient>, userId: st
           label: row.label,
           twitterHandle: row.twitter_handle,
           category: null,
+          notes: null,
           isCurated: false,
           isUserAdded: true,
         });
@@ -374,6 +379,71 @@ async function loadWallets(supabase: ReturnType<typeof createClient>, userId: st
 
   return wallets;
 }
+
+function selectWallets(wallets: Map<string, WalletMeta>, now: number) {
+  const eligible = [...wallets.values()]
+    .filter((w) => BASE58_RE.test(w.address))
+    .filter((w) => !NOISE_ADDRESSES.has(w.address))
+    .filter((w) => w.isUserAdded || ACTIVE_CATEGORIES.has(w.category ?? ""));
+
+  const pinned = eligible
+    .filter((w) => w.isUserAdded || w.notes === "verified" || w.notes === "live_feed")
+    .sort(compareWalletPriority)
+    .slice(0, PINNED_WALLETS);
+
+  const pinnedSet = new Set(pinned.map((w) => w.address));
+  const rotatingPool = eligible
+    .filter((w) => !pinnedSet.has(w.address))
+    .sort((a, b) => {
+      const bucketDiff = walletRotationBucket(a.address, now) - walletRotationBucket(b.address, now);
+      if (bucketDiff !== 0) return bucketDiff;
+      return compareWalletPriority(a, b);
+    });
+
+  const rotated = [...pinned, ...rotatingPool].slice(0, MAX_TRACKED_WALLETS);
+  const fallback = [...wallets.values()]
+    .filter((w) => BASE58_RE.test(w.address))
+    .filter((w) => !pinnedSet.has(w.address))
+    .filter((w) => !NOISE_ADDRESSES.has(w.address))
+    .filter((w) => LOW_PRIORITY_CATEGORIES.has(w.category ?? ""))
+    .sort(compareWalletPriority);
+
+  for (const wallet of fallback) {
+    if (rotated.length >= MAX_TRACKED_WALLETS) break;
+    rotated.push(wallet);
+  }
+
+  return rotated;
+}
+
+function compareWalletPriority(a: WalletMeta, b: WalletMeta) {
+  const score = (wallet: WalletMeta) => {
+    let total = 0;
+    if (wallet.isUserAdded) total += 8;
+    if (wallet.notes === "verified") total += 6;
+    if (wallet.notes === "live_feed") total += 5;
+    if (wallet.category === "trader") total += 3;
+    if (wallet.category === "kol") total += 2;
+    return total;
+  };
+
+  return score(b) - score(a) || a.label.localeCompare(b.label);
+}
+
+function walletRotationBucket(address: string, now: number) {
+  const window = Math.floor(now / ROTATION_WINDOW_MS);
+  return (stableHash(address) + window) % 1000;
+}
+
+function stableHash(input: string) {
+  let hash = 0;
+  for (let i = 0; i < input.length; i++) {
+    hash = (hash * 31 + input.charCodeAt(i)) % 2147483647;
+  }
+  return hash;
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Birdeye top-traders feed
@@ -386,6 +456,7 @@ interface BirdeyeTrader {
 }
 
 let birdeyeCache: { fetchedAt: number; traders: BirdeyeTrader[] } | null = null;
+let tradeCache = new Map<string, { fetchedAt: number; trades: any[] }>();
 const BIRDEYE_TTL_MS = 6 * 60 * 60 * 1000; // 6h
 
 async function fetchBirdeyeTopTraders(): Promise<BirdeyeTrader[]> {
@@ -397,12 +468,12 @@ async function fetchBirdeyeTopTraders(): Promise<BirdeyeTrader[]> {
   const apiKey = Deno.env.get("BIRDEYE_API_KEY");
   if (!apiKey) return [];
 
-  // Pull both gainers (this week) and yesterday for breadth. 10 per call is
-  // the max — we make two calls to get up to ~20 unique traders.
+  // Pull a single weekly leaders page to avoid burning quota on low-value
+  // secondary requests when the provider is already rate-limiting.
   const traders: BirdeyeTrader[] = [];
   const seen = new Set<string>();
 
-  for (const type of ["1W", "yesterday"] as const) {
+  for (const type of ["1W"] as const) {
     try {
       const url =
         `https://public-api.birdeye.so/trader/gainers-losers` +
@@ -447,8 +518,9 @@ async function fetchWalletTrades(
   meta: WalletMeta,
   apiKey: string,
   cutoff: number,
+  windowHours: number,
 ): Promise<RawTrade[]> {
-  const txs = await fetchEnhancedTxs(meta.address, apiKey, cutoff);
+  const txs = await fetchEnhancedTxs(meta.address, apiKey, cutoff, windowHours);
   const out: RawTrade[] = [];
 
   for (const tx of txs) {
@@ -489,11 +561,22 @@ async function fetchWalletTrades(
   return out;
 }
 
-async function fetchEnhancedTxs(address: string, apiKey: string, cutoff: number): Promise<any[]> {
+async function fetchEnhancedTxs(
+  address: string,
+  apiKey: string,
+  cutoff: number,
+  windowHours: number,
+): Promise<any[]> {
+  const cacheKey = `${address}:${windowHours}`;
+  const cached = tradeCache.get(cacheKey);
+  if (cached && Date.now() - cached.fetchedAt < TRADE_CACHE_TTL_MS) {
+    return cached.trades.filter((t) => (t.timestamp ?? 0) >= cutoff);
+  }
+
   const out: any[] = [];
   let before: string | null = null;
-  const PER_PAGE = 100;
-  const MAX_PAGES = 4;
+  const PER_PAGE = 50;
+  const MAX_PAGES = windowHours <= 24 ? 1 : 2;
 
   for (let page = 0; page < MAX_PAGES; page++) {
     const url = new URL(`https://api.helius.xyz/v0/addresses/${address}/transactions`);
@@ -501,7 +584,7 @@ async function fetchEnhancedTxs(address: string, apiKey: string, cutoff: number)
     url.searchParams.set("limit", String(PER_PAGE));
     if (before) url.searchParams.set("before", before);
 
-    const resp = await fetch(url.toString());
+    const resp = await fetchWithRetry(url.toString());
     if (!resp.ok) {
       console.error("[smart-money-activity] Helius enhanced txs error:", resp.status);
       break;
@@ -516,7 +599,23 @@ async function fetchEnhancedTxs(address: string, apiKey: string, cutoff: number)
     if (!before || oldestTs < cutoff) break;
   }
 
+  tradeCache.set(cacheKey, { fetchedAt: Date.now(), trades: out });
   return out.filter((t) => (t.timestamp ?? 0) >= cutoff);
+}
+
+async function fetchWithRetry(url: string) {
+  let lastResp: Response | null = null;
+
+  for (let attempt = 0; attempt <= HELIUS_RETRY_DELAYS_MS.length; attempt++) {
+    const resp = await fetch(url);
+    if (resp.status !== 429) return resp;
+    lastResp = resp;
+    const delay = HELIUS_RETRY_DELAYS_MS[attempt];
+    if (delay == null) break;
+    await sleep(delay);
+  }
+
+  return lastResp ?? fetch(url);
 }
 
 function pickSwapSide(
