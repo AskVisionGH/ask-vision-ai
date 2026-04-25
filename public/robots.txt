@@ -1,3 +1,22 @@
+# Vision — robots.txt
+# Public marketing surface lives at /; authed app routes are noindexed via meta.
+
+User-agent: *
+Allow: /
+Disallow: /chat
+Disallow: /onboarding
+Disallow: /settings
+Disallow: /contacts
+Disallow: /tracked-wallets
+Disallow: /trade
+Disallow: /alerts
+Disallow: /admin
+Disallow: /reset-password
+Disallow: /unsubscribe
+
+# Allow shared (public) conversations to be indexed
+Allow: /shared/
+
 User-agent: Googlebot
 Allow: /
 
@@ -10,5 +29,14 @@ Allow: /
 User-agent: facebookexternalhit
 Allow: /
 
-User-agent: *
-Allow: /
+# Block known scrapers / AI training crawlers (opt-out)
+User-agent: GPTBot
+Disallow: /
+User-agent: CCBot
+Disallow: /
+User-agent: anthropic-ai
+Disallow: /
+User-agent: ClaudeBot
+Disallow: /
+
+Sitemap: https://app.askvision.ai/sitemap.xml
