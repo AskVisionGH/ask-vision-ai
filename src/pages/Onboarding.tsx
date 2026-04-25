@@ -226,9 +226,11 @@ const Onboarding = () => {
   };
 
   // Disable Continue when the current step requires a choice but none made.
+  const isEmailValid = email.trim().includes("@") && email.trim().length >= 5;
   const canContinue = (() => {
-    if (transitioning || finishing || savingAvatar) return false;
+    if (transitioning || finishing || savingAvatar || savingEmail) return false;
     if (step === "welcome") return isNameValid;
+    if (step === "email") return emailSubmitted || isEmailValid;
     if (step === "experience") return experience !== null;
     if (step === "risk") return risk !== null;
     return true;
