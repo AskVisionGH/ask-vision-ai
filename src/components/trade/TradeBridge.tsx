@@ -382,7 +382,13 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
       try {
         signed = await signTransaction(tx);
       } catch {
-        if (mounted.current) setPhase({ name: "error", message: "Cancelled — try again." });
+        if (mounted.current) setPhase({
+          name: "cancelled",
+          fromAmountUi: numericAmount,
+          fromSymbol: fromToken.symbol,
+          toAmountUi: Number(quote.toAmountAtomic) / Math.pow(10, toToken.decimals),
+          toSymbol: toToken.symbol,
+        });
         return;
       }
 
