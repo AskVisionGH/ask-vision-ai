@@ -13,8 +13,6 @@ import {
   isAndroid,
   isIOS,
   shouldUseCustomMobileSheet,
-  openInPhantom,
-  openInSolflare,
 } from "@/lib/mobile-wallet";
 
 /**
@@ -39,47 +37,50 @@ export const useWalletPicker = () => {
     setVisible(true);
   };
 
-  // On Android we route every wallet pick through the Mobile Wallet Adapter
-  // (the only thing that can actually reach Phantom/Solflare/etc. from a
-  // regular Chrome tab). On iOS we deep-link into the wallet's in-app
-  // browser because MWA isn't available there.
-  const pickWallet = async (target: "phantom" | "solflare" | "mwa") => {
-    if (isIOS()) {
-      if (target === "phantom") openInPhantom();
-      else if (target === "solflare") openInSolflare();
-      else {
-        // No MWA on iOS — surface the standard modal as a last resort.
-        setMobileSheet(false);
-        setVisible(true);
+  // Mobile bridge order:
+  //   - Android: Mobile Wallet Adapter (native, fastest, supports any wallet)
+  //   - iOS:     WalletConnect (Reown) — opens the wallet app via deep link,
+  //              user signs, control returns to Safari. No in-app browser.
+  // Both keep the user in their original browser session, which means the
+  // logged-in Vision account is preserved.
+  const connectVia = async (adapterMatcher: (name: string) => boolean, label: string) => {
+    const wallet = wallets.find((w) => adapterMatcher(w.adapter.name.toLowerCase()));
+    if (!wallet) {
+      toast.error(`${label} not available`);
+      return;
+    }
+    try {
+      select(wallet.adapter.name);
+      await new Promise((r) => setTimeout(r, 0));
+      await connect();
+      setMobileSheet(false);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Couldn't open wallet";
+      if (!/user rejected|user cancel|user closed/i.test(msg)) {
+        toast.error("Wallet connection failed", { description: msg });
       }
+    }
+  };
+
+  const pickWallet = async (target: "phantom" | "solflare" | "other") => {
+    if (isAndroid()) {
+      // MWA handles the wallet picker itself on Android — for any target we
+      // just kick off MWA, which lets the user choose the right wallet.
+      await connectVia((n) => n.includes("mobile wallet adapter"), "Mobile Wallet Adapter");
       return;
     }
 
-    if (isAndroid()) {
-      const mwa = wallets.find((w) =>
-        w.adapter.name.toLowerCase().includes("mobile wallet adapter"),
-      );
-      if (!mwa) {
-        toast.error("Mobile Wallet Adapter not available");
+    if (isIOS()) {
+      if (target === "other") {
+        await connectVia((n) => n.includes("walletconnect"), "WalletConnect");
         return;
       }
-      try {
-        select(mwa.adapter.name);
-        // `select` is async-applied; `connect` against the new adapter
-        // sometimes races, so let the next tick run first.
-        await new Promise((r) => setTimeout(r, 0));
-        await connect();
-        setMobileSheet(false);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "Couldn't open wallet";
-        if (!/user rejected|user cancel/i.test(msg)) {
-          toast.error("Wallet connection failed", { description: msg });
-        }
-      }
+      // Phantom & Solflare both speak WalletConnect — the WC modal on iOS
+      // automatically deep-links into the wallet the user picks there.
+      await connectVia((n) => n.includes("walletconnect"), "WalletConnect");
       return;
     }
 
-    // Fallback: open the standard modal.
     setMobileSheet(false);
     setVisible(true);
   };
@@ -92,9 +93,8 @@ export const useWalletPicker = () => {
             Connect a wallet
           </DialogTitle>
           <DialogDescription className="text-center text-xs text-muted-foreground">
-            {isAndroid()
-              ? "Pick the wallet you have installed — we'll hand off to it."
-              : "Mobile wallets need to open this site in their built-in browser to connect."}
+            Pick a wallet — you'll approve the connection in the wallet app
+            and come right back here.
           </DialogDescription>
         </DialogHeader>
 
@@ -107,7 +107,7 @@ export const useWalletPicker = () => {
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#AB9FF2] text-base">
               👻
             </span>
-            <span className="flex-1">{isIOS() ? "Open in Phantom" : "Phantom"}</span>
+            <span className="flex-1">Phantom</span>
           </button>
 
           <button
@@ -118,27 +118,23 @@ export const useWalletPicker = () => {
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#FFCC00] text-base">
               ☀️
             </span>
-            <span className="flex-1">{isIOS() ? "Open in Solflare" : "Solflare"}</span>
+            <span className="flex-1">Solflare</span>
           </button>
 
-          {isAndroid() && (
-            <button
-              type="button"
-              onClick={() => pickWallet("mwa")}
-              className="flex w-full items-center gap-3 rounded-xl border border-border bg-secondary px-4 py-3 text-left text-sm font-medium text-foreground hover:bg-muted ease-vision"
-            >
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 text-primary">
-                📱
-              </span>
-              <span className="flex-1">Other wallet (Backpack, Trust…)</span>
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => pickWallet("other")}
+            className="flex w-full items-center gap-3 rounded-xl border border-border bg-secondary px-4 py-3 text-left text-sm font-medium text-foreground hover:bg-muted ease-vision"
+          >
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 text-primary">
+              📱
+            </span>
+            <span className="flex-1">Other wallet (Backpack, Trust…)</span>
+          </button>
         </div>
 
         <p className="mt-4 text-center text-[10px] uppercase tracking-widest text-muted-foreground/60">
-          {isAndroid()
-            ? "Don't have one? Install Phantom or Solflare from the Play Store."
-            : "Don't have one? Install Phantom or Solflare first."}
+          Don't have a wallet? Install Phantom or Solflare first.
         </p>
       </DialogContent>
     </Dialog>
