@@ -483,16 +483,26 @@ const CandleChart = ({ candles, interval, view, setView, isUp }: ChartProps) => 
     dragRef.current = null;
   };
 
-  const handleWheel = (e: React.WheelEvent<SVGSVGElement>) => {
-    if (Math.abs(e.deltaY) < 1) return;
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? 6 : -6;
-    setView((v) => {
-      const nextCount = Math.max(MIN_VISIBLE, Math.min(MAX_VISIBLE, Math.min(total, v.count + delta)));
-      const nextEnd = Math.min(total, Math.max(nextCount, v.end));
-      return { end: nextEnd, count: nextCount };
-    });
-  };
+  // Native non-passive wheel listener so we can preventDefault and stop the
+  // page from scrolling while the cursor is over the chart. React's synthetic
+  // onWheel is passive in modern React.
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaY) < 1) return;
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? 6 : -6;
+      const total = totalRef.current;
+      setView((v) => {
+        const nextCount = Math.max(MIN_VISIBLE, Math.min(MAX_VISIBLE, Math.min(total, v.count + delta)));
+        const nextEnd = Math.min(total, Math.max(nextCount, v.end));
+        return { end: nextEnd, count: nextCount };
+      });
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [setView]);
 
   // Touch pinch zoom.
   const touchesRef = useRef<Map<number, { x: number; y: number }>>(new Map());
