@@ -315,11 +315,13 @@ function json(body: unknown, status = 200) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function loadWallets(supabase: ReturnType<typeof createClient>, userId: string | null) {
+  const wallets = new Map<string, WalletMeta>();
+
+  // 1. Curated seed (always present).
   const { data: curated } = await supabase
     .from("smart_wallets_global_seed")
     .select("address, label, twitter_handle, category");
 
-  const wallets = new Map<string, WalletMeta>();
   for (const row of curated ?? []) {
     wallets.set(row.address, {
       address: row.address,
@@ -331,6 +333,23 @@ async function loadWallets(supabase: ReturnType<typeof createClient>, userId: st
     });
   }
 
+  // 2. Live top-traders from Birdeye (this-week PnL leaders). This keeps
+  //    the roster fresh as the market rotates without us having to
+  //    re-curate the seed by hand. Cached for 6h to avoid burning API quota.
+  const birdeyeTraders = await fetchBirdeyeTopTraders();
+  for (const trader of birdeyeTraders) {
+    if (wallets.has(trader.address)) continue;
+    wallets.set(trader.address, {
+      address: trader.address,
+      label: trader.label,
+      twitterHandle: null,
+      category: "trader",
+      isCurated: true,
+      isUserAdded: false,
+    });
+  }
+
+  // 3. User-added wallets (highest priority).
   if (userId) {
     const { data: usr } = await supabase
       .from("smart_wallets")
@@ -354,6 +373,70 @@ async function loadWallets(supabase: ReturnType<typeof createClient>, userId: st
   }
 
   return wallets;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Birdeye top-traders feed
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface BirdeyeTrader {
+  address: string;
+  label: string;
+  pnl: number;
+}
+
+let birdeyeCache: { fetchedAt: number; traders: BirdeyeTrader[] } | null = null;
+const BIRDEYE_TTL_MS = 6 * 60 * 60 * 1000; // 6h
+
+async function fetchBirdeyeTopTraders(): Promise<BirdeyeTrader[]> {
+  const now = Date.now();
+  if (birdeyeCache && now - birdeyeCache.fetchedAt < BIRDEYE_TTL_MS) {
+    return birdeyeCache.traders;
+  }
+
+  const apiKey = Deno.env.get("BIRDEYE_API_KEY");
+  if (!apiKey) return [];
+
+  // Pull both gainers (this week) and yesterday for breadth. 10 per call is
+  // the max — we make two calls to get up to ~20 unique traders.
+  const traders: BirdeyeTrader[] = [];
+  const seen = new Set<string>();
+
+  for (const type of ["1W", "yesterday"] as const) {
+    try {
+      const url =
+        `https://public-api.birdeye.so/trader/gainers-losers` +
+        `?type=${type}&sort_by=PnL&sort_type=desc&offset=0&limit=10`;
+      const resp = await fetch(url, {
+        headers: {
+          Accept: "application/json",
+          "X-API-KEY": apiKey,
+          "x-chain": "solana",
+        },
+      });
+      if (!resp.ok) {
+        console.error(`[smart-money-activity] Birdeye ${type} HTTP`, resp.status);
+        continue;
+      }
+      const data = await resp.json();
+      const items = data?.data?.items;
+      if (!Array.isArray(items)) continue;
+      for (const it of items) {
+        if (!it?.address || seen.has(it.address)) continue;
+        seen.add(it.address);
+        traders.push({
+          address: it.address,
+          label: `Top trader (${type === "1W" ? "7d" : "1d"})`,
+          pnl: Number(it?.pnl ?? 0),
+        });
+      }
+    } catch (e) {
+      console.error(`[smart-money-activity] Birdeye ${type} error`, e);
+    }
+  }
+
+  birdeyeCache = { fetchedAt: now, traders };
+  return traders;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
