@@ -258,6 +258,19 @@ export const AlertPreferences = () => {
           </div>
         )}
       </section>
+
+      <PushEnableDialog
+        open={showEnableDialog}
+        busy={push.busy}
+        onEnable={() => void runEnable()}
+        onDismiss={() => setShowEnableDialog(false)}
+      />
+      <PushDeniedDialog
+        open={showDeniedDialog}
+        busy={push.busy}
+        onRetry={() => void runEnable()}
+        onDismiss={() => setShowDeniedDialog(false)}
+      />
     </div>
   );
 };
