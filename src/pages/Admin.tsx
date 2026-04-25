@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, ArrowLeftRight, BarChart3, CalendarIcon, Check, Copy, ExternalLink, History, Loader2, Mail, MailCheck, MessageSquare, RefreshCw, Send, Shield, ShieldOff, TrendingUp, UserCheck, Users, Wallet } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowLeftRight, BarChart3, CalendarIcon, Check, Copy, ExternalLink, History, Loader2, Mail, MailCheck, MailPlus, MessageSquare, RefreshCw, Send, Shield, ShieldOff, TrendingUp, UserCheck, Users, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
@@ -26,6 +26,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -243,6 +253,18 @@ type RawStats = {
   wallets: WalletLite[];
   txs: TxLite[];
   counters: Record<string, number>;
+  summary: {
+    total_users: number;
+    onboarded_users: number;
+    total_conversations: number;
+    total_messages: number;
+    total_wallet_links: number;
+    unique_linked_wallets: number;
+    total_txs: number;
+    total_volume_usd: number;
+    total_treasury_usd: number;
+    refreshed_at: string;
+  } | null;
 };
 
 type RangeKey = "1h" | "1d" | "1w" | "1m" | "1y" | "all" | "custom";
@@ -374,6 +396,7 @@ const StatsTab = () => {
         walletsRes,
         txRes,
         countersRes,
+        summaryRes,
       ] = await Promise.all([
         supabase
           .from("profiles")
@@ -390,6 +413,9 @@ const StatsTab = () => {
           .or("metadata->>via.is.null,metadata->>via.neq.helius_webhook")
           .limit(50000),
         supabase.from("app_counters").select("key, value"),
+        // Cached lifetime totals — refreshed every 5 min by pg_cron, used as
+        // an authoritative floor when row queries hit the 1k–50k limits.
+        supabase.rpc("admin_get_stats_summary"),
       ]);
 
       const profiles = (profilesRes.data ?? []) as ProfileLite[];
@@ -400,8 +426,23 @@ const StatsTab = () => {
       const counters = Object.fromEntries(
         ((countersRes.data ?? []) as Array<{ key: string; value: number }>).map((c) => [c.key, Number(c.value)]),
       );
+      const summaryRow = Array.isArray(summaryRes.data) ? summaryRes.data[0] : null;
+      const summary = summaryRow
+        ? {
+            total_users: Number(summaryRow.total_users ?? 0),
+            onboarded_users: Number(summaryRow.onboarded_users ?? 0),
+            total_conversations: Number(summaryRow.total_conversations ?? 0),
+            total_messages: Number(summaryRow.total_messages ?? 0),
+            total_wallet_links: Number(summaryRow.total_wallet_links ?? 0),
+            unique_linked_wallets: Number(summaryRow.unique_linked_wallets ?? 0),
+            total_txs: Number(summaryRow.total_txs ?? 0),
+            total_volume_usd: Number(summaryRow.total_volume_usd ?? 0),
+            total_treasury_usd: Number(summaryRow.total_treasury_usd ?? 0),
+            refreshed_at: String(summaryRow.refreshed_at ?? ""),
+          }
+        : null;
 
-      setRaw({ profiles, conversations, messages, wallets, txs, counters });
+      setRaw({ profiles, conversations, messages, wallets, txs, counters, summary });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error";
       toast({ title: "Failed to load stats", description: msg, variant: "destructive" });
@@ -416,7 +457,7 @@ const StatsTab = () => {
 
   const stats: StatsData | null = useMemo(() => {
     if (!raw) return null;
-    const { profiles, conversations, messages, wallets, txs, counters } = raw;
+    const { profiles, conversations, messages, wallets, txs, counters, summary } = raw;
 
     // Earliest known timestamp anchors "All time" sparkline.
     const allTimes = [
@@ -433,11 +474,15 @@ const StatsTab = () => {
       return t >= from && t <= to;
     };
 
+    // Lifetime totals: prefer the cached summary (authoritative count from
+    // the materialized view) and fall back to row counts / counters.
     const totalConversationsEver = Math.max(
+      summary?.total_conversations ?? 0,
       counters.conversations_created_total ?? 0,
       conversations.length,
     );
     const totalMessagesEver = Math.max(
+      summary?.total_messages ?? 0,
       counters.messages_created_total ?? 0,
       messages.length,
     );
@@ -944,6 +989,9 @@ const TreasuryTab = () => {
   const [syncing, setSyncing] = useState(false);
   const [chainFilter, setChainFilter] = useState<"all" | "solana" | "ethereum">("all");
   const [kindFilter, setKindFilter] = useState<"all" | TreasuryFee["source_kind"]>("all");
+  const [range, setRange] = useState<RangeKey>("all");
+  const [customRange, setCustomRange] = useState<DateRange | undefined>();
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -1003,27 +1051,107 @@ const TreasuryTab = () => {
     }
   };
 
+  const dateBounds = useMemo(() => {
+    const earliest = fees.length > 0
+      ? new Date(fees[fees.length - 1].block_time).getTime()
+      : Date.now() - 30 * 86400000;
+    return rangeBounds(range, customRange, earliest);
+  }, [fees, range, customRange]);
+
+  const inDateRange = (iso: string) => {
+    const t = new Date(iso).getTime();
+    return t >= dateBounds.from && t <= dateBounds.to;
+  };
+
   const filtered = useMemo(() => {
     return fees.filter((f) => {
       if (chainFilter !== "all" && f.chain !== chainFilter) return false;
       if (kindFilter !== "all" && f.source_kind !== kindFilter) return false;
+      if (!inDateRange(f.block_time)) return false;
       return true;
     });
-  }, [fees, chainFilter, kindFilter]);
+  }, [fees, chainFilter, kindFilter, dateBounds]);
 
   const totals = useMemo(() => {
+    const inRange = fees.filter((f) => inDateRange(f.block_time));
     const sum = (rows: TreasuryFee[]) => rows.reduce((acc, r) => acc + (r.amount_usd ?? 0), 0);
     return {
-      all: sum(fees),
-      sol: sum(fees.filter((f) => f.chain === "solana")),
-      eth: sum(fees.filter((f) => f.chain === "ethereum")),
-      bridge: sum(fees.filter((f) => f.source_kind === "bridge_fee")),
-      count: fees.length,
+      all: sum(inRange),
+      sol: sum(inRange.filter((f) => f.chain === "solana")),
+      eth: sum(inRange.filter((f) => f.chain === "ethereum")),
+      bridge: sum(inRange.filter((f) => f.source_kind === "bridge_fee")),
+      count: inRange.length,
     };
-  }, [fees]);
+  }, [fees, dateBounds]);
+
+  const rangeLabel = range === "custom"
+    ? customRange?.from
+      ? `${format(customRange.from, "MMM d")}${customRange.to ? ` – ${format(customRange.to, "MMM d")}` : ""}`
+      : "Custom"
+    : RANGE_OPTIONS.find((r) => r.value === range)?.label ?? "All time";
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-medium text-muted-foreground">Treasury revenue</h2>
+          <p className="text-xs text-muted-foreground/70">{rangeLabel}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Select
+            value={range}
+            onValueChange={(v: RangeKey) => {
+              setRange(v);
+              if (v !== "custom") setCustomRange(undefined);
+              if (v === "custom") setCalendarOpen(true);
+            }}
+          >
+            <SelectTrigger className="h-9 w-[160px] text-xs">
+              <SelectValue placeholder="Range" />
+            </SelectTrigger>
+            <SelectContent>
+              {RANGE_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                  {opt.label}
+                </SelectItem>
+              ))}
+              <SelectItem value="custom" className="text-xs">Custom range…</SelectItem>
+            </SelectContent>
+          </Select>
+          {range === "custom" && (
+            <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs">
+                  <CalendarIcon className="h-3.5 w-3.5" />
+                  {customRange?.from
+                    ? customRange.to
+                      ? `${format(customRange.from, "MMM d")} – ${format(customRange.to, "MMM d")}`
+                      : format(customRange.from, "MMM d, yyyy")
+                    : "Pick dates"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-auto p-0">
+                <Calendar
+                  mode="range"
+                  selected={customRange}
+                  onSelect={setCustomRange}
+                  numberOfMonths={2}
+                  defaultMonth={customRange?.from ?? new Date()}
+                />
+              </PopoverContent>
+            </Popover>
+          )}
+          <Button size="sm" onClick={triggerSync} disabled={syncing || loading}>
+            {syncing || loading ? (
+              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-1 h-3.5 w-3.5" />
+            )}
+            Refresh
+          </Button>
+        </div>
+      </div>
+
       <div className="grid gap-3 sm:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
@@ -1051,42 +1179,30 @@ const TreasuryTab = () => {
         </Card>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap gap-1">
-          {(["all", "solana", "ethereum"] as const).map((c) => (
-            <Button
-              key={c}
-              size="sm"
-              variant={chainFilter === c ? "default" : "outline"}
-              onClick={() => setChainFilter(c)}
-              className="h-7 text-xs capitalize"
-            >
-              {c}
-            </Button>
-          ))}
-          <span className="mx-2 h-7 w-px bg-border" />
-          {(["all", "swap_fee", "limit_fee", "dca_fee", "bridge_fee", "sweep"] as const).map((k) => (
-            <Button
-              key={k}
-              size="sm"
-              variant={kindFilter === k ? "default" : "outline"}
-              onClick={() => setKindFilter(k)}
-              className="h-7 text-xs"
-            >
-              {k === "all" ? "All kinds" : SOURCE_LABELS[k]}
-            </Button>
-          ))}
-        </div>
-        <div className="flex gap-2">
-          <Button size="sm" onClick={triggerSync} disabled={syncing || loading}>
-            {syncing || loading ? (
-              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <RefreshCw className="mr-1 h-3.5 w-3.5" />
-            )}
-            Refresh
+      <div className="flex flex-wrap items-center gap-1">
+        {(["all", "solana", "ethereum"] as const).map((c) => (
+          <Button
+            key={c}
+            size="sm"
+            variant={chainFilter === c ? "default" : "outline"}
+            onClick={() => setChainFilter(c)}
+            className="h-7 text-xs capitalize"
+          >
+            {c}
           </Button>
-        </div>
+        ))}
+        <span className="mx-2 h-7 w-px bg-border" />
+        {(["all", "swap_fee", "limit_fee", "dca_fee", "bridge_fee", "sweep"] as const).map((k) => (
+          <Button
+            key={k}
+            size="sm"
+            variant={kindFilter === k ? "default" : "outline"}
+            onClick={() => setKindFilter(k)}
+            className="h-7 text-xs"
+          >
+            {k === "all" ? "All kinds" : SOURCE_LABELS[k]}
+          </Button>
+        ))}
       </div>
 
       <Card>
@@ -1165,10 +1281,44 @@ const UsersTab = () => {
   const [walletsByUser, setWalletsByUser] = useState<Record<string, WalletLink[]>>({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [resendingId, setResendingId] = useState<string | null>(null);
 
   // The two clickable-pill dialogs share open state via the focused user id.
   const [onboardingFor, setOnboardingFor] = useState<ProfileRow | null>(null);
   const [walletsFor, setWalletsFor] = useState<ProfileRow | null>(null);
+
+  const resendWelcome = async (p: ProfileRow) => {
+    const email = emails[p.user_id];
+    if (!email) {
+      toast({ title: "No email on file", variant: "destructive" });
+      return;
+    }
+    setResendingId(p.user_id);
+    try {
+      const name = p.display_name ?? email.split("@")[0];
+      // Use a fresh idempotency key each time so admin re-sends bypass the
+      // server-side dedupe and actually deliver another email.
+      const idempotencyKey = `welcome-resend-${p.user_id}-${Date.now()}`;
+      const { error } = await supabase.functions.invoke("send-transactional-email", {
+        body: {
+          templateName: "welcome",
+          recipientEmail: email,
+          idempotencyKey,
+          templateData: { name },
+        },
+      });
+      if (error) throw error;
+      toast({ title: "Welcome email resent", description: shortEmail(email) });
+    } catch (e) {
+      toast({
+        title: "Resend failed",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setResendingId(null);
+    }
+  };
 
   useEffect(() => {
     (async () => {
@@ -1251,19 +1401,20 @@ const UsersTab = () => {
                 <TableHead>Onboarded</TableHead>
                 <TableHead>Joined</TableHead>
                 <TableHead>User ID</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-10 text-center">
+                  <TableCell colSpan={7} className="py-10 text-center">
                     <Loader2 className="mx-auto h-4 w-4 animate-spin text-muted-foreground" />
                   </TableCell>
                 </TableRow>
               ) : null}
               {!loading && filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
                     No users found.
                   </TableCell>
                 </TableRow>
@@ -1271,6 +1422,7 @@ const UsersTab = () => {
               {filtered.map((p) => {
                 const email = emails[p.user_id];
                 const wallets = walletsByUser[p.user_id] ?? [];
+                const isResending = resendingId === p.user_id;
                 return (
                   <TableRow key={p.user_id}>
                     <TableCell className="font-medium">
@@ -1309,6 +1461,22 @@ const UsersTab = () => {
                     <TableCell className="text-xs">{format(new Date(p.created_at), "MMM d, yyyy")}</TableCell>
                     <TableCell>
                       <CopyId value={p.user_id} />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => resendWelcome(p)}
+                        disabled={!email || isResending}
+                        title={email ? "Resend the welcome email" : "No email on file"}
+                      >
+                        {isResending ? (
+                          <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <MailPlus className="mr-1 h-3.5 w-3.5" />
+                        )}
+                        Resend welcome
+                      </Button>
                     </TableCell>
                   </TableRow>
                 );
@@ -1481,25 +1649,44 @@ const WalletsDialog = ({
 
 /* -------------------------------- Roles tab ------------------------------- */
 
+type AuditRow = {
+  id: string;
+  actor_id: string | null;
+  target_id: string;
+  role: string;
+  action: string;
+  created_at: string;
+};
+
 const RolesTab = () => {
   const { user } = useAuth();
   const { isSuperAdmin, loading: superLoading } = useIsSuperAdmin();
   const [roles, setRoles] = useState<RoleRow[]>([]);
+  const [audit, setAudit] = useState<AuditRow[]>([]);
   const [nameByUserId, setNameByUserId] = useState<Record<string, string | null>>({});
+  const [emailByUserId, setEmailByUserId] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [granting, setGranting] = useState(false);
   const [newUserId, setNewUserId] = useState("");
+  // Typed-confirm dialog state — admin must type the matching user id to
+  // confirm. Stops fat-finger promotions caused by clipboard slip-ups.
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
 
   const load = async () => {
     setLoading(true);
-    const [rolesRes, profilesRes] = await Promise.all([
+    const [rolesRes, profilesRes, auditRes] = await Promise.all([
       supabase.from("user_roles").select("*").order("created_at", { ascending: false }),
       supabase.from("profiles").select("user_id, display_name"),
+      supabase.from("role_audit_log").select("*").order("created_at", { ascending: false }).limit(50),
     ]);
     if (rolesRes.error) {
       toast({ title: "Failed to load roles", description: rolesRes.error.message, variant: "destructive" });
     } else {
       setRoles((rolesRes.data ?? []) as RoleRow[]);
+    }
+    if (!auditRes.error && auditRes.data) {
+      setAudit(auditRes.data as AuditRow[]);
     }
     if (!profilesRes.error && profilesRes.data) {
       const map: Record<string, string | null> = {};
@@ -1508,6 +1695,23 @@ const RolesTab = () => {
       }
       setNameByUserId(map);
     }
+    // Hydrate emails for actor/target chips on the audit log.
+    const ids = Array.from(
+      new Set([
+        ...((rolesRes.data ?? []) as RoleRow[]).map((r) => r.user_id),
+        ...((auditRes.data ?? []) as AuditRow[]).flatMap((a) => [a.actor_id, a.target_id].filter((v): v is string => !!v)),
+      ]),
+    );
+    if (ids.length > 0) {
+      const { data: emails } = await supabase.rpc("admin_get_user_emails", { _user_ids: ids });
+      if (emails) {
+        const m: Record<string, string> = {};
+        for (const r of emails as { user_id: string; email: string | null }[]) {
+          if (r.email) m[r.user_id] = r.email;
+        }
+        setEmailByUserId(m);
+      }
+    }
     setLoading(false);
   };
 
@@ -1515,17 +1719,26 @@ const RolesTab = () => {
     load();
   }, []);
 
+  const openConfirm = () => {
+    const id = newUserId.trim();
+    if (!id) return;
+    setConfirmText("");
+    setConfirmOpen(true);
+  };
+
   const grant = async () => {
     const id = newUserId.trim();
     if (!id) return;
     setGranting(true);
     const { error } = await supabase.from("user_roles").insert({ user_id: id, role: "admin" });
     setGranting(false);
+    setConfirmOpen(false);
     if (error) {
       toast({ title: "Could not grant", description: error.message, variant: "destructive" });
       return;
     }
     setNewUserId("");
+    setConfirmText("");
     toast({ title: "Admin granted" });
     load();
   };
@@ -1548,6 +1761,12 @@ const RolesTab = () => {
     load();
   };
 
+  // Preview chunk for typed confirmation — show last 6 chars of pasted ID
+  // along with the matching user's name/email if known.
+  const targetName = nameByUserId[newUserId.trim()] ?? null;
+  const targetEmail = emailByUserId[newUserId.trim()] ?? null;
+  const confirmExpected = newUserId.trim().slice(-6);
+
   return (
     <div className="space-y-4">
       {/* Only super admins can manage roles. Regular admins see a read-only
@@ -1567,7 +1786,7 @@ const RolesTab = () => {
               onChange={(e) => setNewUserId(e.target.value)}
               className="font-mono text-xs"
             />
-            <Button onClick={grant} disabled={granting || !newUserId.trim()}>
+            <Button onClick={openConfirm} disabled={granting || !newUserId.trim()}>
               {granting ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Shield className="mr-1 h-3.5 w-3.5" />}
               Grant
             </Button>
@@ -1666,6 +1885,93 @@ const RolesTab = () => {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Audit log — last 50 grant/revoke actions, viewable by all admins. */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-1.5 text-sm">
+            <History className="h-3.5 w-3.5" /> Recent role changes
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Last 50 grants and revocations. Recorded automatically.
+          </p>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>When</TableHead>
+                <TableHead>Action</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Target</TableHead>
+                <TableHead>By</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {audit.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="py-6 text-center text-xs text-muted-foreground">
+                    No role changes recorded yet.
+                  </TableCell>
+                </TableRow>
+              ) : null}
+              {audit.map((a) => {
+                const targetLabel = nameByUserId[a.target_id] ?? emailByUserId[a.target_id] ?? shortId(a.target_id);
+                const actorLabel = a.actor_id
+                  ? nameByUserId[a.actor_id] ?? emailByUserId[a.actor_id] ?? shortId(a.actor_id)
+                  : "system";
+                return (
+                  <TableRow key={a.id}>
+                    <TableCell className="text-xs">{format(new Date(a.created_at), "MMM d HH:mm")}</TableCell>
+                    <TableCell>
+                      <Badge variant={a.action === "grant" ? "default" : "secondary"} className="text-xs">
+                        {a.action}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-xs">{a.role}</TableCell>
+                    <TableCell className="text-xs">{targetLabel}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{actorLabel}</TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Typed-confirm dialog — admin must retype the last 6 chars of the
+          user id before the grant goes through. Stops accidental promotions. */}
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Grant admin role?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You're about to grant <strong>admin</strong> access to{" "}
+              <span className="font-medium">{targetName ?? targetEmail ?? "this user"}</span>
+              {targetEmail ? <> (<span className="font-mono text-xs">{shortEmail(targetEmail)}</span>)</> : null}.
+              Admins can read all user data, treasury, and email logs.
+              Type <span className="font-mono text-xs">{confirmExpected}</span> (last 6 chars of their user id) to confirm.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            placeholder={confirmExpected}
+            className="font-mono text-xs"
+            autoFocus
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={grant}
+              disabled={granting || confirmText.trim() !== confirmExpected}
+            >
+              {granting ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+              Confirm grant
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
