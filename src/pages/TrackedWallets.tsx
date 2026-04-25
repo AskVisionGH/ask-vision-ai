@@ -68,6 +68,8 @@ const TrackedWallets = () => {
     addWallet,
     removeWallet,
     toggleCurated,
+    trackAllCurated,
+    untrackAllCurated,
   } = useSmartWallets();
 
   const [search, setSearch] = useState("");
