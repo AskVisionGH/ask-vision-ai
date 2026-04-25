@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { VisionLogo } from "@/components/VisionLogo";
 import { ChatPreview } from "@/components/ChatPreview";
 import { Button } from "@/components/ui/button";
+import { SEO } from "@/components/SEO";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -15,6 +16,11 @@ const Index = () => {
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-background text-foreground">
+      <SEO
+        title="Vision — Ask Anything, Unlock Everything"
+        description="The AI crypto assistant. Vision turns plain English into on-chain action — swap, send, track wallets, and explore markets through one conversation."
+        canonicalPath="/"
+      />
       <div className="pointer-events-none absolute inset-0 bg-aurora" aria-hidden />
       <div
         className="pointer-events-none absolute left-1/2 top-0 h-[60vh] w-[2px] -translate-x-1/2 beam animate-pulse-glow"
