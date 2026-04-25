@@ -560,16 +560,22 @@ const CandleChart = ({ candles, interval, view, setView, isUp }: ChartProps) => 
             <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity="0" />
           </linearGradient>
           <filter id="candle-glow-up" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="1.2" result="b" />
+            <feGaussianBlur stdDeviation="2.2" result="b" />
+            <feComponentTransfer in="b" result="b2">
+              <feFuncA type="linear" slope="0.45" />
+            </feComponentTransfer>
             <feMerge>
-              <feMergeNode in="b" />
+              <feMergeNode in="b2" />
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
           <filter id="candle-glow-down" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="1.2" result="b" />
+            <feGaussianBlur stdDeviation="2.2" result="b" />
+            <feComponentTransfer in="b" result="b2">
+              <feFuncA type="linear" slope="0.45" />
+            </feComponentTransfer>
             <feMerge>
-              <feMergeNode in="b" />
+              <feMergeNode in="b2" />
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
