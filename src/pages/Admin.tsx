@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
-import { ArrowLeft, ArrowLeftRight, BarChart3, Check, Copy, ExternalLink, Loader2, Mail, MessageSquare, RefreshCw, Send, Shield, ShieldOff, TrendingUp, UserCheck, Users, Wallet } from "lucide-react";
+import { ArrowLeft, ArrowLeftRight, BarChart3, CalendarIcon, Check, Copy, ExternalLink, Loader2, Mail, MessageSquare, RefreshCw, Send, Shield, ShieldOff, TrendingUp, UserCheck, Users, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
@@ -24,8 +24,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import type { DateRange } from "react-day-picker";
 import { EXPERIENCE_OPTIONS, INTEREST_OPTIONS, RISK_OPTIONS } from "@/lib/profile-options";
 
 type SweepRun = {
@@ -188,16 +198,15 @@ const Admin = () => {
 type StatsData = {
   totalUsers: number;
   onboardedUsers: number;
-  signupsLast7d: number;
-  signupsLast30d: number;
+  signupsInRange: number;
   signupsByDay: { date: string; count: number }[];
-  // "active" = currently in DB, "totalEver" = lifetime including deleted.
+  // "active" = currently in DB within the range.
   activeConversations: number;
   totalConversationsEver: number;
   activeMessages: number;
   totalMessagesEver: number;
-  messagesLast7d: number;
-  activeUsers7d: number;
+  messagesInRange: number;
+  activeUsersInRange: number;
   totalWalletLinks: number;
   uniqueLinkedWallets: number;
   totalTxs: number;
@@ -206,6 +215,65 @@ type StatsData = {
   experienceBreakdown: { value: string; count: number }[];
   riskBreakdown: { value: string; count: number }[];
   topInterests: { value: string; count: number }[];
+};
+
+type ProfileLite = {
+  user_id: string;
+  experience: string | null;
+  risk_tolerance: string | null;
+  interests: string[];
+  onboarding_completed: boolean;
+  created_at: string;
+};
+type ConvLite = { user_id: string; created_at: string };
+type MsgLite = { user_id: string; created_at: string };
+type WalletLite = { user_id: string; wallet_address: string; created_at: string };
+type TxLite = { kind: string; value_usd: number | null; created_at: string };
+
+type RawStats = {
+  profiles: ProfileLite[];
+  conversations: ConvLite[];
+  messages: MsgLite[];
+  wallets: WalletLite[];
+  txs: TxLite[];
+  counters: Record<string, number>;
+};
+
+type RangeKey = "1h" | "1d" | "1w" | "1m" | "1y" | "all" | "custom";
+
+const RANGE_OPTIONS: { value: Exclude<RangeKey, "custom">; label: string }[] = [
+  { value: "1h", label: "Last hour" },
+  { value: "1d", label: "Last 24 hours" },
+  { value: "1w", label: "Last 7 days" },
+  { value: "1m", label: "Last 30 days" },
+  { value: "1y", label: "Last year" },
+  { value: "all", label: "All time" },
+];
+
+const rangeBounds = (
+  range: RangeKey,
+  custom: DateRange | undefined,
+  earliest: number,
+): { from: number; to: number } => {
+  const now = Date.now();
+  if (range === "custom" && custom?.from) {
+    const fromDate = new Date(custom.from);
+    fromDate.setHours(0, 0, 0, 0);
+    const toDate = custom.to ? new Date(custom.to) : new Date(custom.from);
+    toDate.setHours(23, 59, 59, 999);
+    return { from: fromDate.getTime(), to: toDate.getTime() };
+  }
+  const hour = 60 * 60 * 1000;
+  const day = 24 * hour;
+  switch (range) {
+    case "1h": return { from: now - hour, to: now };
+    case "1d": return { from: now - day, to: now };
+    case "1w": return { from: now - 7 * day, to: now };
+    case "1m": return { from: now - 30 * day, to: now };
+    case "1y": return { from: now - 365 * day, to: now };
+    case "all":
+    default: return { from: earliest, to: now };
+  }
 };
 
 const StatCard = ({
@@ -284,13 +352,15 @@ const BreakdownBar = ({
 };
 
 const StatsTab = () => {
-  const [stats, setStats] = useState<StatsData | null>(null);
+  const [raw, setRaw] = useState<RawStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [range, setRange] = useState<RangeKey>("all");
+  const [customRange, setCustomRange] = useState<DateRange | undefined>();
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
     try {
-      // Pull everything in parallel — RLS lets admins see all rows.
       const [
         profilesRes,
         convsRes,
@@ -305,126 +375,27 @@ const StatsTab = () => {
           .limit(10000),
         supabase.from("conversations").select("id, user_id, created_at").limit(10000),
         supabase.from("messages").select("id, user_id, created_at").limit(50000),
-        supabase.from("wallet_links").select("user_id, wallet_address").limit(10000),
-        // Only count platform-originated transactions. Rows synced by the
-        // Helius webhook (any tracked-wallet activity, including external
-        // Raydium swaps and unrelated SOL transfers) are tagged
-        // metadata.via = "helius_webhook" and would otherwise inflate volume.
+        supabase.from("wallet_links").select("user_id, wallet_address, created_at").limit(10000),
+        // Only count platform-originated transactions. Helius webhook rows
+        // are tagged metadata.via = "helius_webhook" and would inflate volume.
         supabase
           .from("tx_events")
           .select("kind, value_usd, created_at")
           .or("metadata->>via.is.null,metadata->>via.neq.helius_webhook")
           .limit(50000),
-        // Lifetime counters survive deletes (DB triggers increment on insert).
         supabase.from("app_counters").select("key, value"),
       ]);
 
-      const profiles = (profilesRes.data ?? []) as Array<{
-        user_id: string;
-        experience: string | null;
-        risk_tolerance: string | null;
-        interests: string[];
-        onboarding_completed: boolean;
-        created_at: string;
-      }>;
-      const conversations = (convsRes.data ?? []) as Array<{ user_id: string; created_at: string }>;
-      const messages = (messagesRes.data ?? []) as Array<{ user_id: string; created_at: string }>;
-      const wallets = (walletsRes.data ?? []) as Array<{ user_id: string; wallet_address: string }>;
-      const txs = (txRes.data ?? []) as Array<{ kind: string; value_usd: number | null; created_at: string }>;
+      const profiles = (profilesRes.data ?? []) as ProfileLite[];
+      const conversations = (convsRes.data ?? []) as ConvLite[];
+      const messages = (messagesRes.data ?? []) as MsgLite[];
+      const wallets = (walletsRes.data ?? []) as WalletLite[];
+      const txs = (txRes.data ?? []) as TxLite[];
       const counters = Object.fromEntries(
         ((countersRes.data ?? []) as Array<{ key: string; value: number }>).map((c) => [c.key, Number(c.value)]),
       );
-      // Fall back to live counts if a counter is missing (e.g. backfill skipped).
-      const totalConversationsEver = Math.max(
-        counters.conversations_created_total ?? 0,
-        conversations.length,
-      );
-      const totalMessagesEver = Math.max(
-        counters.messages_created_total ?? 0,
-        messages.length,
-      );
 
-      const now = Date.now();
-      const day = 24 * 60 * 60 * 1000;
-      const since7 = now - 7 * day;
-      const since30 = now - 30 * day;
-
-      // Build a 30-day signup histogram (oldest → newest).
-      const dayBuckets: { date: string; count: number }[] = [];
-      const bucketIndex = new Map<string, number>();
-      for (let i = 29; i >= 0; i--) {
-        const d = new Date(now - i * day);
-        const key = d.toISOString().slice(0, 10);
-        bucketIndex.set(key, dayBuckets.length);
-        dayBuckets.push({ date: key, count: 0 });
-      }
-      for (const p of profiles) {
-        const key = p.created_at.slice(0, 10);
-        const idx = bucketIndex.get(key);
-        if (idx !== undefined) dayBuckets[idx].count += 1;
-      }
-
-      const signupsLast7d = profiles.filter((p) => new Date(p.created_at).getTime() >= since7).length;
-      const signupsLast30d = profiles.filter((p) => new Date(p.created_at).getTime() >= since30).length;
-      const messagesLast7d = messages.filter((m) => new Date(m.created_at).getTime() >= since7).length;
-      const activeUserSet = new Set(
-        messages.filter((m) => new Date(m.created_at).getTime() >= since7).map((m) => m.user_id),
-      );
-
-      // Tx aggregates
-      const txByKind: Record<string, { count: number; valueUsd: number }> = {};
-      let totalVolumeUsd = 0;
-      for (const t of txs) {
-        const bucket = (txByKind[t.kind] ??= { count: 0, valueUsd: 0 });
-        bucket.count += 1;
-        bucket.valueUsd += t.value_usd ?? 0;
-        totalVolumeUsd += t.value_usd ?? 0;
-      }
-
-      // Onboarding breakdowns
-      const tally = (key: "experience" | "risk_tolerance") => {
-        const counts = new Map<string, number>();
-        for (const p of profiles) {
-          const v = p[key];
-          if (!v) continue;
-          counts.set(v, (counts.get(v) ?? 0) + 1);
-        }
-        return [...counts.entries()]
-          .map(([value, count]) => ({ value, count }))
-          .sort((a, b) => b.count - a.count);
-      };
-      const interestCounts = new Map<string, number>();
-      for (const p of profiles) {
-        for (const i of p.interests ?? []) {
-          interestCounts.set(i, (interestCounts.get(i) ?? 0) + 1);
-        }
-      }
-      const topInterests = [...interestCounts.entries()]
-        .map(([value, count]) => ({ value, count }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 8);
-
-      setStats({
-        totalUsers: profiles.length,
-        onboardedUsers: profiles.filter((p) => p.onboarding_completed).length,
-        signupsLast7d,
-        signupsLast30d,
-        signupsByDay: dayBuckets,
-        activeConversations: conversations.length,
-        totalConversationsEver,
-        activeMessages: messages.length,
-        totalMessagesEver,
-        messagesLast7d,
-        activeUsers7d: activeUserSet.size,
-        totalWalletLinks: wallets.length,
-        uniqueLinkedWallets: new Set(wallets.map((w) => w.wallet_address)).size,
-        totalTxs: txs.length,
-        txByKind,
-        totalVolumeUsd,
-        experienceBreakdown: tally("experience"),
-        riskBreakdown: tally("risk_tolerance"),
-        topInterests,
-      });
+      setRaw({ profiles, conversations, messages, wallets, txs, counters });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error";
       toast({ title: "Failed to load stats", description: msg, variant: "destructive" });
@@ -437,6 +408,116 @@ const StatsTab = () => {
     load();
   }, []);
 
+  const stats: StatsData | null = useMemo(() => {
+    if (!raw) return null;
+    const { profiles, conversations, messages, wallets, txs, counters } = raw;
+
+    // Earliest known timestamp anchors "All time" sparkline.
+    const allTimes = [
+      ...profiles.map((p) => new Date(p.created_at).getTime()),
+      ...conversations.map((c) => new Date(c.created_at).getTime()),
+      ...messages.map((m) => new Date(m.created_at).getTime()),
+      ...txs.map((t) => new Date(t.created_at).getTime()),
+    ].filter((n) => Number.isFinite(n));
+    const earliest = allTimes.length > 0 ? Math.min(...allTimes) : Date.now() - 30 * 86400000;
+
+    const { from, to } = rangeBounds(range, customRange, earliest);
+    const inRange = (iso: string) => {
+      const t = new Date(iso).getTime();
+      return t >= from && t <= to;
+    };
+
+    const totalConversationsEver = Math.max(
+      counters.conversations_created_total ?? 0,
+      conversations.length,
+    );
+    const totalMessagesEver = Math.max(
+      counters.messages_created_total ?? 0,
+      messages.length,
+    );
+
+    const profilesInRange = profiles.filter((p) => inRange(p.created_at));
+    const messagesInRange = messages.filter((m) => inRange(m.created_at));
+    const conversationsInRange = conversations.filter((c) => inRange(c.created_at));
+    const walletsInRange = wallets.filter((w) => inRange(w.created_at));
+    const txsInRange = txs.filter((t) => inRange(t.created_at));
+
+    // Sparkline buckets across the active window. Hourly under 48h, else daily.
+    const span = Math.max(1, to - from);
+    const bucketMs = span <= 48 * 60 * 60 * 1000 ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+    const bucketCount = Math.min(60, Math.max(2, Math.ceil(span / bucketMs)));
+    const stepMs = span / bucketCount;
+    const dayBuckets: { date: string; count: number }[] = [];
+    for (let i = 0; i < bucketCount; i++) {
+      const start = from + i * stepMs;
+      const d = new Date(start);
+      const key = bucketMs >= 24 * 60 * 60 * 1000
+        ? d.toISOString().slice(0, 10)
+        : `${d.toISOString().slice(0, 10)} ${String(d.getUTCHours()).padStart(2, "0")}:00`;
+      dayBuckets.push({ date: key, count: 0 });
+    }
+    for (const p of profilesInRange) {
+      const t = new Date(p.created_at).getTime();
+      const idx = Math.min(bucketCount - 1, Math.max(0, Math.floor((t - from) / stepMs)));
+      dayBuckets[idx].count += 1;
+    }
+
+    const activeUserSet = new Set(messagesInRange.map((m) => m.user_id));
+
+    const txByKind: Record<string, { count: number; valueUsd: number }> = {};
+    let totalVolumeUsd = 0;
+    for (const t of txsInRange) {
+      const bucket = (txByKind[t.kind] ??= { count: 0, valueUsd: 0 });
+      bucket.count += 1;
+      bucket.valueUsd += t.value_usd ?? 0;
+      totalVolumeUsd += t.value_usd ?? 0;
+    }
+
+    // Onboarding breakdowns count only profiles created in the active range.
+    const tally = (key: "experience" | "risk_tolerance") => {
+      const counts = new Map<string, number>();
+      for (const p of profilesInRange) {
+        const v = p[key];
+        if (!v) continue;
+        counts.set(v, (counts.get(v) ?? 0) + 1);
+      }
+      return [...counts.entries()]
+        .map(([value, count]) => ({ value, count }))
+        .sort((a, b) => b.count - a.count);
+    };
+    const interestCounts = new Map<string, number>();
+    for (const p of profilesInRange) {
+      for (const i of p.interests ?? []) {
+        interestCounts.set(i, (interestCounts.get(i) ?? 0) + 1);
+      }
+    }
+    const topInterests = [...interestCounts.entries()]
+      .map(([value, count]) => ({ value, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8);
+
+    return {
+      totalUsers: profilesInRange.length,
+      onboardedUsers: profilesInRange.filter((p) => p.onboarding_completed).length,
+      signupsInRange: profilesInRange.length,
+      signupsByDay: dayBuckets,
+      activeConversations: conversationsInRange.length,
+      totalConversationsEver,
+      activeMessages: messagesInRange.length,
+      totalMessagesEver,
+      messagesInRange: messagesInRange.length,
+      activeUsersInRange: activeUserSet.size,
+      totalWalletLinks: walletsInRange.length,
+      uniqueLinkedWallets: new Set(walletsInRange.map((w) => w.wallet_address)).size,
+      totalTxs: txsInRange.length,
+      txByKind,
+      totalVolumeUsd,
+      experienceBreakdown: tally("experience"),
+      riskBreakdown: tally("risk_tolerance"),
+      topInterests,
+    };
+  }, [raw, range, customRange]);
+
   if (loading || !stats) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -448,31 +529,84 @@ const StatsTab = () => {
   const onboardedPct = stats.totalUsers > 0
     ? Math.round((stats.onboardedUsers / stats.totalUsers) * 100)
     : 0;
-  // Lifetime totals power the avg — deletes shouldn't make this number jump.
   const avgMessages = stats.totalUsers > 0
-    ? (stats.totalMessagesEver / stats.totalUsers).toFixed(1)
+    ? (stats.messagesInRange / stats.totalUsers).toFixed(1)
     : "0";
 
   const expLabel = Object.fromEntries(EXPERIENCE_OPTIONS.map((o) => [o.value, o.label]));
   const riskLabel = Object.fromEntries(RISK_OPTIONS.map((o) => [o.value, o.label]));
   const interestLabel = Object.fromEntries(INTEREST_OPTIONS.map((o) => [o.value, o.label]));
 
+  const rangeLabel = range === "custom"
+    ? customRange?.from
+      ? `${format(customRange.from, "MMM d")}${customRange.to ? ` – ${format(customRange.to, "MMM d")}` : ""}`
+      : "Custom"
+    : RANGE_OPTIONS.find((r) => r.value === range)?.label ?? "All time";
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-medium text-muted-foreground">Overview</h2>
-        <Button variant="outline" size="sm" onClick={load}>
-          <RefreshCw className="mr-1 h-3.5 w-3.5" /> Refresh
-        </Button>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-medium text-muted-foreground">Overview</h2>
+          <p className="text-xs text-muted-foreground/70">{rangeLabel}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Select
+            value={range}
+            onValueChange={(v: RangeKey) => {
+              setRange(v);
+              if (v !== "custom") setCustomRange(undefined);
+              if (v === "custom") setCalendarOpen(true);
+            }}
+          >
+            <SelectTrigger className="h-9 w-[160px] text-xs">
+              <SelectValue placeholder="Range" />
+            </SelectTrigger>
+            <SelectContent>
+              {RANGE_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                  {opt.label}
+                </SelectItem>
+              ))}
+              <SelectItem value="custom" className="text-xs">Custom range…</SelectItem>
+            </SelectContent>
+          </Select>
+          {range === "custom" && (
+            <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs">
+                  <CalendarIcon className="h-3.5 w-3.5" />
+                  {customRange?.from
+                    ? customRange.to
+                      ? `${format(customRange.from, "MMM d")} – ${format(customRange.to, "MMM d")}`
+                      : format(customRange.from, "MMM d, yyyy")
+                    : "Pick dates"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-auto p-0">
+                <Calendar
+                  mode="range"
+                  selected={customRange}
+                  onSelect={setCustomRange}
+                  numberOfMonths={2}
+                  defaultMonth={customRange?.from ?? new Date()}
+                />
+              </PopoverContent>
+            </Popover>
+          )}
+          <Button variant="outline" size="sm" onClick={load}>
+            <RefreshCw className="mr-1 h-3.5 w-3.5" /> Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Top-line numbers */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           icon={Users}
-          label="Total users"
+          label="Users"
           value={stats.totalUsers.toLocaleString()}
-          hint={`+${stats.signupsLast7d} in last 7d`}
+          hint={`${stats.signupsInRange} signups in range`}
         />
         <StatCard
           icon={UserCheck}
@@ -501,14 +635,14 @@ const StatsTab = () => {
           <StatCard
             icon={MessageSquare}
             label="Conversations"
-            value={stats.totalConversationsEver.toLocaleString()}
-            hint={`${stats.activeConversations.toLocaleString()} active · ${(stats.totalConversationsEver - stats.activeConversations).toLocaleString()} deleted`}
+            value={stats.activeConversations.toLocaleString()}
+            hint={`${stats.totalConversationsEver.toLocaleString()} lifetime`}
           />
           <StatCard
             icon={MessageSquare}
             label="Messages"
-            value={stats.totalMessagesEver.toLocaleString()}
-            hint={`${stats.activeMessages.toLocaleString()} active · +${stats.messagesLast7d} in last 7d`}
+            value={stats.messagesInRange.toLocaleString()}
+            hint={`${stats.totalMessagesEver.toLocaleString()} lifetime`}
           />
           <StatCard
             icon={BarChart3}
@@ -517,8 +651,8 @@ const StatsTab = () => {
           />
           <StatCard
             icon={Users}
-            label="Active users (7d)"
-            value={stats.activeUsers7d.toLocaleString()}
+            label="Active users"
+            value={stats.activeUsersInRange.toLocaleString()}
             hint="Sent at least one message"
           />
         </div>
@@ -551,7 +685,7 @@ const StatsTab = () => {
         </div>
         {stats.totalTxs === 0 ? (
           <p className="mt-2 text-xs text-muted-foreground">
-            No transactions logged yet — they'll appear here as users swap or transfer.
+            No transactions in this range.
           </p>
         ) : null}
       </div>
@@ -559,13 +693,13 @@ const StatsTab = () => {
       {/* Signups sparkline */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Signups · last 30 days</CardTitle>
+          <CardTitle className="text-sm">Signups · {rangeLabel.toLowerCase()}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <SignupsSparkline data={stats.signupsByDay} />
           <div className="flex justify-between text-[10px] uppercase tracking-widest text-muted-foreground">
             <span>{stats.signupsByDay[0]?.date}</span>
-            <span>Today</span>
+            <span>{stats.signupsByDay[stats.signupsByDay.length - 1]?.date}</span>
           </div>
         </CardContent>
       </Card>
