@@ -42,6 +42,7 @@ async function isAdminCaller(req: Request, supabaseUrl: string, anonKey: string,
   }
 }
 import { Connection, Keypair, PublicKey, VersionedTransaction } from "npm:@solana/web3.js@1.95.3";
+import { MintLayout, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from "npm:@solana/spl-token@0.4.8";
 import { ReferralProvider } from "npm:@jup-ag/referral-sdk@0.3.0";
 import bs58 from "https://esm.sh/bs58@5.0.0";
 
@@ -51,8 +52,13 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-sweep-secret, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const REFERRAL_ACCOUNT_PUBKEY = "5c9b2oVVJBQgFQmikVxoYsaM5tVfrMZfhk86joSZwWxx";
+const DEFAULT_REFERRAL_ACCOUNT_PUBKEY = "5c9b2oVVJBQgFQmikVxoYsaM5tVfrMZfhk86joSZwWxx";
 const DUST_THRESHOLD_USD = 1.0;
+
+const KNOWN_TOKEN_META: Record<string, { decimals: number; symbol: string }> = {
+  So11111111111111111111111111111111111111112: { decimals: 9, symbol: "SOL" },
+  EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v: { decimals: 6, symbol: "USDC" },
+};
 
 interface TokenAccountInfo {
   pubkey: string;
@@ -98,10 +104,56 @@ async function fetchPricesUsd(mints: string[]): Promise<Map<string, number>> {
   return prices;
 }
 
+async function fetchMintMeta(
+  connection: Connection,
+  mints: Array<{ mint: string; programId: PublicKey }>,
+): Promise<Map<string, { decimals: number; symbol: string }>> {
+  const unique = Array.from(new Map(mints.map((item) => [item.mint, item])).values());
+  const meta = new Map<string, { decimals: number; symbol: string }>();
+
+  for (const item of unique) {
+    const known = KNOWN_TOKEN_META[item.mint];
+    if (known) meta.set(item.mint, known);
+  }
+
+  const unknown = unique.filter((item) => !meta.has(item.mint));
+  if (unknown.length === 0) return meta;
+
+  for (let i = 0; i < unknown.length; i += 100) {
+    const chunk = unknown.slice(i, i + 100);
+    const infos = await connection.getMultipleAccountsInfo(
+      chunk.map((item) => new PublicKey(item.mint)),
+      "confirmed",
+    );
+
+    infos.forEach((info, idx) => {
+      const { mint } = chunk[idx];
+      const fallback = { decimals: 0, symbol: `${mint.slice(0, 4)}…${mint.slice(-4)}` };
+      if (!info) {
+        meta.set(mint, fallback);
+        return;
+      }
+
+      try {
+        const decoded = MintLayout.decode(new Uint8Array(info.data));
+        meta.set(mint, {
+          decimals: decoded.decimals,
+          symbol: fallback.symbol,
+        });
+      } catch {
+        meta.set(mint, fallback);
+      }
+    });
+  }
+
+  return meta;
+}
+
 async function runSweep(trigger: "cron" | "manual"): Promise<Response> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const heliusKey = Deno.env.get("HELIUS_API_KEY");
+  const referralAccountPubkey = Deno.env.get("JUPITER_REFERRAL_ACCOUNT") ?? DEFAULT_REFERRAL_ACCOUNT_PUBKEY;
   const treasuryPrivateKey = Deno.env.get("TREASURY_PRIVATE_KEY");
   const treasuryPublicKey = Deno.env.get("TREASURY_PUBLIC_KEY");
 
@@ -166,11 +218,8 @@ async function runSweep(trigger: "cron" | "manual"): Promise<Response> {
     const connection = new Connection(heliusRpc, "confirmed");
 
     const provider = new ReferralProvider(connection);
-    const discovered = await provider.getReferralTokenAccountsWithStrategy(
-      REFERRAL_ACCOUNT_PUBKEY,
-      { type: "token-list", tokenList: "strict" } as any,
-    ).catch((e) => {
-      console.warn("getReferralTokenAccountsWithStrategy failed, continuing without dust check:", e);
+    const discovered = await provider.getReferralTokenAccountsV2(referralAccountPubkey).catch((e) => {
+      console.warn("getReferralTokenAccountsV2 failed, continuing without dust check:", e);
       return null;
     });
 
@@ -179,43 +228,29 @@ async function runSweep(trigger: "cron" | "manual"): Promise<Response> {
       ? [...(discovered.tokenAccounts ?? []), ...(discovered.token2022Accounts ?? [])]
       : [];
 
-    const balances = flat.map((a) => {
+    const balances = flat.map((a, idx) => {
       const pubkeyStr = typeof a.pubkey === "string" ? a.pubkey : a.pubkey.toBase58();
       const mintStr = typeof a.account.mint === "string" ? a.account.mint : a.account.mint?.toBase58?.() ?? String(a.account.mint);
       const amountStr = String(a.account.amount ?? "0");
       return {
+        programId: idx < (discovered?.tokenAccounts?.length ?? 0) ? TOKEN_PROGRAM_ID : TOKEN_2022_PROGRAM_ID,
         ta: { pubkey: pubkeyStr, mint: mintStr },
-        balance: { amount: amountStr, decimals: 0, uiAmountString: amountStr },
+        balance: { amount: amountStr },
       };
     }).filter((b) => b.ta.mint && b.balance.amount !== "0");
 
 
     const accountInfos: TokenAccountInfo[] = [];
-    const mintMetaCache = new Map<string, { decimals: number; symbol: string }>();
+    const mintMeta = await fetchMintMeta(connection, balances.map(({ ta, programId }) => ({ mint: ta.mint, programId })));
 
-    // Resolve symbols via Jupiter lite API (cheap)
     for (const { ta, balance } of balances) {
       if (!balance || Number(balance.amount) === 0) continue;
-      let meta = mintMetaCache.get(ta.mint);
-      if (!meta) {
-        try {
-          const r = await fetch(`https://lite-api.jup.ag/tokens/v2/search?query=${ta.mint}`);
-          if (r.ok) {
-            const arr = await r.json();
-            const tok = Array.isArray(arr) ? arr.find((t: any) => t.id === ta.mint) ?? arr[0] : null;
-            meta = { decimals: tok?.decimals ?? balance.decimals, symbol: tok?.symbol ?? "?" };
-          } else {
-            meta = { decimals: balance.decimals, symbol: "?" };
-          }
-        } catch {
-          meta = { decimals: balance.decimals, symbol: "?" };
-        }
-        mintMetaCache.set(ta.mint, meta);
-      }
+      const meta = mintMeta.get(ta.mint) ?? { decimals: 0, symbol: `${ta.mint.slice(0, 4)}…${ta.mint.slice(-4)}` };
+      const amountRaw = Number(balance.amount);
       accountInfos.push({
         pubkey: ta.pubkey,
         mint: ta.mint,
-        amountUi: Number(balance.uiAmountString ?? "0"),
+        amountUi: amountRaw / Math.pow(10, meta.decimals),
         decimals: meta.decimals,
         symbol: meta.symbol,
         priceUsd: null,
@@ -264,7 +299,7 @@ async function runSweep(trigger: "cron" | "manual"): Promise<Response> {
     // the discovery step above).
     const claimTxs: VersionedTransaction[] = await provider.claimAllV2({
       payerPubKey: treasuryKp.publicKey,
-      referralAccountPubKey: new PublicKey(REFERRAL_ACCOUNT_PUBKEY),
+      referralAccountPubKey: new PublicKey(referralAccountPubkey),
     });
 
     if (claimTxs.length === 0) {
