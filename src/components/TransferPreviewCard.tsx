@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   UserPlus,
   Check,
+  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useContacts, findContactByAddress } from "@/hooks/useContacts";
