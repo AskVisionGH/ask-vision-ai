@@ -13,6 +13,16 @@ export const isMobile = (): boolean => {
   );
 };
 
+export const isAndroid = (): boolean => {
+  if (typeof navigator === "undefined") return false;
+  return /android/i.test(navigator.userAgent);
+};
+
+export const isIOS = (): boolean => {
+  if (typeof navigator === "undefined") return false;
+  return /iphone|ipad|ipod/i.test(navigator.userAgent);
+};
+
 /** True when we're already inside a wallet's in-app browser. */
 export const isInWalletBrowser = (): boolean => {
   if (typeof window === "undefined") return false;
@@ -25,6 +35,16 @@ export const isInWalletBrowser = (): boolean => {
   return Boolean(
     w.phantom?.solana || w.solflare || w.solana?.isPhantom || w.backpack,
   );
+};
+
+/**
+ * Android browsers can stay in-place and hand off via the Solana Mobile Wallet
+ * Adapter, which preserves the user's logged-in browser session. iOS browsers
+ * still generally need the wallet's in-app browser for wallet connection.
+ */
+export const shouldUseWalletDeepLinks = (): boolean => {
+  if (!isMobile() || isInWalletBrowser()) return false;
+  return isIOS() && !isAndroid();
 };
 
 /**
