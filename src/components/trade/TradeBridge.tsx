@@ -7,6 +7,7 @@ import {
   ExternalLink,
   AlertCircle,
   Info,
+  XCircle,
 } from "lucide-react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
@@ -69,6 +70,7 @@ type Phase =
   | { name: "submitting" }
   | { name: "bridging"; signature: string; startedAt: number; estimatedSec: number | null }
   | { name: "success"; signature: string; durationMs: number; toAmountUi: number; toSymbol: string; destExplorer: string | null }
+  | { name: "cancelled"; fromAmountUi: number; fromSymbol: string; toAmountUi: number; toSymbol: string }
   | { name: "error"; message: string };
 
 const QUOTE_DEBOUNCE_MS = 400;
@@ -380,7 +382,13 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
       try {
         signed = await signTransaction(tx);
       } catch {
-        if (mounted.current) setPhase({ name: "error", message: "Cancelled — try again." });
+        if (mounted.current) setPhase({
+          name: "cancelled",
+          fromAmountUi: numericAmount,
+          fromSymbol: fromToken.symbol,
+          toAmountUi: Number(quote.toAmountAtomic) / Math.pow(10, toToken.decimals),
+          toSymbol: toToken.symbol,
+        });
         return;
       }
 
@@ -491,6 +499,36 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
                 <ExternalLink className="h-3 w-3" />
               </a>
             )}
+          </div>
+          <Button
+            onClick={reset}
+            className="ease-vision mt-2 w-full font-mono text-[11px] uppercase tracking-wider"
+          >
+            New bridge
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ---------- Cancelled ----------
+  if (phase.name === "cancelled") {
+    return (
+      <div className="ease-vision animate-fade-up w-full max-w-[440px] overflow-hidden rounded-2xl border border-border/60 bg-card/60 backdrop-blur-sm">
+        <div className="flex flex-col items-center gap-4 p-8 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-muted-foreground/30 bg-muted/30">
+            <XCircle className="h-7 w-7 text-muted-foreground" />
+          </div>
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              Bridge cancelled
+            </p>
+            <p className="mt-2 font-mono text-sm text-foreground">
+              {fmtAmount(phase.fromAmountUi)} {phase.fromSymbol} → {fmtAmount(phase.toAmountUi)} {phase.toSymbol}
+            </p>
+            <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+              No funds were moved.
+            </p>
           </div>
           <Button
             onClick={reset}

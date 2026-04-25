@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   UserPlus,
   Check,
+  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useContacts, findContactByAddress } from "@/hooks/useContacts";
@@ -463,6 +464,7 @@ export const TransferPreviewCard = ({ data: initial }: Props) => {
 
   const isError = phase.name === "error";
   const errorMsg = isError ? (phase as Extract<Phase, { name: "error" }>).message : "";
+  const isCancelled = isError && (phase as Extract<Phase, { name: "error" }>).cancelled === true;
 
   const totalSolCost = data.token.isNative
     ? data.amountUi + data.estNetworkFeeSol + data.ataCreationFeeSol
@@ -587,8 +589,21 @@ export const TransferPreviewCard = ({ data: initial }: Props) => {
           </div>
         )}
 
-        {/* Inline error banner */}
-        {isError && (
+        {/* Inline error / cancelled banner */}
+        {isError && isCancelled && (
+          <div className="flex items-start gap-2 border-t border-border/60 bg-muted/30 px-5 py-3">
+            <XCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+            <div className="flex-1">
+              <p className="font-mono text-[11px] font-medium leading-relaxed text-foreground">
+                Transfer cancelled
+              </p>
+              <p className="mt-0.5 font-mono text-[10px] leading-relaxed text-muted-foreground">
+                You rejected the request in your wallet. No funds were moved.
+              </p>
+            </div>
+          </div>
+        )}
+        {isError && !isCancelled && (
           <div className="flex items-start gap-2 border-t border-destructive/30 bg-destructive/5 px-5 py-3">
             <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-destructive" />
             <p className="font-mono text-[11px] leading-relaxed text-destructive">{errorMsg}</p>

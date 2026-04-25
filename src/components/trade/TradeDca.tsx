@@ -6,6 +6,7 @@ import {
   ExternalLink,
   Info,
   Loader2,
+  XCircle,
 } from "lucide-react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
@@ -61,6 +62,7 @@ type Phase =
   | { name: "awaiting_signature" }
   | { name: "submitting" }
   | { name: "success"; orderId: string | null; signature: string | null }
+  | { name: "cancelled" }
   | { name: "error"; message: string };
 
 const fmtUsd = (n: number | null | undefined) => {
@@ -270,7 +272,7 @@ export const TradeDca = () => {
       try {
         signedFee = await signTransaction(feeTx);
       } catch {
-        if (mounted.current) setPhase({ name: "error", message: "Cancelled — try again." });
+        if (mounted.current) setPhase({ name: "cancelled" });
         return;
       }
       const signedFeeB64 = btoa(
@@ -309,7 +311,7 @@ export const TradeDca = () => {
       try {
         signed = await signTransaction(tx);
       } catch {
-        if (mounted.current) setPhase({ name: "error", message: "Cancelled — try again." });
+        if (mounted.current) setPhase({ name: "cancelled" });
         return;
       }
       const signedB64 = btoa(String.fromCharCode(...signed.serialize()));
@@ -386,6 +388,40 @@ export const TradeDca = () => {
                 <ExternalLink className="h-3 w-3" />
               </a>
             )}
+            <Button
+              onClick={reset}
+              className="ease-vision mt-2 w-full font-mono text-[11px] uppercase tracking-wider"
+            >
+              New DCA
+            </Button>
+          </div>
+        </div>
+        <DcaOpenOrders refreshKey={refreshKey} />
+      </div>
+    );
+  }
+
+  // ---- Cancelled view ----
+  if (phase.name === "cancelled") {
+    return (
+      <div className="w-full max-w-[440px] space-y-4">
+        <div className="ease-vision animate-fade-up overflow-hidden rounded-2xl border border-border/60 bg-card/60 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-4 p-8 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full border border-muted-foreground/30 bg-muted/30">
+              <XCircle className="h-7 w-7 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                DCA cancelled
+              </p>
+              <p className="mt-2 font-mono text-sm text-foreground">
+                {fmtAmount(perOrderAmount)} {inputToken.symbol} → {outputToken.symbol} every{" "}
+                {fmtDuration(intervalSec)}
+              </p>
+              <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+                No funds were moved.
+              </p>
+            </div>
             <Button
               onClick={reset}
               className="ease-vision mt-2 w-full font-mono text-[11px] uppercase tracking-wider"
