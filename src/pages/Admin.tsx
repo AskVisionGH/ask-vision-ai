@@ -1092,6 +1092,66 @@ const TreasuryTab = () => {
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-medium text-muted-foreground">Treasury revenue</h2>
+          <p className="text-xs text-muted-foreground/70">{rangeLabel}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Select
+            value={range}
+            onValueChange={(v: RangeKey) => {
+              setRange(v);
+              if (v !== "custom") setCustomRange(undefined);
+              if (v === "custom") setCalendarOpen(true);
+            }}
+          >
+            <SelectTrigger className="h-9 w-[160px] text-xs">
+              <SelectValue placeholder="Range" />
+            </SelectTrigger>
+            <SelectContent>
+              {RANGE_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                  {opt.label}
+                </SelectItem>
+              ))}
+              <SelectItem value="custom" className="text-xs">Custom range…</SelectItem>
+            </SelectContent>
+          </Select>
+          {range === "custom" && (
+            <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="h-9 gap-1.5 text-xs">
+                  <CalendarIcon className="h-3.5 w-3.5" />
+                  {customRange?.from
+                    ? customRange.to
+                      ? `${format(customRange.from, "MMM d")} – ${format(customRange.to, "MMM d")}`
+                      : format(customRange.from, "MMM d, yyyy")
+                    : "Pick dates"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-auto p-0">
+                <Calendar
+                  mode="range"
+                  selected={customRange}
+                  onSelect={setCustomRange}
+                  numberOfMonths={2}
+                  defaultMonth={customRange?.from ?? new Date()}
+                />
+              </PopoverContent>
+            </Popover>
+          )}
+          <Button size="sm" onClick={triggerSync} disabled={syncing || loading}>
+            {syncing || loading ? (
+              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-1 h-3.5 w-3.5" />
+            )}
+            Refresh
+          </Button>
+        </div>
+      </div>
+
       <div className="grid gap-3 sm:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
@@ -1119,42 +1179,30 @@ const TreasuryTab = () => {
         </Card>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap gap-1">
-          {(["all", "solana", "ethereum"] as const).map((c) => (
-            <Button
-              key={c}
-              size="sm"
-              variant={chainFilter === c ? "default" : "outline"}
-              onClick={() => setChainFilter(c)}
-              className="h-7 text-xs capitalize"
-            >
-              {c}
-            </Button>
-          ))}
-          <span className="mx-2 h-7 w-px bg-border" />
-          {(["all", "swap_fee", "limit_fee", "dca_fee", "bridge_fee", "sweep"] as const).map((k) => (
-            <Button
-              key={k}
-              size="sm"
-              variant={kindFilter === k ? "default" : "outline"}
-              onClick={() => setKindFilter(k)}
-              className="h-7 text-xs"
-            >
-              {k === "all" ? "All kinds" : SOURCE_LABELS[k]}
-            </Button>
-          ))}
-        </div>
-        <div className="flex gap-2">
-          <Button size="sm" onClick={triggerSync} disabled={syncing || loading}>
-            {syncing || loading ? (
-              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <RefreshCw className="mr-1 h-3.5 w-3.5" />
-            )}
-            Refresh
+      <div className="flex flex-wrap items-center gap-1">
+        {(["all", "solana", "ethereum"] as const).map((c) => (
+          <Button
+            key={c}
+            size="sm"
+            variant={chainFilter === c ? "default" : "outline"}
+            onClick={() => setChainFilter(c)}
+            className="h-7 text-xs capitalize"
+          >
+            {c}
           </Button>
-        </div>
+        ))}
+        <span className="mx-2 h-7 w-px bg-border" />
+        {(["all", "swap_fee", "limit_fee", "dca_fee", "bridge_fee", "sweep"] as const).map((k) => (
+          <Button
+            key={k}
+            size="sm"
+            variant={kindFilter === k ? "default" : "outline"}
+            onClick={() => setKindFilter(k)}
+            className="h-7 text-xs"
+          >
+            {k === "all" ? "All kinds" : SOURCE_LABELS[k]}
+          </Button>
+        ))}
       </div>
 
       <Card>
