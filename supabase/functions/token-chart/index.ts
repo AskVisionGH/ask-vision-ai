@@ -243,3 +243,29 @@ function json(body: unknown, status = 200) {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
+
+/**
+ * Coalesce finer OHLC bars into wider buckets. Used when GeckoTerminal doesn't
+ * natively support the requested aggregate (30m, 1w, 1mo).
+ */
+function rebucketCandles(bars: Candle[], bucketSecs: number): Candle[] {
+  if (!bars.length) return [];
+  const out: Candle[] = [];
+  let cur: Candle | null = null;
+  let curStart = 0;
+  for (const b of bars) {
+    const start = Math.floor(b.t / bucketSecs) * bucketSecs;
+    if (cur === null || start !== curStart) {
+      if (cur) out.push(cur);
+      curStart = start;
+      cur = { t: start, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v };
+    } else {
+      cur.h = Math.max(cur.h, b.h);
+      cur.l = Math.min(cur.l, b.l);
+      cur.c = b.c;
+      cur.v += b.v;
+    }
+  }
+  if (cur) out.push(cur);
+  return out;
+}
