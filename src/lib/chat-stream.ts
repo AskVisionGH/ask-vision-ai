@@ -637,30 +637,46 @@ export async function streamChat(args: {
   contacts?: ContactContext[];
   signal?: AbortSignal;
 } & StreamChatCallbacks): Promise<void> {
+  // Transparently retry transient cold-start / runtime crashes from the
+  // edge runtime (503 SUPABASE_EDGE_RUNTIME_ERROR, 504 timeouts) before
+  // the stream has started. Once bytes are flowing we don't retry.
   let resp: Response;
-  try {
-    resp = await fetch(CHAT_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${AUTH_TOKEN}`,
-      },
-      body: JSON.stringify({
-        messages: toModelMessages(args.messages),
-        walletAddress: args.walletAddress ?? null,
-        userId: args.userId ?? null,
-        profile: args.profile ?? null,
-        contacts: args.contacts ?? [],
-      }),
-      signal: args.signal,
-    });
-  } catch (e) {
-    if ((e as Error).name === "AbortError") {
-      args.onError("Cancelled", 0);
+  let attempt = 0;
+  const MAX_ATTEMPTS = 3;
+  while (true) {
+    try {
+      resp = await fetch(CHAT_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${AUTH_TOKEN}`,
+        },
+        body: JSON.stringify({
+          messages: toModelMessages(args.messages),
+          walletAddress: args.walletAddress ?? null,
+          userId: args.userId ?? null,
+          profile: args.profile ?? null,
+          contacts: args.contacts ?? [],
+        }),
+        signal: args.signal,
+      });
+    } catch (e) {
+      if ((e as Error).name === "AbortError") {
+        args.onError("Cancelled", 0);
+        return;
+      }
+      args.onError("Network error. Check your connection.", 0);
       return;
     }
-    args.onError("Network error. Check your connection.", 0);
-    return;
+
+    // Transient edge-runtime errors — retry with backoff.
+    const transient = resp.status === 503 || resp.status === 504;
+    if (transient && attempt < MAX_ATTEMPTS - 1) {
+      attempt += 1;
+      await new Promise((r) => setTimeout(r, 400 * attempt));
+      continue;
+    }
+    break;
   }
 
   if (!resp.ok || !resp.body) {
@@ -670,6 +686,9 @@ export async function streamChat(args: {
       if (data?.error) msg = data.error;
     } catch {
       /* ignore */
+    }
+    if (resp.status === 503 || resp.status === 504) {
+      msg = "The chat service is warming up — try again in a moment.";
     }
     args.onError(msg, resp.status);
     return;
