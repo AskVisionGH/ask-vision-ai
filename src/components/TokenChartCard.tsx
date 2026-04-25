@@ -549,6 +549,7 @@ const CandleChart = ({ candles, interval, view, setView, isUp }: ChartProps) => 
   return (
     <div ref={wrapRef} className="relative h-64 w-full select-none px-2 py-3 sm:h-72">
       <svg
+        ref={svgRef}
         viewBox={`0 0 ${box.w} ${box.h}`}
         width="100%"
         height="100%"
@@ -561,7 +562,6 @@ const CandleChart = ({ candles, interval, view, setView, isUp }: ChartProps) => 
           setHover(null);
           dragRef.current = null;
         }}
-        onWheel={handleWheel}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
