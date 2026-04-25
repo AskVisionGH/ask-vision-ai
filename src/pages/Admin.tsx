@@ -989,6 +989,9 @@ const TreasuryTab = () => {
   const [syncing, setSyncing] = useState(false);
   const [chainFilter, setChainFilter] = useState<"all" | "solana" | "ethereum">("all");
   const [kindFilter, setKindFilter] = useState<"all" | TreasuryFee["source_kind"]>("all");
+  const [range, setRange] = useState<RangeKey>("all");
+  const [customRange, setCustomRange] = useState<DateRange | undefined>();
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
