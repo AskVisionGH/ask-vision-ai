@@ -272,7 +272,7 @@ export const TradeDca = () => {
       try {
         signedFee = await signTransaction(feeTx);
       } catch {
-        if (mounted.current) setPhase({ name: "error", message: "Cancelled — try again." });
+        if (mounted.current) setPhase({ name: "cancelled" });
         return;
       }
       const signedFeeB64 = btoa(
