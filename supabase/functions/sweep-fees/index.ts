@@ -218,8 +218,8 @@ async function runSweep(trigger: "cron" | "manual"): Promise<Response> {
     const connection = new Connection(heliusRpc, "confirmed");
 
     const provider = new ReferralProvider(connection);
-    const discovered = await provider.getReferralTokenAccountsV2(referralAccountPubkey).catch((e) => {
-      console.warn("getReferralTokenAccountsV2 failed, continuing without dust check:", e);
+    const discovered = await provider.getReferralTokenAccounts(referralAccountPubkey).catch((e) => {
+      console.warn("getReferralTokenAccounts failed, continuing without dust check:", e);
       return null;
     });
 
@@ -297,9 +297,16 @@ async function runSweep(trigger: "cron" | "manual"): Promise<Response> {
 
     // 5. Build claim transactions via Jupiter SDK (reuse the provider from
     // the discovery step above).
-    const claimTxs: VersionedTransaction[] = await provider.claimAllV2({
+    const claimTxs: VersionedTransaction[] = await provider.claimAll({
       payerPubKey: treasuryKp.publicKey,
       referralAccountPubKey: new PublicKey(referralAccountPubkey),
+    });
+
+    console.log("sweep-fees discovery", {
+      referralAccountPubkey,
+      tokenAccounts: discovered?.tokenAccounts?.length ?? 0,
+      token2022Accounts: discovered?.token2022Accounts?.length ?? 0,
+      claimTxs: claimTxs.length,
     });
 
     if (claimTxs.length === 0) {
