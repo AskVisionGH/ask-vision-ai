@@ -401,35 +401,49 @@ export const BridgePreviewCard = ({ data }: Props) => {
               }
             />
           )}
-          {data.platformFeeUsd != null && data.platformFeeUsd > 0 && (
-            <Row
-              label="Platform fee"
-              value={
-                <div className="flex items-center gap-1.5">
-                  <span className="font-mono text-[13px] text-foreground">
-                    {fmtUsd(data.platformFeeUsd)}
-                  </span>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        className="ease-vision text-muted-foreground/60 transition-colors hover:text-foreground"
-                        aria-label="About platform fee"
-                      >
-                        <Info className="h-3 w-3" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="max-w-[240px]">
-                      <p className="font-mono text-[11px] leading-relaxed">
-                        Vision charges a 1% integrator fee on bridges, paid in
-                        the source token through LI.FI.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-              }
-            />
-          )}
+          {(() => {
+            // LI.FI sometimes returns the integrator fee itemized in feeCosts
+            // and sometimes (e.g. NearIntents routes) bakes it into the rate
+            // without breaking it out. Mirror the Trade tab's behaviour:
+            // fall back to 1% of the input USD so users always see the cut.
+            const feeUsd =
+              data.platformFeeUsd != null && data.platformFeeUsd > 0
+                ? data.platformFeeUsd
+                : data.fromAmountUsd != null
+                  ? data.fromAmountUsd * 0.01
+                  : null;
+            if (feeUsd == null || feeUsd <= 0) return null;
+            const isEstimated = data.platformFeeUsd == null || data.platformFeeUsd <= 0;
+            return (
+              <Row
+                label="Platform fee"
+                value={
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono text-[13px] text-foreground">
+                      {isEstimated ? "~" : ""}{fmtUsd(feeUsd)}
+                    </span>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          className="ease-vision text-muted-foreground/60 transition-colors hover:text-foreground"
+                          aria-label="About platform fee"
+                        >
+                          <Info className="h-3 w-3" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-[240px]">
+                        <p className="font-mono text-[11px] leading-relaxed">
+                          Vision charges a 1% integrator fee on bridges, paid in
+                          the source token through LI.FI.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                }
+              />
+            );
+          })()}
           <Row
             label="Destination"
             value={
