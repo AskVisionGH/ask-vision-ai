@@ -102,14 +102,9 @@ const AppRoutes = () => {
           </ProtectedRoute>
         }
       />
-      <Route
-        path="/tracked-wallets"
-        element={
-          <ProtectedRoute>
-            <TrackedWallets />
-          </ProtectedRoute>
-        }
-      />
+      {/* Tracked-wallets page is hidden behind a "soon" tag in the nav.
+          Backend + page code are kept intact; just block the route for now. */}
+      <Route path="/tracked-wallets" element={<Navigate to="/chat" replace />} />
       <Route
         path="/trade"
         element={
