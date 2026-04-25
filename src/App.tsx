@@ -18,7 +18,7 @@ import SharedChat from "./pages/SharedChat.tsx";
 import Onboarding from "./pages/Onboarding.tsx";
 import Settings from "./pages/Settings.tsx";
 import Contacts from "./pages/Contacts.tsx";
-import TrackedWallets from "./pages/TrackedWallets.tsx";
+// TrackedWallets page kept in the codebase for future re-enable; route is hidden for now.
 import Admin from "./pages/Admin.tsx";
 import Trade from "./pages/Trade.tsx";
 import Alerts from "./pages/Alerts.tsx";
@@ -102,14 +102,9 @@ const AppRoutes = () => {
           </ProtectedRoute>
         }
       />
-      <Route
-        path="/tracked-wallets"
-        element={
-          <ProtectedRoute>
-            <TrackedWallets />
-          </ProtectedRoute>
-        }
-      />
+      {/* Tracked-wallets page is hidden behind a "soon" tag in the nav.
+          Backend + page code are kept intact; just block the route for now. */}
+      <Route path="/tracked-wallets" element={<Navigate to="/chat" replace />} />
       <Route
         path="/trade"
         element={

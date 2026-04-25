@@ -127,6 +127,49 @@ export const useSmartWallets = () => {
     [tracked, addWallet, removeWallet],
   );
 
+  /**
+   * Bulk: track every suggested wallet that isn't already tracked.
+   * Returns the number successfully added.
+   */
+  const trackAllCurated = useCallback(async (): Promise<number> => {
+    if (!user) return 0;
+    const have = new Set(tracked.map((t) => t.address));
+    const toAdd = curated.filter((c) => !have.has(c.address));
+    if (toAdd.length === 0) return 0;
+    const rows = toAdd.map((c) => ({
+      user_id: user.id,
+      address: c.address,
+      label: c.label,
+      twitter_handle: c.twitter_handle,
+      notes: null,
+      is_default: true,
+    }));
+    const { data, error } = await supabase
+      .from("smart_wallets")
+      .insert(rows)
+      .select("*");
+    if (error) return 0;
+    const added = (data ?? []) as SmartWalletRow[];
+    setTracked((prev) =>
+      [...prev, ...added].sort((a, b) => a.label.localeCompare(b.label)),
+    );
+    return added.length;
+  }, [user, tracked, curated]);
+
+  /**
+   * Bulk: stop tracking every suggested wallet currently in the tracked
+   * list. Custom (non-suggested) wallets are left alone.
+   */
+  const untrackAllCurated = useCallback(async (): Promise<number> => {
+    const curatedAddrs = new Set(curated.map((c) => c.address));
+    const ids = tracked.filter((t) => curatedAddrs.has(t.address)).map((t) => t.id);
+    if (ids.length === 0) return 0;
+    const { error } = await supabase.from("smart_wallets").delete().in("id", ids);
+    if (error) return 0;
+    setTracked((prev) => prev.filter((t) => !ids.includes(t.id)));
+    return ids.length;
+  }, [tracked, curated]);
+
   return {
     tracked,
     trackedAddresses,
@@ -136,5 +179,7 @@ export const useSmartWallets = () => {
     addWallet,
     removeWallet,
     toggleCurated,
+    trackAllCurated,
+    untrackAllCurated,
   };
 };
