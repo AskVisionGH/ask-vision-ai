@@ -151,40 +151,49 @@ async function runSweep(trigger: "cron" | "manual"): Promise<Response> {
       );
     }
 
-    // 2. List referral token accounts via Jupiter's API
-    const taResp = await fetch(
-      `https://referral.jup.ag/api/referral/${REFERRAL_ACCOUNT_PUBKEY}/token-accounts`,
-    );
-    if (!taResp.ok) {
-      throw new Error(`Jupiter token-accounts API ${taResp.status}: ${await taResp.text()}`);
-    }
-    const tokenAccounts = (await taResp.json()) as Array<{ mint: string; pubkey: string }>;
+    // 2. Discover referral token accounts on-chain.
+    //
+    // The Jupiter referral.jup.ag/api/.../token-accounts endpoint was
+    // disabled in late 2025 ("This endpoint is disabled. Please contact us
+    // on discord for assistance."), so we go straight to RPC. The referral
+    // account PDA owns its referral token accounts, so getTokenAccountsByOwner
+    // gives us the same list the API used to return — for both classic SPL
+    // and Token-2022 mints.
+    const heliusRpc = `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`;
+    const connection = new Connection(heliusRpc, "confirmed");
+    const referralPubkey = new PublicKey(REFERRAL_ACCOUNT_PUBKEY);
 
-    if (tokenAccounts.length === 0) {
+    const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+    const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+
+    const [splAccts, t22Accts] = await Promise.all([
+      connection.getParsedTokenAccountsByOwner(referralPubkey, { programId: TOKEN_PROGRAM_ID }),
+      connection.getParsedTokenAccountsByOwner(referralPubkey, { programId: TOKEN_2022_PROGRAM_ID })
+        .catch(() => ({ value: [] as Array<{ pubkey: PublicKey; account: { data: any } }> })),
+    ]);
+
+    const balances = [...splAccts.value, ...t22Accts.value].map((a) => {
+      const info = (a.account.data as any).parsed?.info;
+      const tokenAmount = info?.tokenAmount;
+      return {
+        ta: { pubkey: a.pubkey.toBase58(), mint: info?.mint as string },
+        balance: tokenAmount
+          ? {
+              amount: tokenAmount.amount as string,
+              decimals: tokenAmount.decimals as number,
+              uiAmountString: tokenAmount.uiAmountString as string,
+            }
+          : null,
+      };
+    }).filter((b) => b.ta.mint);
+
+    if (balances.length === 0) {
       await finalize({ status: "skipped_dust", accounts_scanned: 0, total_value_usd: 0 });
       return json({ ok: true, status: "skipped_dust", reason: "No referral token accounts exist yet" });
     }
 
-    // 3. Fetch on-chain balances + symbols/decimals via Helius RPC
-    const heliusRpc = `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`;
-    const connection = new Connection(heliusRpc, "confirmed");
-
     const accountInfos: TokenAccountInfo[] = [];
     const mintMetaCache = new Map<string, { decimals: number; symbol: string }>();
-
-    // Pull all accounts in parallel (one RPC call per account; we could batch
-    // via getMultipleAccounts but the parsed shape is awkward for token accts).
-    const balances = await Promise.all(
-      tokenAccounts.map(async (ta) => {
-        try {
-          const resp = await connection.getTokenAccountBalance(new PublicKey(ta.pubkey));
-          return { ta, balance: resp.value };
-        } catch (e) {
-          // Account may not exist yet (token not initialized) — skip silently
-          return { ta, balance: null };
-        }
-      }),
-    );
 
     // Resolve symbols via Jupiter lite API (cheap)
     for (const { ta, balance } of balances) {
