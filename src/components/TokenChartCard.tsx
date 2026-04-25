@@ -366,10 +366,13 @@ const PAD_RIGHT = 8;
 
 const CandleChart = ({ candles, interval, view, setView, isUp }: ChartProps) => {
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const svgRef = useRef<SVGSVGElement | null>(null);
   const [box, setBox] = useState({ w: 600, h: 280 });
   const [hover, setHover] = useState<{ x: number; y: number; idx: number } | null>(null);
   const dragRef = useRef<{ startX: number; startEnd: number; dragged: boolean } | null>(null);
   const pinchRef = useRef<{ startDist: number; startCount: number } | null>(null);
+  const totalRef = useRef(candles.length);
+  totalRef.current = candles.length;
 
   // Track size with ResizeObserver.
   useEffect(() => {
