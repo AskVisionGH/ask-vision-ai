@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { ChatBubble } from "@/components/ChatBubble";
 import { VisionLogo } from "@/components/VisionLogo";
 import { Button } from "@/components/ui/button";
+import { SEO } from "@/components/SEO";
 import { useAuth } from "@/hooks/useAuth";
 import type { ChatMessage, ToolEvent } from "@/lib/chat-stream";
 import type { ShareMode } from "@/hooks/useConversations";
@@ -123,6 +124,16 @@ const SharedChat = () => {
 
   return (
     <div className="relative flex min-h-screen flex-col bg-background text-foreground">
+      <SEO
+        title={convo?.title ? `${convo.title} — shared on Vision` : "Shared conversation — Vision"}
+        description={
+          convo?.title
+            ? `Read "${convo.title}" — a conversation shared on Vision, the AI crypto assistant.`
+            : "A conversation shared on Vision — the AI crypto assistant."
+        }
+        canonicalPath={shareId ? `/shared/${shareId}` : undefined}
+        type="article"
+      />
       <div className="pointer-events-none absolute inset-0 bg-aurora" aria-hidden />
 
       {/* Header */}
