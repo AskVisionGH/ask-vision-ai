@@ -283,14 +283,31 @@ async function fetchWalletTrades(
 }
 
 function extractTrade(tx: any, meta: WalletMeta): TradeRow | null {
-  const swap = tx?.events?.swap;
-  if (!swap || !tx?.signature || !tx?.timestamp) return null;
-
-  const outSide = pickSwapSide(swap.tokenOutputs, swap.nativeOutput, meta.address);
-  const inSide = pickSwapSide(swap.tokenInputs, swap.nativeInput, meta.address);
+  if (!tx?.signature || !tx?.timestamp) return null;
 
   let side: "buy" | "sell" | null = null;
   let tokenSide: { mint: string; amount: number } | undefined;
+  let inSide: { mint: string; amount: number } | undefined;
+  let outSide: { mint: string; amount: number } | undefined;
+
+  // 1. Preferred: Helius-decoded swap event. Most reliable when present.
+  const swap = tx?.events?.swap;
+  if (swap) {
+    outSide = pickSwapSide(swap.tokenOutputs, swap.nativeOutput, meta.address);
+    inSide = pickSwapSide(swap.tokenInputs, swap.nativeInput, meta.address);
+  }
+
+  // 2. Fallback: Helius didn't decode the swap (common for Photon, Bonkbot,
+  //    Pump.fun-style routers, and many memecoin-launch programs). For
+  //    txs Helius classifies as SWAP, derive sides from tokenTransfers +
+  //    nativeTransfers from the wallet's perspective.
+  if ((!inSide || !outSide) && tx?.type === "SWAP") {
+    const derived = deriveSwapFromTransfers(tx, meta.address);
+    if (derived) {
+      inSide = inSide ?? derived.inSide;
+      outSide = outSide ?? derived.outSide;
+    }
+  }
 
   if (outSide && outSide.mint !== SOL_MINT && !STABLE_MINTS.has(outSide.mint)) {
     side = "buy";
@@ -318,6 +335,62 @@ function extractTrade(tx: any, meta: WalletMeta): TradeRow | null {
     source: typeof tx?.source === "string" ? tx.source : null,
   };
 }
+
+/**
+ * Derive a swap's in/out sides from raw token + native transfers when the
+ * Helius enhanced-events decoder doesn't fire. We sum every token movement
+ * by mint from the wallet's perspective: positive = received (out side of
+ * the swap), negative = sent (in side). Picks the largest send + largest
+ * receive as the swap legs.
+ */
+function deriveSwapFromTransfers(
+  tx: any,
+  owner: string,
+): { inSide?: { mint: string; amount: number }; outSide?: { mint: string; amount: number } } | null {
+  const balances = new Map<string, number>(); // mint -> signed delta
+
+  // SPL token movements
+  const tokenTransfers = Array.isArray(tx?.tokenTransfers) ? tx.tokenTransfers : [];
+  for (const t of tokenTransfers) {
+    if (!t?.mint) continue;
+    const amount = Number(t?.tokenAmount ?? 0);
+    if (!Number.isFinite(amount) || amount === 0) continue;
+    if (t?.toUserAccount === owner) {
+      balances.set(t.mint, (balances.get(t.mint) ?? 0) + amount);
+    } else if (t?.fromUserAccount === owner) {
+      balances.set(t.mint, (balances.get(t.mint) ?? 0) - amount);
+    }
+  }
+
+  // Native SOL movements (in lamports)
+  const nativeTransfers = Array.isArray(tx?.nativeTransfers) ? tx.nativeTransfers : [];
+  let solDelta = 0;
+  for (const n of nativeTransfers) {
+    const amount = Number(n?.amount ?? 0);
+    if (!Number.isFinite(amount) || amount === 0) continue;
+    if (n?.toUserAccount === owner) solDelta += amount;
+    else if (n?.fromUserAccount === owner) solDelta -= amount;
+  }
+  if (solDelta !== 0) balances.set(SOL_MINT, (balances.get(SOL_MINT) ?? 0) + solDelta / 1e9);
+
+  // Pick largest negative (sent) and largest positive (received).
+  let largestSent: { mint: string; amount: number } | undefined;
+  let largestReceived: { mint: string; amount: number } | undefined;
+  for (const [mint, delta] of balances) {
+    if (delta < 0) {
+      if (!largestSent || Math.abs(delta) > largestSent.amount) {
+        largestSent = { mint, amount: Math.abs(delta) };
+      }
+    } else if (delta > 0) {
+      if (!largestReceived || delta > largestReceived.amount) {
+        largestReceived = { mint, amount: delta };
+      }
+    }
+  }
+  if (!largestSent && !largestReceived) return null;
+  return { inSide: largestSent, outSide: largestReceived };
+}
+
 
 function pickSwapSide(
   tokenSide: any[] | undefined,
