@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { VisionLogo } from "@/components/VisionLogo";
+import { SEO } from "@/components/SEO";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
@@ -83,6 +84,7 @@ const Unsubscribe = () => {
 
   return (
     <div className="relative flex min-h-screen items-center justify-center bg-background px-6">
+      <SEO title="Unsubscribe — Vision" description="Manage your Vision email subscription." noindex />
       <div className="bg-aurora pointer-events-none absolute inset-x-0 top-0 h-[60vh]" />
       <div className="relative w-full max-w-md rounded-2xl border border-border bg-card/60 p-8 shadow-soft backdrop-blur">
         <div className="mb-8 flex items-center gap-2">

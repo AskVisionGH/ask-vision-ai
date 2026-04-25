@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { KeyRound } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { VisionLogo } from "@/components/VisionLogo";
+import { SEO } from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -62,6 +63,7 @@ const ResetPassword = () => {
 
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-6 py-10 text-foreground">
+      <SEO title="Reset password — Vision" description="Set a new password for your Vision account." noindex />
       <div className="pointer-events-none absolute inset-0 bg-aurora" aria-hidden />
 
       <div className="relative z-10 w-full max-w-sm">

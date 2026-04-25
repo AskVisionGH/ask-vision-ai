@@ -9,6 +9,7 @@ import { ConnectWalletButton } from "@/components/ConnectWalletButton";
 import { AlertBell } from "@/components/AlertBell";
 import { ShareConversationDialog } from "@/components/ShareConversationDialog";
 import { VisionLogo } from "@/components/VisionLogo";
+import { SEO } from "@/components/SEO";
 import { WalletOnboardingPrompt } from "@/components/WalletOnboardingPrompt";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -456,6 +457,7 @@ const Chat = () => {
 
   return (
     <div className="relative flex h-screen bg-background text-foreground">
+      <SEO title="Chat — Vision" description="Vision chat — your AI crypto assistant." noindex />
       {/* One-time wallet prompt for email signups with no linked wallet. */}
       <WalletOnboardingPrompt needsWallet={hasNoWallet === true} />
       <ShareConversationDialog
