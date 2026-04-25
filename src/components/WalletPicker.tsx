@@ -8,8 +8,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  isMobile,
-  isInWalletBrowser,
+  shouldUseWalletDeepLinks,
   openInPhantom,
   openInSolflare,
 } from "@/lib/mobile-wallet";
@@ -28,7 +27,7 @@ export const useWalletPicker = () => {
   const [mobileSheet, setMobileSheet] = useState(false);
 
   const open = () => {
-    if (isMobile() && !isInWalletBrowser()) {
+    if (shouldUseWalletDeepLinks()) {
       setMobileSheet(true);
       return;
     }
