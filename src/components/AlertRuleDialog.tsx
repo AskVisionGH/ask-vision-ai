@@ -36,6 +36,16 @@ interface Props {
   onOpenChange: (open: boolean) => void;
 }
 
+/** Wrapped SOL — sensible default selection so first-open feels populated. */
+const DEFAULT_SOL: TokenMeta = {
+  symbol: "SOL",
+  name: "Solana",
+  address: "So11111111111111111111111111111111111111112",
+  decimals: 9,
+  logo: "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png",
+  priceUsd: null,
+};
+
 /**
  * Create-new-rule dialog.
  * Form shape swaps based on the selected kind (price/wallet/pnl).
