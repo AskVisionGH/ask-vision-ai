@@ -1,0 +1,1 @@
+CREATE POLICY "Admins can view email send log" ON public.email_send_log FOR SELECT TO authenticated USING (public.is_admin_or_super(auth.uid()));
