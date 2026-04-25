@@ -1401,19 +1401,20 @@ const UsersTab = () => {
                 <TableHead>Onboarded</TableHead>
                 <TableHead>Joined</TableHead>
                 <TableHead>User ID</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-10 text-center">
+                  <TableCell colSpan={7} className="py-10 text-center">
                     <Loader2 className="mx-auto h-4 w-4 animate-spin text-muted-foreground" />
                   </TableCell>
                 </TableRow>
               ) : null}
               {!loading && filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
                     No users found.
                   </TableCell>
                 </TableRow>
@@ -1421,6 +1422,7 @@ const UsersTab = () => {
               {filtered.map((p) => {
                 const email = emails[p.user_id];
                 const wallets = walletsByUser[p.user_id] ?? [];
+                const isResending = resendingId === p.user_id;
                 return (
                   <TableRow key={p.user_id}>
                     <TableCell className="font-medium">
@@ -1459,6 +1461,22 @@ const UsersTab = () => {
                     <TableCell className="text-xs">{format(new Date(p.created_at), "MMM d, yyyy")}</TableCell>
                     <TableCell>
                       <CopyId value={p.user_id} />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => resendWelcome(p)}
+                        disabled={!email || isResending}
+                        title={email ? "Resend the welcome email" : "No email on file"}
+                      >
+                        {isResending ? (
+                          <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <MailPlus className="mr-1 h-3.5 w-3.5" />
+                        )}
+                        Resend welcome
+                      </Button>
                     </TableCell>
                   </TableRow>
                 );
