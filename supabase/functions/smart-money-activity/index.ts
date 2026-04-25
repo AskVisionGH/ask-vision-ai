@@ -346,7 +346,7 @@ async function loadWallets(supabase: ReturnType<typeof createClient>, userId: st
       label: trader.label,
       twitterHandle: null,
       category: "trader",
-        notes: "live_feed",
+      notes: "live_feed",
       isCurated: true,
       isUserAdded: false,
     });
@@ -563,7 +563,7 @@ async function fetchEnhancedTxs(address: string, apiKey: string, cutoff: number)
   const out: any[] = [];
   let before: string | null = null;
   const PER_PAGE = 50;
-  const MAX_PAGES = 2;
+  const MAX_PAGES = windowHours <= 24 ? 1 : 2;
 
   for (let page = 0; page < MAX_PAGES; page++) {
     const url = new URL(`https://api.helius.xyz/v0/addresses/${address}/transactions`);
