@@ -327,10 +327,20 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
-  // Shared-secret auth — only the cron and the admin UI should reach this.
+  // Auth: either the shared cron secret OR a signed-in admin/super_admin JWT.
   const expectedSecret = Deno.env.get("INNGEST_EVENT_TRIGGER_SECRET");
   const providedSecret = req.headers.get("x-sweep-secret");
-  if (!expectedSecret || providedSecret !== expectedSecret) {
+  const secretOk = !!expectedSecret && providedSecret === expectedSecret;
+
+  let adminOk = false;
+  if (!secretOk) {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    adminOk = await isAdminCaller(req, supabaseUrl, anonKey, serviceKey);
+  }
+
+  if (!secretOk && !adminOk) {
     return json({ error: "Unauthorized" }, 401);
   }
 
