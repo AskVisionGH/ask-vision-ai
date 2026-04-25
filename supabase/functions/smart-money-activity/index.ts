@@ -559,7 +559,12 @@ async function fetchWalletTrades(
   return out;
 }
 
-async function fetchEnhancedTxs(address: string, apiKey: string, cutoff: number): Promise<any[]> {
+async function fetchEnhancedTxs(
+  address: string,
+  apiKey: string,
+  cutoff: number,
+  windowHours: number,
+): Promise<any[]> {
   const out: any[] = [];
   let before: string | null = null;
   const PER_PAGE = 50;
