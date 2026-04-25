@@ -1086,6 +1086,8 @@ const TreasuryTab = () => {
           title: "Nothing to sweep",
           description: result.reason ?? `Below $${1} dust threshold (~$${(result.totalValueUsd ?? 0).toFixed(2)})`,
         });
+        // Still refresh the ledger so any out-of-band fees get indexed.
+        await triggerSync();
       } else {
         toast({
           title: "Sweep failed",
@@ -1189,19 +1191,13 @@ const TreasuryTab = () => {
               </PopoverContent>
             </Popover>
           )}
-          <Button size="sm" variant="outline" onClick={triggerSweep} disabled={sweeping || syncing || loading}>
-            {sweeping ? (
-              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-            ) : null}
-            Sweep now
-          </Button>
-          <Button size="sm" onClick={triggerSync} disabled={syncing || loading || sweeping}>
-            {syncing || loading ? (
+          <Button size="sm" onClick={triggerSweep} disabled={sweeping || syncing || loading}>
+            {sweeping || syncing || loading ? (
               <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
             ) : (
               <RefreshCw className="mr-1 h-3.5 w-3.5" />
             )}
-            Refresh
+            {sweeping ? "Sweeping…" : syncing ? "Refreshing…" : "Sweep + Refresh"}
           </Button>
         </div>
       </div>
