@@ -16,6 +16,31 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.45.0";
+
+// Verify whether the request bearer token belongs to a super_admin / admin
+// user. Lets the admin-panel "Sweep now" button trigger sweeps from the
+// browser without leaking the cron's shared secret.
+async function isAdminCaller(req: Request, supabaseUrl: string, anonKey: string, serviceKey: string): Promise<boolean> {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) return false;
+  try {
+    const userClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user } } = await userClient.auth.getUser();
+    if (!user) return false;
+    const admin = createClient(supabaseUrl, serviceKey);
+    const { data } = await admin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .in("role", ["admin", "super_admin"])
+      .maybeSingle();
+    return !!data;
+  } catch {
+    return false;
+  }
+}
 import { Connection, Keypair, PublicKey, VersionedTransaction } from "npm:@solana/web3.js@1.95.3";
 import { ReferralProvider } from "npm:@jup-ag/referral-sdk@0.3.0";
 import bs58 from "https://esm.sh/bs58@5.0.0";
@@ -302,10 +327,20 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
-  // Shared-secret auth — only the cron and the admin UI should reach this.
+  // Auth: either the shared cron secret OR a signed-in admin/super_admin JWT.
   const expectedSecret = Deno.env.get("INNGEST_EVENT_TRIGGER_SECRET");
   const providedSecret = req.headers.get("x-sweep-secret");
-  if (!expectedSecret || providedSecret !== expectedSecret) {
+  const secretOk = !!expectedSecret && providedSecret === expectedSecret;
+
+  let adminOk = false;
+  if (!secretOk) {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    adminOk = await isAdminCaller(req, supabaseUrl, anonKey, serviceKey);
+  }
+
+  if (!secretOk && !adminOk) {
     return json({ error: "Unauthorized" }, 401);
   }
 

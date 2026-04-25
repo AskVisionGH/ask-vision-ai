@@ -1059,6 +1059,47 @@ const TreasuryTab = () => {
     }
   };
 
+  const [sweeping, setSweeping] = useState(false);
+  const triggerSweep = async () => {
+    setSweeping(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("sweep-fees", {
+        body: { trigger: "manual" },
+      });
+      if (error) throw error;
+      const result = data as {
+        status?: string;
+        totalValueUsd?: number;
+        signatures?: string[];
+        reason?: string;
+        error?: string;
+      };
+      if (result?.status === "success" || result?.status === "partial") {
+        toast({
+          title: result.status === "success" ? "Sweep complete" : "Sweep partial",
+          description: `Claimed ~$${(result.totalValueUsd ?? 0).toFixed(2)} · ${result.signatures?.length ?? 0} tx`,
+        });
+        // Re-index ledger so the new sweep rows appear immediately.
+        await triggerSync();
+      } else if (result?.status === "skipped_dust") {
+        toast({
+          title: "Nothing to sweep",
+          description: result.reason ?? `Below $${1} dust threshold (~$${(result.totalValueUsd ?? 0).toFixed(2)})`,
+        });
+      } else {
+        toast({
+          title: "Sweep failed",
+          description: result?.error ?? "Unknown error",
+          variant: "destructive",
+        });
+      }
+    } catch (e) {
+      toast({ title: "Sweep failed", description: e instanceof Error ? e.message : "Unknown error", variant: "destructive" });
+    } finally {
+      setSweeping(false);
+    }
+  };
+
   const dateBounds = useMemo(() => {
     const earliest = fees.length > 0
       ? new Date(fees[fees.length - 1].block_time).getTime()
@@ -1148,7 +1189,13 @@ const TreasuryTab = () => {
               </PopoverContent>
             </Popover>
           )}
-          <Button size="sm" onClick={triggerSync} disabled={syncing || loading}>
+          <Button size="sm" variant="outline" onClick={triggerSweep} disabled={sweeping || syncing || loading}>
+            {sweeping ? (
+              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+            ) : null}
+            Sweep now
+          </Button>
+          <Button size="sm" onClick={triggerSync} disabled={syncing || loading || sweeping}>
             {syncing || loading ? (
               <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
             ) : (
