@@ -297,21 +297,47 @@ const TrackedWallets = () => {
               )}
             </section>
 
-            {/* Curated */}
+            {/* Suggested */}
             <section className="rounded-2xl border border-border bg-card/40 p-6 backdrop-blur-md">
-              <div className="mb-4 flex items-center gap-2">
+              <div className="mb-4 flex flex-wrap items-center gap-2">
                 <Star className="h-4 w-4 text-primary" />
-                <h2 className="text-sm font-medium text-foreground">Curated wallets</h2>
-                <span className="ml-auto text-[11px] text-muted-foreground">
+                <h2 className="text-sm font-medium text-foreground">Suggested wallets</h2>
+                <span className="text-[11px] text-muted-foreground">
                   {curated.length} known traders & devs
                 </span>
+                {(() => {
+                  const suggestedTrackedCount = curated.filter((c) =>
+                    trackedAddresses.has(c.address),
+                  ).length;
+                  const allOn = suggestedTrackedCount === curated.length && curated.length > 0;
+                  return (
+                    <div className="ml-auto flex items-center gap-2">
+                      <span className="text-[11px] text-muted-foreground">
+                        {allOn ? "Track none" : "Track all"}
+                      </span>
+                      <Switch
+                        checked={allOn}
+                        onCheckedChange={async (next) => {
+                          if (next) {
+                            const added = await trackAllCurated();
+                            if (added > 0) toast.success(`Tracking ${added} suggested wallets`);
+                          } else {
+                            const removed = await untrackAllCurated();
+                            if (removed > 0) toast.success(`Stopped tracking ${removed} wallets`);
+                          }
+                        }}
+                        aria-label={allOn ? "Stop tracking all suggested wallets" : "Track all suggested wallets"}
+                      />
+                    </div>
+                  );
+                })()}
               </div>
               <div className="relative mb-3">
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
                 <Input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search curated wallets…"
+                  placeholder="Search suggested wallets…"
                   className="h-8 border-border/60 bg-secondary/40 pl-8 pr-7 text-xs"
                 />
                 {search && (
@@ -326,7 +352,7 @@ const TrackedWallets = () => {
               </div>
               {filteredCurated.length === 0 ? (
                 <p className="rounded-xl border border-dashed border-border/60 px-4 py-6 text-center text-xs text-muted-foreground">
-                  No curated wallets match that search.
+                  No suggested wallets match that search.
                 </p>
               ) : (
                 <ul className="space-y-1">
