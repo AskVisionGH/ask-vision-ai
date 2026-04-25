@@ -420,6 +420,11 @@ export const AlertRuleDialog = ({ open, onOpenChange }: Props) => {
           </Button>
         </DialogFooter>
       </DialogContent>
+      <TokenPickerDialog
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        onSelect={(t) => setPriceToken(t)}
+      />
     </Dialog>
   );
 };
