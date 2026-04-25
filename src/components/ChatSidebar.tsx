@@ -385,14 +385,13 @@ export const ChatSidebar = ({
           >
             <ArrowLeftRight className="h-4 w-4" />
           </Link>
-          <Link
-            to="/tracked-wallets"
-            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
-            aria-label="Tracked wallets"
-            title="Tracked wallets"
+          <div
+            className="flex h-8 w-8 cursor-not-allowed items-center justify-center rounded-md text-muted-foreground/40"
+            aria-disabled="true"
+            title="Tracking — coming soon"
           >
             <Radar className="h-4 w-4" />
-          </Link>
+          </div>
           <Link
             to="/contacts"
             className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
@@ -530,13 +529,17 @@ export const ChatSidebar = ({
           <ArrowLeftRight className="h-3.5 w-3.5" />
           Bridge
         </Link>
-        <Link
-          to="/tracked-wallets"
-          className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground ease-vision hover:bg-secondary/60 hover:text-foreground"
+        <div
+          className="ease-vision flex cursor-not-allowed items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground/50"
+          aria-disabled="true"
+          title="Tracking — coming soon"
         >
           <Radar className="h-3.5 w-3.5" />
-          Tracking
-        </Link>
+          <span>Tracking</span>
+          <span className="ml-auto rounded-full border border-border/60 bg-secondary/40 px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
+            Soon
+          </span>
+        </div>
         <Link
           to="/contacts"
           className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground ease-vision hover:bg-secondary/60 hover:text-foreground"
