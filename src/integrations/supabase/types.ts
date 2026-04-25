@@ -895,7 +895,7 @@ export type Database = {
     }
     Enums: {
       alert_rule_kind: "price" | "wallet_activity" | "portfolio_pnl"
-      app_role: "admin" | "user"
+      app_role: "admin" | "user" | "super_admin"
       crypto_experience: "new" | "intermediate" | "advanced"
       notification_category:
         | "price"
@@ -1033,7 +1033,7 @@ export const Constants = {
   public: {
     Enums: {
       alert_rule_kind: ["price", "wallet_activity", "portfolio_pnl"],
-      app_role: ["admin", "user"],
+      app_role: ["admin", "user", "super_admin"],
       crypto_experience: ["new", "intermediate", "advanced"],
       notification_category: [
         "price",

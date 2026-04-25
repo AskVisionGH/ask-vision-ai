@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowLeftRight, BarChart3, CalendarIcon, Check, Copy, Extern
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
+import { useIsSuperAdmin } from "@/hooks/useIsSuperAdmin";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1293,6 +1294,7 @@ const WalletsDialog = ({
 
 const RolesTab = () => {
   const { user } = useAuth();
+  const { isSuperAdmin, loading: superLoading } = useIsSuperAdmin();
   const [roles, setRoles] = useState<RoleRow[]>([]);
   const [nameByUserId, setNameByUserId] = useState<Record<string, string | null>>({});
   const [loading, setLoading] = useState(true);
@@ -1341,7 +1343,11 @@ const RolesTab = () => {
 
   const revoke = async (row: RoleRow) => {
     if (row.user_id === user?.id) {
-      toast({ title: "Refusing to revoke your own admin role", variant: "destructive" });
+      toast({ title: "Refusing to revoke your own role", variant: "destructive" });
+      return;
+    }
+    if (row.role === "super_admin") {
+      toast({ title: "Super admin role is protected", variant: "destructive" });
       return;
     }
     const { error } = await supabase.from("user_roles").delete().eq("id", row.id);
@@ -1355,23 +1361,40 @@ const RolesTab = () => {
 
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Grant admin</CardTitle>
-        </CardHeader>
-        <CardContent className="flex gap-2">
-          <Input
-            placeholder="User ID (UUID from Users tab)"
-            value={newUserId}
-            onChange={(e) => setNewUserId(e.target.value)}
-            className="font-mono text-xs"
-          />
-          <Button onClick={grant} disabled={granting || !newUserId.trim()}>
-            {granting ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Shield className="mr-1 h-3.5 w-3.5" />}
-            Grant
-          </Button>
-        </CardContent>
-      </Card>
+      {/* Only super admins can manage roles. Regular admins see a read-only
+          notice and the role list. The DB enforces the same rule via RLS. */}
+      {superLoading ? null : isSuperAdmin ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Grant admin</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Only super admins can grant or revoke roles. Pasted user must already exist.
+            </p>
+          </CardHeader>
+          <CardContent className="flex gap-2">
+            <Input
+              placeholder="User ID (UUID from Users tab)"
+              value={newUserId}
+              onChange={(e) => setNewUserId(e.target.value)}
+              className="font-mono text-xs"
+            />
+            <Button onClick={grant} disabled={granting || !newUserId.trim()}>
+              {granting ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Shield className="mr-1 h-3.5 w-3.5" />}
+              Grant
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardContent className="flex items-start gap-2 py-3 text-xs text-muted-foreground">
+            <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>
+              Role management is restricted to super admins. You can view roles below
+              but can't grant or revoke them.
+            </span>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardContent className="p-0">
@@ -1402,11 +1425,16 @@ const RolesTab = () => {
               ) : null}
               {roles.map((r) => {
                 const name = nameByUserId[r.user_id];
+                const isProtected = r.role === "super_admin";
+                const isSelf = r.user_id === user?.id;
+                // Disable the revoke button for: self, super_admin rows,
+                // or non-super-admin viewers (RLS would also reject).
+                const canRevoke = isSuperAdmin && !isSelf && !isProtected;
                 return (
                 <TableRow key={r.id}>
                   <TableCell className="font-medium">
                     {name ?? <span className="text-muted-foreground">Unknown</span>}
-                    {r.user_id === user?.id ? (
+                    {isSelf ? (
                       <Badge variant="outline" className="ml-2 text-[10px]">You</Badge>
                     ) : null}
                   </TableCell>
@@ -1414,7 +1442,12 @@ const RolesTab = () => {
                     <CopyId value={r.user_id} />
                   </TableCell>
                   <TableCell>
-                    <Badge variant="secondary" className="text-xs">{r.role}</Badge>
+                    <Badge
+                      variant={isProtected ? "default" : "secondary"}
+                      className="text-xs"
+                    >
+                      {isProtected ? "super admin" : r.role}
+                    </Badge>
                   </TableCell>
                   <TableCell className="text-xs">{format(new Date(r.created_at), "MMM d, yyyy")}</TableCell>
                   <TableCell className="text-right">
@@ -1422,7 +1455,16 @@ const RolesTab = () => {
                       variant="ghost"
                       size="sm"
                       onClick={() => revoke(r)}
-                      disabled={r.user_id === user?.id}
+                      disabled={!canRevoke}
+                      title={
+                        isProtected
+                          ? "Super admin role is protected"
+                          : isSelf
+                            ? "You can't revoke your own role"
+                            : !isSuperAdmin
+                              ? "Only super admins can revoke roles"
+                              : undefined
+                      }
                     >
                       <ShieldOff className="mr-1 h-3.5 w-3.5" />
                       Revoke
