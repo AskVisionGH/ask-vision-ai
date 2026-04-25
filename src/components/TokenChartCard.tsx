@@ -8,7 +8,17 @@ interface Props {
   data: TokenChartData;
 }
 
-const INTERVALS: ChartInterval[] = ["5m", "15m", "1h", "4h", "1d"];
+const INTERVALS: ChartInterval[] = ["5m", "30m", "1h", "4h", "1d", "1w", "1mo"];
+
+const INTERVAL_DISPLAY: Record<ChartInterval, string> = {
+  "5m": "5m",
+  "30m": "30m",
+  "1h": "1h",
+  "4h": "4h",
+  "1d": "1d",
+  "1w": "1w",
+  "1mo": "1m",
+};
 
 const TA_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/token-ta`;
 const CHART_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/token-chart`;
