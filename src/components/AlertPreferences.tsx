@@ -10,6 +10,8 @@ import {
   type NotificationPreferences,
 } from "@/hooks/useNotificationPreferences";
 import { useWebPush } from "@/hooks/useWebPush";
+import { PushEnableDialog } from "@/components/PushEnableDialog";
+import { PushDeniedDialog } from "@/components/PushDeniedDialog";
 import { cn } from "@/lib/utils";
 
 /**
@@ -27,6 +29,8 @@ export const AlertPreferences = () => {
   const [savingQuiet, setSavingQuiet] = useState(false);
   const [quietStart, setQuietStart] = useState<string>("22:00");
   const [quietEnd, setQuietEnd] = useState<string>("08:00");
+  const [showEnableDialog, setShowEnableDialog] = useState(false);
+  const [showDeniedDialog, setShowDeniedDialog] = useState(false);
 
   // Hydrate quiet-hours inputs from prefs the first time they arrive.
   useEffect(() => {
