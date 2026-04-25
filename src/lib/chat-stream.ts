@@ -517,6 +517,52 @@ export interface OpenOrdersData {
   error?: string;
 }
 
+export interface BridgeChainInfo {
+  id: number | string;
+  key: string;
+  name: string;
+  logo: string | null;
+  chainType: string;
+}
+
+export interface BridgeTokenSide {
+  address: string;
+  symbol: string;
+  name: string;
+  decimals: number;
+  logo: string | null;
+  priceUsd: number | null;
+  /** Source side: amount being sent. Destination side: estimated amount received. */
+  amountUi: number;
+  /** Atomic units string — only set on the source side. */
+  amountAtomic?: string;
+  /** Destination side only — minimum after slippage. */
+  amountMinUi?: number;
+}
+
+export interface BridgeQuoteData {
+  fromChain: BridgeChainInfo;
+  toChain: BridgeChainInfo;
+  fromToken: BridgeTokenSide;
+  toToken: BridgeTokenSide;
+  fromAddress: string;
+  toAddress: string;
+  /** True when source + destination chains share a chain family (e.g. SVM↔SVM). */
+  sameFamily: boolean;
+  slippageBps: number;
+  executionDurationSec: number | null;
+  platformFeeUsd: number | null;
+  gasFeeUsd: number | null;
+  fromAmountUsd: number | null;
+  toAmountUsd: number | null;
+  tool: string | null;
+  toolName: string | null;
+  /** Echoed raw LI.FI quote — handed back to bridge-build untouched. */
+  raw: any;
+  quotedAt: number;
+  error?: string;
+}
+
 export type ToolEvent =
   | { type: "wallet_balance"; data: WalletBalanceData }
   | { type: "token_info"; data: TokenInfoData }
@@ -537,6 +583,7 @@ export type ToolEvent =
   | { type: "bracket_quote"; data: BracketQuoteData }
   | { type: "ladder_quote"; data: LadderQuoteData }
   | { type: "open_orders"; data: OpenOrdersData }
+  | { type: "bridge_quote"; data: BridgeQuoteData }
   | { type: string; data: any };
 
 export interface ChatMessage {

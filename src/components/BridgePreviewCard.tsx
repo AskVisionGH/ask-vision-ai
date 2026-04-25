@@ -1,0 +1,558 @@
+import { useEffect, useRef, useState } from "react";
+import {
+  ArrowRight,
+  Loader2,
+  CheckCircle2,
+  ExternalLink,
+  AlertCircle,
+  Info,
+} from "lucide-react";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { VersionedTransaction } from "@solana/web3.js";
+import { cn } from "@/lib/utils";
+import { TokenLogo } from "@/components/TokenLogo";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { supabase } from "@/integrations/supabase/client";
+import type { BridgeQuoteData, BridgeTokenSide } from "@/lib/chat-stream";
+
+interface Props {
+  data: BridgeQuoteData;
+}
+
+const POLL_INTERVAL_MS = 4000;
+const POLL_TIMEOUT_MS = 15 * 60 * 1000;
+
+type Phase =
+  | { name: "preview" }
+  | { name: "building" }
+  | { name: "awaiting_signature" }
+  | { name: "submitting" }
+  | {
+      name: "bridging";
+      signature: string;
+      startedAt: number;
+      estimatedSec: number | null;
+    }
+  | {
+      name: "success";
+      signature: string;
+      durationMs: number;
+      toAmountUi: number;
+      destExplorer: string | null;
+    }
+  | { name: "error"; message: string; cancelled?: boolean };
+
+const fmtUsd = (n: number | null | undefined) => {
+  if (n == null) return "—";
+  if (Math.abs(n) < 0.01 && n !== 0) return `$${n.toExponential(2)}`;
+  return n.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+  });
+};
+
+const fmtAmount = (n: number) => {
+  if (n === 0) return "0";
+  if (Math.abs(n) < 0.000001) return n.toExponential(3);
+  if (Math.abs(n) < 1) return n.toLocaleString("en-US", { maximumFractionDigits: 6 });
+  if (Math.abs(n) < 1000) return n.toLocaleString("en-US", { maximumFractionDigits: 4 });
+  return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+};
+
+const truncSig = (s: string) => `${s.slice(0, 4)}…${s.slice(-4)}`;
+const truncAddr = (s: string) => (s.length > 14 ? `${s.slice(0, 6)}…${s.slice(-4)}` : s);
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+const supaPost = async (fn: string, body: unknown, attempt = 0): Promise<any> => {
+  const { data, error } = await supabase.functions.invoke(fn, { body });
+  if (error) {
+    const ctx = (error as any).context;
+    let serverMsg: string | null = null;
+    let status: number | undefined;
+    if (ctx) {
+      status = ctx.status;
+      if (typeof ctx.json === "function") {
+        try {
+          const parsed = await ctx.json();
+          if (parsed?.error) serverMsg = String(parsed.error);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    const message = serverMsg ?? error.message ?? `${fn} failed`;
+    const transient =
+      status === 503 ||
+      status === 504 ||
+      message.toLowerCase().includes("temporarily unavailable") ||
+      message.toLowerCase().includes("runtime_error");
+    if (transient && attempt < 2) {
+      await sleep(400 * (attempt + 1));
+      return supaPost(fn, body, attempt + 1);
+    }
+    throw new Error(message);
+  }
+  if (data && typeof data === "object" && "error" in (data as any) && (data as any).error) {
+    throw new Error((data as any).error);
+  }
+  return data;
+};
+
+const supaGet = async (fn: string, params: Record<string, string>): Promise<any> => {
+  const url = new URL(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${fn}`);
+  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+  const resp = await fetch(url.toString(), {
+    headers: {
+      apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+    },
+  });
+  const data = await resp.json();
+  if (data?.error && resp.status >= 400) throw new Error(data.error);
+  return data;
+};
+
+export const BridgePreviewCard = ({ data }: Props) => {
+  const [phase, setPhase] = useState<Phase>({ name: "preview" });
+  const [dismissed, setDismissed] = useState(false);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  const mounted = useRef(true);
+  const { publicKey, signTransaction, connected } = useWallet();
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (phase.name !== "bridging") return;
+    setNowTick(Date.now());
+    const id = window.setInterval(() => setNowTick(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [phase.name]);
+
+  if (data.error) {
+    return (
+      <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+        {data.error}
+      </div>
+    );
+  }
+
+  if (dismissed) return null;
+
+  const handleConfirm = async () => {
+    if (!connected || !publicKey || !signTransaction) {
+      setPhase({
+        name: "error",
+        message: "Connect a wallet that supports signing.",
+      });
+      return;
+    }
+
+    const startedAt = Date.now();
+    try {
+      setPhase({ name: "building" });
+      const built = await supaPost("bridge-build", { quote: data.raw });
+      const txB64: string | null =
+        built.solanaTransaction ?? built.transactionRequest?.data ?? null;
+      if (!txB64) throw new Error("Bridge route returned no Solana transaction");
+
+      setPhase({ name: "awaiting_signature" });
+      const txBytes = Uint8Array.from(atob(txB64), (c) => c.charCodeAt(0));
+      const tx = VersionedTransaction.deserialize(txBytes);
+      let signed: VersionedTransaction;
+      try {
+        signed = await signTransaction(tx);
+      } catch {
+        if (mounted.current) {
+          setPhase({
+            name: "error",
+            message: "Cancelled — try again or adjust the amount.",
+            cancelled: true,
+          });
+        }
+        return;
+      }
+
+      setPhase({ name: "submitting" });
+      const signedB64 = btoa(String.fromCharCode(...signed.serialize()));
+      const submitted = await supaPost("tx-submit", {
+        signedTransaction: signedB64,
+        kind: "bridge",
+        valueUsd: data.fromAmountUsd ?? data.toAmountUsd ?? null,
+        inputMint: data.fromToken.address,
+        outputMint: data.toToken.address,
+        inputAmount: data.fromToken.amountUi,
+        outputAmount: data.toToken.amountUi,
+        walletAddress: publicKey.toBase58(),
+      });
+      const signature = submitted.signature as string;
+      if (!signature) throw new Error("No signature returned from submit");
+
+      setPhase({
+        name: "bridging",
+        signature,
+        startedAt,
+        estimatedSec: data.executionDurationSec ?? null,
+      });
+      const deadline = Date.now() + POLL_TIMEOUT_MS;
+      while (Date.now() < deadline) {
+        if (!mounted.current) return;
+        await sleep(POLL_INTERVAL_MS);
+        try {
+          const status = await supaGet("bridge-status", {
+            txHash: signature,
+            fromChain: String(data.fromChain.id),
+            toChain: String(data.toChain.id),
+            bridge: data.tool ?? "",
+          });
+          if (status.status === "DONE") {
+            const recv = status.receiving;
+            const destAmountUi =
+              recv?.amount && data.toToken.decimals != null
+                ? Number(recv.amount) / Math.pow(10, data.toToken.decimals)
+                : data.toToken.amountUi;
+            const destExplorer = recv?.txLink ?? null;
+            if (!mounted.current) return;
+            setPhase({
+              name: "success",
+              signature,
+              durationMs: Date.now() - startedAt,
+              toAmountUi: destAmountUi,
+              destExplorer,
+            });
+            return;
+          }
+          if (status.status === "FAILED" || status.status === "INVALID") {
+            throw new Error(status.substatus ?? "Bridge failed on-chain");
+          }
+        } catch {
+          continue;
+        }
+      }
+      throw new Error(
+        "Bridge is taking longer than expected. You can keep tracking it from the source transaction.",
+      );
+    } catch (e) {
+      if (!mounted.current) return;
+      const message = e instanceof Error ? e.message : "Something went wrong.";
+      setPhase({ name: "error", message });
+    }
+  };
+
+  if (phase.name === "success") {
+    return (
+      <div className="ease-vision animate-fade-up overflow-hidden rounded-2xl border border-up/30 bg-up/5 p-4">
+        <div className="flex items-start gap-3">
+          <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-up" />
+          <div className="min-w-0 flex-1">
+            <p className="font-mono text-[13px] text-foreground">
+              Bridged{" "}
+              <span className="font-medium">
+                {fmtAmount(data.fromToken.amountUi)} {data.fromToken.symbol}
+              </span>{" "}
+              <span className="text-muted-foreground">on {data.fromChain.name}</span>
+              {" → "}
+              <span className="font-medium">
+                {fmtAmount(phase.toAmountUi)} {data.toToken.symbol}
+              </span>{" "}
+              <span className="text-muted-foreground">on {data.toChain.name}</span>
+            </p>
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              <span>Completed in {(phase.durationMs / 1000).toFixed(0)}s</span>
+              <a
+                href={`https://solscan.io/tx/${phase.signature}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ease-vision inline-flex items-center gap-1 text-primary transition-colors hover:text-primary/80"
+              >
+                Source {truncSig(phase.signature)}
+                <ExternalLink className="h-2.5 w-2.5" />
+              </a>
+              {phase.destExplorer && (
+                <a
+                  href={phase.destExplorer}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ease-vision inline-flex items-center gap-1 text-primary transition-colors hover:text-primary/80"
+                >
+                  Destination tx
+                  <ExternalLink className="h-2.5 w-2.5" />
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const isBusy =
+    phase.name === "building" ||
+    phase.name === "awaiting_signature" ||
+    phase.name === "submitting" ||
+    phase.name === "bridging";
+  const isError = phase.name === "error";
+  const errorMsg = isError ? (phase as Extract<Phase, { name: "error" }>).message : "";
+
+  const busyLabel =
+    phase.name === "building"
+      ? "Building transaction…"
+      : phase.name === "awaiting_signature"
+        ? "Approve in wallet…"
+        : phase.name === "submitting"
+          ? "Submitting on Solana…"
+          : phase.name === "bridging"
+            ? bridgingLabel(phase, nowTick)
+            : "";
+
+  return (
+    <TooltipProvider delayDuration={150}>
+      <div className="ease-vision animate-fade-up overflow-hidden rounded-2xl border border-border bg-card/60 backdrop-blur-sm">
+        <div className="flex items-center justify-between border-b border-border/60 bg-gradient-to-br from-primary/[0.04] to-transparent px-5 py-3">
+          <span className="font-mono text-[10px] tracking-widest uppercase text-muted-foreground">
+            Bridge preview
+          </span>
+          {isBusy && (
+            <div className="flex items-center gap-2 font-mono text-[10px] text-primary">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              <span>{busyLabel}</span>
+            </div>
+          )}
+          {phase.name === "preview" && data.toolName && (
+            <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/70">
+              via {data.toolName}
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-5 py-5">
+          <BridgeSide
+            chain={data.fromChain}
+            token={data.fromToken}
+            align="left"
+          />
+          <ArrowRight className="h-4 w-4 text-muted-foreground" />
+          <BridgeSide
+            chain={data.toChain}
+            token={data.toToken}
+            align="right"
+            approx
+          />
+        </div>
+
+        <div className="border-t border-border/40 px-5 py-3">
+          <Row
+            label="Route"
+            value={
+              <span className="font-mono text-[13px] text-foreground">
+                {data.fromChain.name} → {data.toChain.name}{" "}
+                {data.toolName && (
+                  <span className="text-muted-foreground">via {data.toolName}</span>
+                )}
+              </span>
+            }
+          />
+          {data.executionDurationSec != null && (
+            <Row
+              label="Est. time"
+              value={
+                <span className="font-mono text-[13px] text-foreground">
+                  ~{Math.max(1, Math.round(data.executionDurationSec / 60))} min
+                </span>
+              }
+            />
+          )}
+          <Row
+            label="Slippage"
+            value={
+              <span className="font-mono text-[13px] text-foreground">
+                {(data.slippageBps / 100).toFixed(2)}%
+              </span>
+            }
+          />
+          {data.toToken.amountMinUi != null && (
+            <Row
+              label="Min received"
+              value={
+                <span className="font-mono text-[13px] text-foreground">
+                  {fmtAmount(data.toToken.amountMinUi)} {data.toToken.symbol}
+                </span>
+              }
+            />
+          )}
+          {data.gasFeeUsd != null && (
+            <Row
+              label="Gas fee"
+              value={
+                <span className="font-mono text-[13px] text-muted-foreground">
+                  ~{fmtUsd(data.gasFeeUsd)}
+                </span>
+              }
+            />
+          )}
+          {data.platformFeeUsd != null && data.platformFeeUsd > 0 && (
+            <Row
+              label="Platform fee"
+              value={
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono text-[13px] text-foreground">
+                    {fmtUsd(data.platformFeeUsd)}
+                  </span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        className="ease-vision text-muted-foreground/60 transition-colors hover:text-foreground"
+                        aria-label="About platform fee"
+                      >
+                        <Info className="h-3 w-3" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-[240px]">
+                      <p className="font-mono text-[11px] leading-relaxed">
+                        Vision charges a 1% integrator fee on bridges, paid in
+                        the source token through LI.FI.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              }
+            />
+          )}
+          <Row
+            label="Destination"
+            value={
+              <span className="font-mono text-[13px] text-foreground">
+                {truncAddr(data.toAddress)}
+                {data.sameFamily && (
+                  <span className="ml-1.5 text-muted-foreground">(your wallet)</span>
+                )}
+              </span>
+            }
+          />
+        </div>
+
+        {isError && (
+          <div className="flex items-start gap-2 border-t border-destructive/30 bg-destructive/5 px-5 py-3">
+            <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-destructive" />
+            <p className="font-mono text-[11px] leading-relaxed text-destructive">
+              {errorMsg}
+            </p>
+          </div>
+        )}
+
+        <div className="flex items-center gap-2 border-t border-border/40 bg-secondary/30 px-5 py-3">
+          {!connected ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="flex-1">
+                  <Button
+                    disabled
+                    className="ease-vision w-full font-mono text-[11px] tracking-wider uppercase"
+                  >
+                    Confirm & sign
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top">Connect a wallet to sign.</TooltipContent>
+            </Tooltip>
+          ) : (
+            <Button
+              onClick={isError ? () => setPhase({ name: "preview" }) : handleConfirm}
+              disabled={isBusy}
+              className="ease-vision flex-1 font-mono text-[11px] tracking-wider uppercase"
+            >
+              {isBusy ? (
+                <>
+                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                  {busyLabel}
+                </>
+              ) : isError ? (
+                "Retry"
+              ) : (
+                "Confirm & sign"
+              )}
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            disabled={isBusy}
+            onClick={() => setDismissed(true)}
+            className="ease-vision font-mono text-[11px] tracking-wider uppercase"
+          >
+            Dismiss
+          </Button>
+        </div>
+      </div>
+    </TooltipProvider>
+  );
+};
+
+function bridgingLabel(
+  phase: Extract<Phase, { name: "bridging" }>,
+  now: number,
+): string {
+  const elapsed = Math.max(0, Math.floor((now - phase.startedAt) / 1000));
+  if (phase.estimatedSec != null) {
+    const remaining = Math.max(0, phase.estimatedSec - elapsed);
+    return `Bridging… ~${remaining}s left`;
+  }
+  return `Bridging… ${elapsed}s elapsed`;
+}
+
+interface BridgeSideProps {
+  chain: BridgeQuoteData["fromChain"];
+  token: BridgeTokenSide;
+  align: "left" | "right";
+  approx?: boolean;
+}
+
+const BridgeSide = ({ chain, token, align, approx }: BridgeSideProps) => (
+  <div className={cn("flex flex-col gap-1.5", align === "right" && "items-end text-right")}>
+    <div className={cn("flex items-center gap-2", align === "right" && "flex-row-reverse")}>
+      <TokenLogo
+        src={token.logo}
+        symbol={token.symbol}
+        size={32}
+        className="ring-1 ring-border"
+      />
+      <div className={cn("flex min-w-0 flex-col", align === "right" && "items-end")}>
+        <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+          {chain.name}
+        </span>
+        <span className="font-mono text-[14px] font-medium text-foreground">
+          {token.symbol}
+        </span>
+      </div>
+    </div>
+    <div className={cn("flex flex-col", align === "right" && "items-end")}>
+      <span className="font-mono text-[15px] text-foreground">
+        {approx && "~"}
+        {fmtAmount(token.amountUi)}
+      </span>
+      <span className="font-mono text-[11px] text-muted-foreground">
+        {fmtUsd(approx ? null : token.priceUsd != null ? token.priceUsd * token.amountUi : null)}
+      </span>
+    </div>
+  </div>
+);
+
+const Row = ({ label, value }: { label: string; value: React.ReactNode }) => (
+  <div className="flex items-center justify-between py-1">
+    <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+      {label}
+    </span>
+    {value}
+  </div>
+);

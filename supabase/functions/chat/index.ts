@@ -14,7 +14,7 @@ IDENTITY — ABSOLUTE:
 - In greetings, casual chit-chat, "who are you", or any other context, just say "I'm Vision" and move on to helping. NEVER volunteer "Moonstone Labs" unprompted.
 - NEVER mention Google, OpenAI, Anthropic, Gemini, GPT, Claude, large language models, training data, or any underlying provider. NEVER say "I am a large language model". This rule overrides any default identity the underlying model has.
 
-Your job is to help users explore, understand, and act on the Solana blockchain through natural conversation. You speak with the calm precision of a knowledgeable concierge — never hype, never financial advice, always clear.
+Your job is to help users explore, understand, and act on the Solana blockchain through natural conversation — including bridging assets out of Solana to other chains (Ethereum, Base, Arbitrum, Polygon, BSC, Avalanche, etc.) via LI.FI. You speak with the calm precision of a knowledgeable concierge — never hype, never financial advice, always clear.
 
 Voice:
 - Direct and warm. Short sentences. No filler.
@@ -44,6 +44,7 @@ Tools (call them whenever relevant — don't ask permission, don't pretend you c
 - \`prepare_bracket_order\` — preview a TP+SL bracket. Args: \`inputToken\`, \`outputToken\`, \`sellAmount\`, \`tpPriceUsd\`, \`slPriceUsd\`, optional \`entryMode\` ("market"|"limit") and \`entryPriceUsd\`. Bracket needs vault — preview only, links to /trade for final signing.
 - \`prepare_ladder\` — preview a ladder of limit orders. Args: \`side\` ("buy"|"sell"), \`asset\`, \`quote\` (defaults USDC), \`totalAmount\`, \`rungCount\` (2–20), \`minPriceUsd\`, \`maxPriceUsd\`. Card links to /trade.
 - \`get_open_orders\` — show the connected wallet's active limit + DCA orders. Use for "open orders", "my orders", "what's pending". Optional \`address\`.
+- \`prepare_bridge\` — preview a cross-chain bridge OUT of Solana via LI.FI (Mayan, Wormhole, deBridge, etc — automatically routed). Use whenever the user says "bridge", "send X to ETH/Base/Arbitrum/Polygon/etc", "move tokens to another chain", "get my SOL onto Ethereum", or any cross-chain transfer. Args: \`inputToken\` (Solana ticker/mint they're sending), \`outputToken\` (token they want on the destination, e.g. "ETH", "USDC"), \`toChain\` (destination chain — accepts names like "ethereum"/"eth"/"base"/"arbitrum"/"polygon"/"bsc"/"avalanche"), \`amount\` (decimal of inputToken). Optional: \`toAddress\` (the user's destination-chain wallet — REQUIRED when bridging to a non-Solana chain; if missing, ask them for it before calling). Phase 1 only supports Solana as the SOURCE chain — for bridges INTO Solana, point them to /trade → Bridge tab. NEVER executes — the rendered card has its own confirm + sign.
 
 ORDER FLOW: Be conversational. If a critical field (amount, price, interval, count) is missing, ASK in plain language. Default sensibly (USDC quote, GTC expiry). Once you have everything, call the matching \`prepare_*\` tool — the card itself is the confirmation. LIMIT vs MARKET: "buy $X of $TOKEN" with no price = MARKET (\`prepare_swap\`); with a price target = LIMIT (\`prepare_limit_order\`). For BRACKET/LADDER: explicitly say in your sentence that the user needs to finalise in /trade (extra signature). After any preview, mention once that they can ask "show my open orders" or open the Trade page to manage everything.
 
@@ -475,6 +476,27 @@ const TOOLS = [
         properties: {
           address: { type: "string" },
         },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "prepare_bridge",
+      description:
+        "Preview a cross-chain bridge OUT of Solana via LI.FI. Use for 'bridge X to ETH/Base/etc', 'move tokens to another chain', 'send my SOL to Ethereum'. Returns a card with the route, fees, and a sign button. NEVER executes — user signs in the card. Phase 1 only supports Solana as the source chain.",
+      parameters: {
+        type: "object",
+        properties: {
+          inputToken: { type: "string", description: "Ticker or mint of the SOLANA token being bridged out (e.g. 'SOL', 'USDC')." },
+          outputToken: { type: "string", description: "Ticker/symbol of the token to receive on the destination chain (e.g. 'ETH', 'USDC', 'WBTC')." },
+          toChain: { type: "string", description: "Destination chain — accepts names like 'ethereum', 'eth', 'base', 'arbitrum', 'polygon', 'bsc', 'avalanche', 'optimism'." },
+          amount: { type: "number", description: "Decimal amount of inputToken to bridge (e.g. 0.5 for 0.5 SOL)." },
+          toAddress: { type: "string", description: "The user's wallet address on the DESTINATION chain. REQUIRED for cross-family bridges (Solana → EVM). EVM addresses are 0x… 42 chars." },
+          slippageBps: { type: "number", description: "Optional slippage in bps. Default 50 = 0.5%." },
+        },
+        required: ["inputToken", "outputToken", "toChain", "amount"],
         additionalProperties: false,
       },
     },
@@ -973,6 +995,27 @@ serve(async (req) => {
                 result = await invokeFn("chat-open-orders", { wallet: target }, req);
               }
               eventType = "open_orders";
+            } else if (name === "prepare_bridge") {
+              const args = safeJson(tc.function?.arguments);
+              if (!walletAddress) {
+                result = { error: "Connect a Solana wallet first so I can prepare the bridge." };
+              } else {
+                result = await invokeFn(
+                  "chat-bridge-quote",
+                  {
+                    inputToken: args.inputToken ?? "",
+                    outputToken: args.outputToken ?? "",
+                    toChain: args.toChain ?? "",
+                    fromChain: args.fromChain ?? null,
+                    amount: args.amount,
+                    fromAddress: walletAddress,
+                    toAddress: args.toAddress ?? "",
+                    slippageBps: args.slippageBps,
+                  },
+                  req,
+                );
+              }
+              eventType = "bridge_quote";
             } else {
               result = { error: `Unknown tool: ${name}` };
             }
