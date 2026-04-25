@@ -340,7 +340,13 @@ export const TradeLimit = ({ tab, onTabChange }: Props) => {
       try {
         signed = await signTransaction(tx);
       } catch {
-        if (mounted.current) setPhase({ name: "error", message: "Cancelled — try again." });
+        if (mounted.current) setPhase({
+          name: "cancelled",
+          sellUi: numericSell,
+          sellSymbol: inputToken.symbol,
+          buyUi: buyAmount,
+          buySymbol: outputToken.symbol,
+        });
         return;
       }
 
