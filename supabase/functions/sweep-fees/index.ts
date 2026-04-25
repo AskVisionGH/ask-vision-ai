@@ -239,7 +239,12 @@ async function runSweep(trigger: "cron" | "manual"): Promise<Response> {
       valueUsd: a.valueUsd,
     }));
 
-    if (totalUsd < DUST_THRESHOLD_USD) {
+    // Only enforce the dust threshold when we have priced data to compare
+    // against. If discovery returned nothing or every mint lacked a price,
+    // fall through and let claimAllV2 decide (it'll return zero txs if
+    // nothing is actually claimable, which we handle below).
+    const havePricedData = accountInfos.length > 0 && totalUsd > 0;
+    if (havePricedData && totalUsd < DUST_THRESHOLD_USD) {
       await finalize({
         status: "skipped_dust",
         accounts_scanned: accountInfos.length,
