@@ -48,6 +48,16 @@ export const shouldUseWalletDeepLinks = (): boolean => {
 };
 
 /**
+ * On a mobile browser without a wallet provider injected, the only thing that
+ * actually works is the Solana Mobile Wallet Adapter (Android) or a deep-link
+ * into the wallet's in-app browser (iOS). The wallet-adapter modal still
+ * lists every extension wallet, but tapping them is a silent no-op.
+ */
+export const shouldUseCustomMobileSheet = (): boolean => {
+  return isMobile() && !isInWalletBrowser();
+};
+
+/**
  * Redirect the mobile user into Phantom's in-app browser pointed at the
  * current URL. From there wallet-adapter connects normally.
  */
