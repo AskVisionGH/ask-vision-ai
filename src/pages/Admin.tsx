@@ -253,6 +253,18 @@ type RawStats = {
   wallets: WalletLite[];
   txs: TxLite[];
   counters: Record<string, number>;
+  summary: {
+    total_users: number;
+    onboarded_users: number;
+    total_conversations: number;
+    total_messages: number;
+    total_wallet_links: number;
+    unique_linked_wallets: number;
+    total_txs: number;
+    total_volume_usd: number;
+    total_treasury_usd: number;
+    refreshed_at: string;
+  } | null;
 };
 
 type RangeKey = "1h" | "1d" | "1w" | "1m" | "1y" | "all" | "custom";
