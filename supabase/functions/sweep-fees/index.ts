@@ -42,7 +42,7 @@ async function isAdminCaller(req: Request, supabaseUrl: string, anonKey: string,
   }
 }
 import { Connection, Keypair, PublicKey, VersionedTransaction } from "npm:@solana/web3.js@1.95.3";
-import { MintLayout, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from "npm:@solana/spl-token@0.4.8";
+import { AccountLayout, MintLayout } from "npm:@solana/spl-token@0.4.8";
 import { ReferralProvider } from "npm:@jup-ag/referral-sdk@0.3.0";
 import bs58 from "https://esm.sh/bs58@5.0.0";
 
@@ -59,6 +59,8 @@ const KNOWN_TOKEN_META: Record<string, { decimals: number; symbol: string }> = {
   So11111111111111111111111111111111111111112: { decimals: 9, symbol: "SOL" },
   EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v: { decimals: 6, symbol: "USDC" },
 };
+
+const TARGET_SWEEP_MINTS = Object.keys(KNOWN_TOKEN_META);
 
 interface TokenAccountInfo {
   pubkey: string;
@@ -106,17 +108,17 @@ async function fetchPricesUsd(mints: string[]): Promise<Map<string, number>> {
 
 async function fetchMintMeta(
   connection: Connection,
-  mints: Array<{ mint: string; programId: PublicKey }>,
+  mints: string[],
 ): Promise<Map<string, { decimals: number; symbol: string }>> {
-  const unique = Array.from(new Map(mints.map((item) => [item.mint, item])).values());
+  const unique = Array.from(new Set(mints));
   const meta = new Map<string, { decimals: number; symbol: string }>();
 
-  for (const item of unique) {
-    const known = KNOWN_TOKEN_META[item.mint];
-    if (known) meta.set(item.mint, known);
+  for (const mint of unique) {
+    const known = KNOWN_TOKEN_META[mint];
+    if (known) meta.set(mint, known);
   }
 
-  const unknown = unique.filter((item) => !meta.has(item.mint));
+  const unknown = unique.filter((mint) => !meta.has(mint));
   if (unknown.length === 0) return meta;
 
   for (let i = 0; i < unknown.length; i += 100) {
@@ -127,7 +129,7 @@ async function fetchMintMeta(
     );
 
     infos.forEach((info, idx) => {
-      const { mint } = chunk[idx];
+      const mint = chunk[idx];
       const fallback = { decimals: 0, symbol: `${mint.slice(0, 4)}…${mint.slice(-4)}` };
       if (!info) {
         meta.set(mint, fallback);
