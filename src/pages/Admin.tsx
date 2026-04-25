@@ -1372,12 +1372,17 @@ const UsersTab = () => {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return profiles;
-    return profiles.filter(
-      (p) =>
+    return profiles.filter((p) => {
+      const e = emails[p.user_id];
+      // Don't match synthetic wallet emails — they'd produce confusing hits
+      // when an admin searches for a real domain like "gmail".
+      const realEmail = isWalletSyntheticEmail(e) ? undefined : e;
+      return (
         p.display_name?.toLowerCase().includes(q) ||
         p.user_id.toLowerCase().includes(q) ||
-        emails[p.user_id]?.toLowerCase().includes(q),
-    );
+        realEmail?.toLowerCase().includes(q)
+      );
+    });
   }, [profiles, search, emails]);
 
   return (
