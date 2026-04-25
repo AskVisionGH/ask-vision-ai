@@ -49,9 +49,14 @@ export const AlertRuleDialog = ({ open, onOpenChange }: Props) => {
   const [saving, setSaving] = useState(false);
 
   // Price fields
-  const [tokenSymbol, setTokenSymbol] = useState("SOL");
+  const [priceToken, setPriceToken] = useState<TokenMeta>(DEFAULT_SOL);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [priceDirection, setPriceDirection] = useState<"above" | "below">("above");
+  /** "price" = absolute USD threshold · "percent" = % move over a window. */
+  const [thresholdType, setThresholdType] = useState<"price" | "percent">("price");
   const [thresholdUsd, setThresholdUsd] = useState("");
+  const [pricePercent, setPricePercent] = useState("");
+  const [priceWindow, setPriceWindow] = useState("24");
 
   // Wallet fields
   const [walletAddress, setWalletAddress] = useState("");
@@ -68,9 +73,12 @@ export const AlertRuleDialog = ({ open, onOpenChange }: Props) => {
     if (!open) return;
     setKind("price");
     setLabel("");
-    setTokenSymbol("SOL");
+    setPriceToken(DEFAULT_SOL);
     setPriceDirection("above");
+    setThresholdType("price");
     setThresholdUsd("");
+    setPricePercent("");
+    setPriceWindow("24");
     setWalletAddress("");
     setWalletLabel("");
     setWalletMinUsd("");
@@ -85,18 +93,47 @@ export const AlertRuleDialog = ({ open, onOpenChange }: Props) => {
     let autoLabel = label.trim();
 
     if (kind === "price") {
-      const n = Number(thresholdUsd);
-      if (!tokenSymbol.trim() || !Number.isFinite(n) || n <= 0) {
-        toast.error("Fill in token and a positive price");
+      if (!priceToken.address) {
+        toast.error("Pick a token");
         return;
       }
-      config = {
-        token_symbol: tokenSymbol.trim().toUpperCase(),
-        direction: priceDirection,
-        threshold_usd: n,
-      };
-      if (!autoLabel)
-        autoLabel = `${config.token_symbol} ${priceDirection} $${n}`;
+      const dirWord = priceDirection === "above" ? "rises above" : "falls below";
+      if (thresholdType === "price") {
+        const n = Number(thresholdUsd);
+        if (!Number.isFinite(n) || n <= 0) {
+          toast.error("Set a positive price target");
+          return;
+        }
+        config = {
+          token_symbol: priceToken.symbol,
+          token_name: priceToken.name,
+          token_logo: priceToken.logo,
+          token_address: priceToken.address,
+          direction: priceDirection,
+          threshold_type: "price",
+          threshold_usd: n,
+        };
+        if (!autoLabel) autoLabel = `${priceToken.symbol} ${dirWord} $${n}`;
+      } else {
+        const pct = Number(pricePercent);
+        const win = Number(priceWindow);
+        if (!Number.isFinite(pct) || pct <= 0 || !Number.isFinite(win) || win <= 0) {
+          toast.error("Set a positive percent and window");
+          return;
+        }
+        config = {
+          token_symbol: priceToken.symbol,
+          token_name: priceToken.name,
+          token_logo: priceToken.logo,
+          token_address: priceToken.address,
+          direction: priceDirection,
+          threshold_type: "percent",
+          percent_change: pct,
+          window_hours: win,
+        };
+        const arrow = priceDirection === "above" ? "+" : "-";
+        if (!autoLabel) autoLabel = `${priceToken.symbol} ${arrow}${pct}% / ${win}h`;
+      }
     } else if (kind === "wallet_activity") {
       const n = Number(walletMinUsd);
       if (!walletAddress.trim() || !Number.isFinite(n) || n <= 0) {
