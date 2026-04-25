@@ -27,18 +27,20 @@ const KNOWN_MINTS: Record<string, string> = {
   JITOSOL: "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn",
 };
 
-type Interval = "5m" | "15m" | "1h" | "4h" | "1d";
+type Interval = "5m" | "30m" | "1h" | "4h" | "1d" | "1w" | "1mo";
 
 const INTERVAL_GT: Record<Interval, { timeframe: "minute" | "hour" | "day"; aggregate: number }> = {
-  "5m": { timeframe: "minute", aggregate: 5 },
-  "15m": { timeframe: "minute", aggregate: 15 },
-  "1h": { timeframe: "hour", aggregate: 1 },
-  "4h": { timeframe: "hour", aggregate: 4 },
-  "1d": { timeframe: "day", aggregate: 1 },
+  "5m":  { timeframe: "minute", aggregate: 5 },
+  "30m": { timeframe: "minute", aggregate: 30 },
+  "1h":  { timeframe: "hour",   aggregate: 1 },
+  "4h":  { timeframe: "hour",   aggregate: 4 },
+  "1d":  { timeframe: "day",    aggregate: 1 },
+  "1w":  { timeframe: "day",    aggregate: 7 },
+  "1mo": { timeframe: "day",    aggregate: 30 },
 };
 
 const INTERVAL_BARS: Record<Interval, number> = {
-  "5m": 144, "15m": 192, "1h": 168, "4h": 180, "1d": 180,
+  "5m": 144, "30m": 192, "1h": 168, "4h": 180, "1d": 180, "1w": 156, "1mo": 60,
 };
 
 interface Candle {
@@ -69,12 +71,12 @@ serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     const queryRaw = typeof body.query === "string" ? body.query : "";
-    const intervalRaw = typeof body.interval === "string" ? body.interval : "15m";
-    const interval: Interval = (["5m", "15m", "1h", "4h", "1d"] as Interval[]).includes(
-      intervalRaw as Interval,
-    )
+    const intervalRaw = typeof body.interval === "string" ? body.interval : "1h";
+    const interval: Interval = (
+      ["5m", "30m", "1h", "4h", "1d", "1w", "1mo"] as Interval[]
+    ).includes(intervalRaw as Interval)
       ? (intervalRaw as Interval)
-      : "15m";
+      : "1h";
 
     if (!queryRaw) return json({ error: "query required" }, 400);
 

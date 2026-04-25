@@ -8,7 +8,17 @@ interface Props {
   data: TokenChartData;
 }
 
-const INTERVALS: ChartInterval[] = ["5m", "15m", "1h", "4h", "1d"];
+const INTERVALS: ChartInterval[] = ["5m", "30m", "1h", "4h", "1d", "1w", "1mo"];
+
+const INTERVAL_DISPLAY: Record<ChartInterval, string> = {
+  "5m": "5m",
+  "30m": "30m",
+  "1h": "1h",
+  "4h": "4h",
+  "1d": "1d",
+  "1w": "1w",
+  "1mo": "1m",
+};
 
 const TA_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/token-ta`;
 const CHART_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/token-chart`;
@@ -65,15 +75,18 @@ const fmtTime = (t: number, interval: ChartInterval): string => {
   return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
 };
 
-const PERIOD_LABEL: Record<ChartInterval, string> = {
-  "5m": "12h",
-  "15m": "2d",
-  "1h": "7d",
-  "4h": "30d",
-  "1d": "6m",
-};
+const periodLabel = (iv: ChartInterval): string => INTERVAL_DISPLAY[iv] ?? "";
 
-const periodLabel = (iv: ChartInterval): string => PERIOD_LABEL[iv] ?? "";
+/**
+ * Price change over the selected timeframe = open→close of the most recent
+ * candle (so 5m shows the last 5min change, 1d shows the last day, etc).
+ * Falls back to the server-provided window-wide pct when no candles are loaded.
+ */
+const lastBarChangePct = (data: TokenChartData): number | null => {
+  const last = data.candles[data.candles.length - 1];
+  if (last && last.o) return ((last.c - last.o) / last.o) * 100;
+  return data.priceChangePct ?? null;
+};
 
 interface ViewState {
   /** Index of the right-most visible candle (exclusive). */
@@ -141,7 +154,8 @@ export const TokenChartCard = ({ data: initial }: Props) => {
     };
   }, [interval, data.address, data.symbol, data.interval]);
 
-  const isUp = (data.priceChangePct ?? 0) >= 0;
+  const tfChangePct = lastBarChangePct(data);
+  const isUp = (tfChangePct ?? 0) >= 0;
 
   const zoom = useCallback(
     (delta: number) => {
@@ -211,7 +225,7 @@ export const TokenChartCard = ({ data: initial }: Props) => {
               {fmtPrice(data.priceUsd)}
             </p>
           </div>
-          {data.priceChangePct != null && (
+          {tfChangePct != null && (
             <div
               className={cn(
                 "flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-mono text-[11px]",
@@ -221,7 +235,7 @@ export const TokenChartCard = ({ data: initial }: Props) => {
               )}
             >
               {isUp ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-              <span>{fmtPct(data.priceChangePct)}</span>
+              <span>{fmtPct(tfChangePct)}</span>
               <span className="opacity-60">· {periodLabel(data.interval)}</span>
             </div>
           )}
@@ -241,7 +255,7 @@ export const TokenChartCard = ({ data: initial }: Props) => {
                     : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
                 )}
               >
-                {iv}
+                {INTERVAL_DISPLAY[iv]}
               </button>
             ))}
             {loadingInterval && <Loader2 className="ml-2 h-3 w-3 animate-spin text-muted-foreground" />}

@@ -154,7 +154,7 @@ export interface ChartCandle {
   v: number;
 }
 
-export type ChartInterval = "5m" | "15m" | "1h" | "4h" | "1d";
+export type ChartInterval = "5m" | "30m" | "1h" | "4h" | "1d" | "1w" | "1mo";
 
 export interface TokenChartData {
   symbol: string;
