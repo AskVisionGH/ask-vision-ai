@@ -396,6 +396,7 @@ const StatsTab = () => {
         walletsRes,
         txRes,
         countersRes,
+        summaryRes,
       ] = await Promise.all([
         supabase
           .from("profiles")
@@ -412,6 +413,9 @@ const StatsTab = () => {
           .or("metadata->>via.is.null,metadata->>via.neq.helius_webhook")
           .limit(50000),
         supabase.from("app_counters").select("key, value"),
+        // Cached lifetime totals — refreshed every 5 min by pg_cron, used as
+        // an authoritative floor when row queries hit the 1k–50k limits.
+        supabase.rpc("admin_get_stats_summary"),
       ]);
 
       const profiles = (profilesRes.data ?? []) as ProfileLite[];
@@ -422,8 +426,23 @@ const StatsTab = () => {
       const counters = Object.fromEntries(
         ((countersRes.data ?? []) as Array<{ key: string; value: number }>).map((c) => [c.key, Number(c.value)]),
       );
+      const summaryRow = Array.isArray(summaryRes.data) ? summaryRes.data[0] : null;
+      const summary = summaryRow
+        ? {
+            total_users: Number(summaryRow.total_users ?? 0),
+            onboarded_users: Number(summaryRow.onboarded_users ?? 0),
+            total_conversations: Number(summaryRow.total_conversations ?? 0),
+            total_messages: Number(summaryRow.total_messages ?? 0),
+            total_wallet_links: Number(summaryRow.total_wallet_links ?? 0),
+            unique_linked_wallets: Number(summaryRow.unique_linked_wallets ?? 0),
+            total_txs: Number(summaryRow.total_txs ?? 0),
+            total_volume_usd: Number(summaryRow.total_volume_usd ?? 0),
+            total_treasury_usd: Number(summaryRow.total_treasury_usd ?? 0),
+            refreshed_at: String(summaryRow.refreshed_at ?? ""),
+          }
+        : null;
 
-      setRaw({ profiles, conversations, messages, wallets, txs, counters });
+      setRaw({ profiles, conversations, messages, wallets, txs, counters, summary });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error";
       toast({ title: "Failed to load stats", description: msg, variant: "destructive" });
