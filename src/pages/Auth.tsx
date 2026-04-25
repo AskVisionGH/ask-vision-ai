@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { toast } from "sonner";
-import { Apple, Mail, Wallet } from "lucide-react";
+import { Apple, Copy, ExternalLink, Mail, ShieldAlert, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
 import { useAuth } from "@/hooks/useAuth";
@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SEO } from "@/components/SEO";
 import { cn } from "@/lib/utils";
+import { detectInAppBrowser, type InAppBrowserInfo } from "@/lib/in-app-browser";
 
 const GoogleGlyph = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden>
