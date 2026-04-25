@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, ArrowLeftRight, BarChart3, CalendarIcon, Check, Copy, ExternalLink, History, Loader2, Mail, MailCheck, MailPlus, MessageSquare, RefreshCw, Send, Shield, ShieldOff, TrendingUp, UserCheck, Users, Wallet } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowLeftRight, BarChart3, CalendarIcon, Check, Copy, ExternalLink, History, Loader2, Mail, MailCheck, MailPlus, MessageSquare, MoreHorizontal, RefreshCw, Send, Shield, ShieldOff, Trash2, TrendingUp, UserCheck, Users, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
@@ -37,6 +37,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Select,
@@ -1276,16 +1283,79 @@ const TreasuryTab = () => {
 /* -------------------------------- Users tab ------------------------------- */
 
 const UsersTab = () => {
+  const { user } = useAuth();
+  const { isSuperAdmin } = useIsSuperAdmin();
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
   const [emails, setEmails] = useState<Record<string, string>>({});
   const [walletsByUser, setWalletsByUser] = useState<Record<string, WalletLink[]>>({});
+  // Set of user_ids that already hold an admin or super_admin role — used to
+  // hide / disable the "Make admin" menu item.
+  const [adminUserIds, setAdminUserIds] = useState<Set<string>>(new Set());
+  const [superAdminUserIds, setSuperAdminUserIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [resendingId, setResendingId] = useState<string | null>(null);
+  const [grantingId, setGrantingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  // Confirm-delete dialog: requires typing the user's display name or email.
+  const [deleteTarget, setDeleteTarget] = useState<ProfileRow | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
 
   // The two clickable-pill dialogs share open state via the focused user id.
   const [onboardingFor, setOnboardingFor] = useState<ProfileRow | null>(null);
   const [walletsFor, setWalletsFor] = useState<ProfileRow | null>(null);
+
+  const reloadRoles = async () => {
+    const { data } = await supabase.from("user_roles").select("user_id, role");
+    if (data) {
+      const admins = new Set<string>();
+      const supers = new Set<string>();
+      for (const r of data as { user_id: string; role: string }[]) {
+        if (r.role === "admin" || r.role === "super_admin") admins.add(r.user_id);
+        if (r.role === "super_admin") supers.add(r.user_id);
+      }
+      setAdminUserIds(admins);
+      setSuperAdminUserIds(supers);
+    }
+  };
+
+  const makeAdmin = async (p: ProfileRow) => {
+    setGrantingId(p.user_id);
+    const { error } = await supabase.from("user_roles").insert({ user_id: p.user_id, role: "admin" });
+    setGrantingId(null);
+    if (error) {
+      toast({ title: "Could not grant admin", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Admin granted", description: p.display_name ?? shortId(p.user_id) });
+    reloadRoles();
+  };
+
+  const deleteUser = async () => {
+    if (!deleteTarget) return;
+    setDeletingId(deleteTarget.user_id);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-delete-user", {
+        body: { userId: deleteTarget.user_id },
+      });
+      if (error) throw error;
+      if (data && typeof data === "object" && "error" in data && data.error) {
+        throw new Error(String(data.error));
+      }
+      toast({ title: "User deleted", description: deleteTarget.display_name ?? shortId(deleteTarget.user_id) });
+      setProfiles((prev) => prev.filter((row) => row.user_id !== deleteTarget.user_id));
+      setDeleteTarget(null);
+      setDeleteConfirm("");
+    } catch (e) {
+      toast({
+        title: "Delete failed",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const resendWelcome = async (p: ProfileRow) => {
     const email = emails[p.user_id];
@@ -1365,7 +1435,9 @@ const UsersTab = () => {
         }
         setWalletsByUser(map);
       }
+      reloadRoles();
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const filtered = useMemo(() => {
@@ -1433,6 +1505,12 @@ const UsersTab = () => {
                 const email = isSynthetic ? undefined : rawEmail;
                 const wallets = walletsByUser[p.user_id] ?? [];
                 const isResending = resendingId === p.user_id;
+                const isGranting = grantingId === p.user_id;
+                const isDeleting = deletingId === p.user_id;
+                const isAlreadyAdmin = adminUserIds.has(p.user_id);
+                const isTargetSuperAdmin = superAdminUserIds.has(p.user_id);
+                const isSelf = p.user_id === user?.id;
+                const busy = isResending || isGranting || isDeleting;
                 return (
                   <TableRow key={p.user_id}>
                     <TableCell className="font-medium">
@@ -1478,26 +1556,46 @@ const UsersTab = () => {
                       <CopyId value={p.user_id} />
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => resendWelcome(p)}
-                        disabled={!email || isResending}
-                        title={
-                          email
-                            ? "Resend the welcome email"
-                            : isSynthetic
-                              ? "Wallet-only account — no email on file"
-                              : "No email on file"
-                        }
-                      >
-                        {isResending ? (
-                          <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <MailPlus className="mr-1 h-3.5 w-3.5" />
-                        )}
-                        Resend welcome
-                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" disabled={busy}>
+                            {busy ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <MoreHorizontal className="h-4 w-4" />
+                            )}
+                            <span className="sr-only">Open user actions</span>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuItem
+                            onClick={() => resendWelcome(p)}
+                            disabled={!email}
+                          >
+                            <MailPlus className="mr-2 h-3.5 w-3.5" />
+                            Resend welcome
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => makeAdmin(p)}
+                            disabled={!isSuperAdmin || isAlreadyAdmin}
+                          >
+                            <Shield className="mr-2 h-3.5 w-3.5" />
+                            {isAlreadyAdmin ? "Already admin" : "Make admin"}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setDeleteConfirm("");
+                              setDeleteTarget(p);
+                            }}
+                            disabled={!isSuperAdmin || isSelf || isTargetSuperAdmin}
+                            className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                          >
+                            <Trash2 className="mr-2 h-3.5 w-3.5" />
+                            Delete user
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 );
@@ -1516,6 +1614,58 @@ const UsersTab = () => {
         wallets={walletsFor ? walletsByUser[walletsFor.user_id] ?? [] : []}
         onOpenChange={(open) => !open && setWalletsFor(null)}
       />
+
+
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteTarget(null);
+            setDeleteConfirm("");
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this user?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm">
+                <p>
+                  This permanently deletes the auth account, profile, conversations,
+                  messages, contacts, wallet links, and avatar files for{" "}
+                  <span className="font-medium text-foreground">
+                    {deleteTarget?.display_name ?? emails[deleteTarget?.user_id ?? ""] ?? shortId(deleteTarget?.user_id ?? "")}
+                  </span>
+                  . This action cannot be undone.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Type <span className="font-mono text-foreground">DELETE</span> to confirm.
+                </p>
+                <Input
+                  value={deleteConfirm}
+                  onChange={(e) => setDeleteConfirm(e.target.value)}
+                  placeholder="DELETE"
+                  autoFocus
+                />
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                deleteUser();
+              }}
+              disabled={deleteConfirm !== "DELETE" || !!deletingId}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deletingId ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Trash2 className="mr-1 h-3.5 w-3.5" />}
+              Delete user
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
