@@ -1628,7 +1628,7 @@ const UsersTab = () => {
                   </TableCell>
                 </TableRow>
               ) : null}
-              {filtered.map((p) => {
+              {filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((p) => {
                 const rawEmail = emails[p.user_id];
                 // Wallet-only signups carry a synthetic `<wallet>@wallet.vision.local`
                 // address — surface that as a "Wallet only" badge so admins
