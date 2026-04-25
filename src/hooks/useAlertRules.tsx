@@ -5,10 +5,31 @@ import { useAuth } from "@/hooks/useAuth";
 export type AlertRuleKind = "price" | "wallet_activity" | "portfolio_pnl";
 
 export interface PriceRuleConfig {
+  /** Display ticker, e.g. "SOL". Kept for the UI label. */
   token_symbol: string;
+  /** Display name, e.g. "Solana". Optional. */
+  token_name?: string;
+  /** Logo URL. Optional. */
+  token_logo?: string | null;
+  /**
+   * Mint address. Required for new rules — disambiguates the thousands of
+   * tokens sharing the same ticker (e.g. dozens of "$BULL"s). Legacy rules
+   * created before mint capture may omit this; the evaluator falls back to
+   * a symbol search in that case.
+   */
   token_address?: string;
   direction: "above" | "below";
-  threshold_usd: number;
+  /**
+   * Trigger flavour:
+   *  - "price"   — fire when current USD price crosses `threshold_usd`
+   *  - "percent" — fire when price moves by ≥ `percent_change`% over
+   *                `window_hours` (direction "above" = up, "below" = down)
+   * Defaults to "price" for legacy rows that lack the field.
+   */
+  threshold_type?: "price" | "percent";
+  threshold_usd?: number;
+  percent_change?: number;
+  window_hours?: number;
 }
 
 export interface WalletRuleConfig {
