@@ -29,14 +29,26 @@ const KNOWN_MINTS: Record<string, string> = {
 
 type Interval = "5m" | "30m" | "1h" | "4h" | "1d" | "1w" | "1mo";
 
-const INTERVAL_GT: Record<Interval, { timeframe: "minute" | "hour" | "day"; aggregate: number }> = {
-  "5m":  { timeframe: "minute", aggregate: 5 },
-  "30m": { timeframe: "minute", aggregate: 30 },
-  "1h":  { timeframe: "hour",   aggregate: 1 },
-  "4h":  { timeframe: "hour",   aggregate: 4 },
-  "1d":  { timeframe: "day",    aggregate: 1 },
-  "1w":  { timeframe: "day",    aggregate: 7 },
-  "1mo": { timeframe: "day",    aggregate: 30 },
+/**
+ * GeckoTerminal only natively supports certain (timeframe, aggregate) pairs:
+ *   minute → 1, 5, 15
+ *   hour   → 1, 4, 12
+ *   day    → 1
+ * For any interval that isn't a native pair (30m, 1w, 1mo) we fetch the next
+ * finer native bar and re-bucket client-side. `bucketSecs` defines the target
+ * bucket width.
+ */
+const INTERVAL_GT: Record<
+  Interval,
+  { timeframe: "minute" | "hour" | "day"; aggregate: number; bucketSecs: number; fetchMultiplier: number }
+> = {
+  "5m":  { timeframe: "minute", aggregate: 5,  bucketSecs: 5 * 60,            fetchMultiplier: 1 },
+  "30m": { timeframe: "minute", aggregate: 15, bucketSecs: 30 * 60,           fetchMultiplier: 2 },
+  "1h":  { timeframe: "hour",   aggregate: 1,  bucketSecs: 60 * 60,           fetchMultiplier: 1 },
+  "4h":  { timeframe: "hour",   aggregate: 4,  bucketSecs: 4 * 60 * 60,       fetchMultiplier: 1 },
+  "1d":  { timeframe: "day",    aggregate: 1,  bucketSecs: 24 * 60 * 60,      fetchMultiplier: 1 },
+  "1w":  { timeframe: "day",    aggregate: 1,  bucketSecs: 7 * 24 * 60 * 60,  fetchMultiplier: 7 },
+  "1mo": { timeframe: "day",    aggregate: 1,  bucketSecs: 30 * 24 * 60 * 60, fetchMultiplier: 30 },
 };
 
 const INTERVAL_BARS: Record<Interval, number> = {
