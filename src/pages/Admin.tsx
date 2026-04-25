@@ -1427,6 +1427,8 @@ const UsersTab = () => {
   // Confirm-delete dialog: requires typing the user's display name or email.
   const [deleteTarget, setDeleteTarget] = useState<ProfileRow | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
 
   // The two clickable-pill dialogs share open state via the focused user id.
   const [onboardingFor, setOnboardingFor] = useState<ProfileRow | null>(null);
