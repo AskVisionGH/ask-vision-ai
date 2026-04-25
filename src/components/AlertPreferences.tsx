@@ -39,6 +39,23 @@ export const AlertPreferences = () => {
     if (prefs.quiet_end) setQuietEnd(prefs.quiet_end.slice(0, 5));
   }, [prefs]);
 
+  // Auto-open the friendly pre-prompt the first time a user lands here, but
+  // ONLY when (a) push is supported, (b) permission is still "default" (so
+  // we won't get permanently denied), (c) the user hasn't already turned
+  // push on, and (d) we haven't asked yet. The localStorage flag prevents
+  // nagging — denied users only see the recovery dialog if they click the
+  // toggle themselves.
+  useEffect(() => {
+    if (!prefs || !prefs.master_enabled) return;
+    if (!push.supported) return;
+    if (push.permission !== "default") return;
+    if (prefs.channel_web_push && push.subscribed) return;
+    if (typeof window === "undefined") return;
+    if (window.localStorage.getItem("vision:push-prompted") === "1") return;
+    window.localStorage.setItem("vision:push-prompted", "1");
+    setShowEnableDialog(true);
+  }, [prefs, push.supported, push.permission, push.subscribed]);
+
   if (loading || !prefs) {
     return <p className="text-xs text-muted-foreground/70">Loading…</p>;
   }
