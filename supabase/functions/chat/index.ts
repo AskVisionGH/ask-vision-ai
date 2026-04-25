@@ -995,6 +995,27 @@ serve(async (req) => {
                 result = await invokeFn("chat-open-orders", { wallet: target }, req);
               }
               eventType = "open_orders";
+            } else if (name === "prepare_bridge") {
+              const args = safeJson(tc.function?.arguments);
+              if (!walletAddress) {
+                result = { error: "Connect a Solana wallet first so I can prepare the bridge." };
+              } else {
+                result = await invokeFn(
+                  "chat-bridge-quote",
+                  {
+                    inputToken: args.inputToken ?? "",
+                    outputToken: args.outputToken ?? "",
+                    toChain: args.toChain ?? "",
+                    fromChain: args.fromChain ?? null,
+                    amount: args.amount,
+                    fromAddress: walletAddress,
+                    toAddress: args.toAddress ?? "",
+                    slippageBps: args.slippageBps,
+                  },
+                  req,
+                );
+              }
+              eventType = "bridge_quote";
             } else {
               result = { error: `Unknown tool: ${name}` };
             }
