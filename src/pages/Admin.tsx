@@ -1885,6 +1885,93 @@ const RolesTab = () => {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Audit log — last 50 grant/revoke actions, viewable by all admins. */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-1.5 text-sm">
+            <History className="h-3.5 w-3.5" /> Recent role changes
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Last 50 grants and revocations. Recorded automatically.
+          </p>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>When</TableHead>
+                <TableHead>Action</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Target</TableHead>
+                <TableHead>By</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {audit.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="py-6 text-center text-xs text-muted-foreground">
+                    No role changes recorded yet.
+                  </TableCell>
+                </TableRow>
+              ) : null}
+              {audit.map((a) => {
+                const targetLabel = nameByUserId[a.target_id] ?? emailByUserId[a.target_id] ?? shortId(a.target_id);
+                const actorLabel = a.actor_id
+                  ? nameByUserId[a.actor_id] ?? emailByUserId[a.actor_id] ?? shortId(a.actor_id)
+                  : "system";
+                return (
+                  <TableRow key={a.id}>
+                    <TableCell className="text-xs">{format(new Date(a.created_at), "MMM d HH:mm")}</TableCell>
+                    <TableCell>
+                      <Badge variant={a.action === "grant" ? "default" : "secondary"} className="text-xs">
+                        {a.action}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-xs">{a.role}</TableCell>
+                    <TableCell className="text-xs">{targetLabel}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{actorLabel}</TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Typed-confirm dialog — admin must retype the last 6 chars of the
+          user id before the grant goes through. Stops accidental promotions. */}
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Grant admin role?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You're about to grant <strong>admin</strong> access to{" "}
+              <span className="font-medium">{targetName ?? targetEmail ?? "this user"}</span>
+              {targetEmail ? <> (<span className="font-mono text-xs">{shortEmail(targetEmail)}</span>)</> : null}.
+              Admins can read all user data, treasury, and email logs.
+              Type <span className="font-mono text-xs">{confirmExpected}</span> (last 6 chars of their user id) to confirm.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            placeholder={confirmExpected}
+            className="font-mono text-xs"
+            autoFocus
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={grant}
+              disabled={granting || confirmText.trim() !== confirmExpected}
+            >
+              {granting ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+              Confirm grant
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
