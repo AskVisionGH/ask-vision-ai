@@ -65,6 +65,16 @@ const fmtTime = (t: number, interval: ChartInterval): string => {
   return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
 };
 
+const PERIOD_LABEL: Record<ChartInterval, string> = {
+  "5m": "12h",
+  "15m": "2d",
+  "1h": "7d",
+  "4h": "30d",
+  "1d": "6m",
+};
+
+const periodLabel = (iv: ChartInterval): string => PERIOD_LABEL[iv] ?? "";
+
 interface ViewState {
   /** Index of the right-most visible candle (exclusive). */
   end: number;
