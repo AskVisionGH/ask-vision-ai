@@ -98,7 +98,7 @@ const Alerts = () => {
 
       {/* Mobile drawer */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent side="left" className="w-72 p-0 md:hidden">
+        <SheetContent side="left" className="w-72 p-0 md:hidden [&>button.absolute]:hidden">
           <AppSidebar
             collapsed={false}
             activePath="/alerts"
