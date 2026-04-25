@@ -62,6 +62,7 @@ type Phase =
   | { name: "awaiting_signature" }
   | { name: "submitting" }
   | { name: "success"; orderId: string | null; signature: string | null }
+  | { name: "cancelled" }
   | { name: "error"; message: string };
 
 const fmtUsd = (n: number | null | undefined) => {
