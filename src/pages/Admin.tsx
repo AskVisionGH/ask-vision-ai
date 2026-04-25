@@ -1051,24 +1051,44 @@ const TreasuryTab = () => {
     }
   };
 
+  const dateBounds = useMemo(() => {
+    const earliest = fees.length > 0
+      ? new Date(fees[fees.length - 1].block_time).getTime()
+      : Date.now() - 30 * 86400000;
+    return rangeBounds(range, customRange, earliest);
+  }, [fees, range, customRange]);
+
+  const inDateRange = (iso: string) => {
+    const t = new Date(iso).getTime();
+    return t >= dateBounds.from && t <= dateBounds.to;
+  };
+
   const filtered = useMemo(() => {
     return fees.filter((f) => {
       if (chainFilter !== "all" && f.chain !== chainFilter) return false;
       if (kindFilter !== "all" && f.source_kind !== kindFilter) return false;
+      if (!inDateRange(f.block_time)) return false;
       return true;
     });
-  }, [fees, chainFilter, kindFilter]);
+  }, [fees, chainFilter, kindFilter, dateBounds]);
 
   const totals = useMemo(() => {
+    const inRange = fees.filter((f) => inDateRange(f.block_time));
     const sum = (rows: TreasuryFee[]) => rows.reduce((acc, r) => acc + (r.amount_usd ?? 0), 0);
     return {
-      all: sum(fees),
-      sol: sum(fees.filter((f) => f.chain === "solana")),
-      eth: sum(fees.filter((f) => f.chain === "ethereum")),
-      bridge: sum(fees.filter((f) => f.source_kind === "bridge_fee")),
-      count: fees.length,
+      all: sum(inRange),
+      sol: sum(inRange.filter((f) => f.chain === "solana")),
+      eth: sum(inRange.filter((f) => f.chain === "ethereum")),
+      bridge: sum(inRange.filter((f) => f.source_kind === "bridge_fee")),
+      count: inRange.length,
     };
-  }, [fees]);
+  }, [fees, dateBounds]);
+
+  const rangeLabel = range === "custom"
+    ? customRange?.from
+      ? `${format(customRange.from, "MMM d")}${customRange.to ? ` – ${format(customRange.to, "MMM d")}` : ""}`
+      : "Custom"
+    : RANGE_OPTIONS.find((r) => r.value === range)?.label ?? "All time";
 
   return (
     <div className="space-y-4">
