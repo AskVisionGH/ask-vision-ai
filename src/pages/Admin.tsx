@@ -828,6 +828,8 @@ const EmailsTab = () => {
   const [range, setRange] = useState<"1d" | "7d" | "30d">("7d");
   const [templateFilter, setTemplateFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
 
   const load = async () => {
     setLoading(true);
@@ -849,12 +851,13 @@ const EmailsTab = () => {
 
   useEffect(() => {
     load();
-    // Poll while the tab is open so newly-sent emails show up without
-    // a manual refresh. 15s is frequent enough for a live feel without
-    // hammering the DB.
-    const id = window.setInterval(load, 15000);
+    // Hourly background refresh; admins can hit Refresh for an immediate update.
+    const id = window.setInterval(load, 60 * 60 * 1000);
     return () => window.clearInterval(id);
   }, [range]);
+
+  // Reset to first page whenever filters/range change.
+  useEffect(() => { setPage(1); }, [range, templateFilter, statusFilter]);
 
   // Deduplicate by message_id, keeping latest row (rows are already DESC).
   const deduped = useMemo(() => {
@@ -958,7 +961,9 @@ const EmailsTab = () => {
                   </TableCell>
                 </TableRow>
               ) : (
-                filtered.slice(0, 200).map((r) => (
+                filtered
+                  .slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+                  .map((r) => (
                   <TableRow key={r.id}>
                     <TableCell className="text-xs">{format(new Date(r.created_at), "MMM d HH:mm")}</TableCell>
                     <TableCell className="text-xs font-medium">{r.template_name}</TableCell>
@@ -976,11 +981,42 @@ const EmailsTab = () => {
           </Table>
         </CardContent>
       </Card>
-      {filtered.length > 200 ? (
-        <p className="text-center text-xs text-muted-foreground">
-          Showing 200 of {filtered.length}. Narrow your filters to see more.
-        </p>
-      ) : null}
+      {filtered.length > 0 ? (() => {
+        const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+        const safePage = Math.min(page, totalPages);
+        const start = (safePage - 1) * PAGE_SIZE + 1;
+        const end = Math.min(safePage * PAGE_SIZE, filtered.length);
+        return (
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">
+              Showing {start}–{end} of {filtered.length}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8"
+                disabled={safePage <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                Previous
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                Page {safePage} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8"
+                disabled={safePage >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        );
+      })() : null}
     </div>
   );
 };
