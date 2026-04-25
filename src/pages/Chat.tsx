@@ -571,10 +571,23 @@ const Chat = () => {
             )}
 
             {isThinking && (
-              <div className="flex items-center gap-1.5 px-1 text-muted-foreground">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary [animation-delay:0ms]" />
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary [animation-delay:150ms]" />
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary [animation-delay:300ms]" />
+              <div
+                className="flex items-center gap-2 px-1 text-foreground"
+                aria-label="Vision is thinking"
+                role="status"
+              >
+                <VisionLogo
+                  size={9}
+                  className="animate-pulse text-foreground drop-shadow-[0_0_6px_hsl(var(--primary-glow)/0.9)] [animation-delay:0ms]"
+                />
+                <VisionLogo
+                  size={9}
+                  className="animate-pulse text-foreground drop-shadow-[0_0_6px_hsl(var(--primary-glow)/0.9)] [animation-delay:200ms]"
+                />
+                <VisionLogo
+                  size={9}
+                  className="animate-pulse text-foreground drop-shadow-[0_0_6px_hsl(var(--primary-glow)/0.9)] [animation-delay:400ms]"
+                />
               </div>
             )}
           </div>
