@@ -44,10 +44,24 @@ const Auth = () => {
   // disconnected, we open the modal and remember the intent so we can
   // auto-trigger signing the moment a wallet connects.
   const [pendingSign, setPendingSign] = useState(false);
+  const [inApp, setInApp] = useState<InAppBrowserInfo>({ isInApp: false, app: null, label: null });
+
+  useEffect(() => {
+    setInApp(detectInAppBrowser());
+  }, []);
 
   useEffect(() => {
     if (!loading && session) navigate("/chat", { replace: true });
   }, [loading, session, navigate]);
+
+  const copyAuthUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      toast.success("Link copied", { description: "Paste it into Safari or Chrome." });
+    } catch {
+      toast.error("Couldn't copy link", { description: "Long-press the address bar to copy it manually." });
+    }
+  };
 
   const submitEmail = async (e: FormEvent) => {
     e.preventDefault();
