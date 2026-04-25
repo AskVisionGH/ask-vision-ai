@@ -1326,7 +1326,7 @@ const TreasuryTab = () => {
                   </TableCell>
                 </TableRow>
               ) : null}
-              {filtered.map((f) => {
+              {filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((f) => {
                 const explorer = f.chain === "solana"
                   ? `https://solscan.io/tx/${f.signature}`
                   : `https://etherscan.io/tx/${f.signature}`;
