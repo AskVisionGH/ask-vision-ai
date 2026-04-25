@@ -20,6 +20,7 @@ import { DcaPreviewCard } from "@/components/DcaPreviewCard";
 import { BracketPreviewCard } from "@/components/BracketPreviewCard";
 import { LadderPreviewCard } from "@/components/LadderPreviewCard";
 import { OpenOrdersCard } from "@/components/OpenOrdersCard";
+import { BridgePreviewCard } from "@/components/BridgePreviewCard";
 
 interface Props {
   message: ChatMessage;
@@ -215,6 +216,9 @@ export const ChatBubble = ({ message, onEdit, readOnly = false }: Props) => {
         }
         if (event.type === "open_orders") {
           return <OpenOrdersCard key={i} data={event.data} />;
+        }
+        if (event.type === "bridge_quote") {
+          return <BridgePreviewCard key={i} data={event.data} />;
         }
         return null;
       })}
