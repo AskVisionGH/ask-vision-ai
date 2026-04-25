@@ -210,14 +210,41 @@ export const AlertRuleDialog = ({ open, onOpenChange }: Props) => {
 
           {kind === "price" && (
             <>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] text-muted-foreground">Token</Label>
+                {/* Picker resolves to a specific mint so we never confuse the */}
+                {/* dozens of tokens sharing a ticker (e.g. multiple "$BULL"s). */}
+                <button
+                  type="button"
+                  onClick={() => setPickerOpen(true)}
+                  className="ease-vision flex h-10 w-full items-center gap-3 rounded-md border border-input bg-background px-3 text-left text-sm hover:bg-secondary/40"
+                >
+                  <TokenLogo logo={priceToken.logo} symbol={priceToken.symbol} size={24} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{priceToken.symbol}</p>
+                    <p className="truncate font-mono text-[10px] text-muted-foreground">
+                      {priceToken.address.slice(0, 4)}…{priceToken.address.slice(-4)}
+                    </p>
+                  </div>
+                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                </button>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label className="text-[11px] text-muted-foreground">Token symbol</Label>
-                  <Input
-                    value={tokenSymbol}
-                    onChange={(e) => setTokenSymbol(e.target.value)}
-                    placeholder="SOL"
-                  />
+                  <Label className="text-[11px] text-muted-foreground">Trigger when</Label>
+                  <Select
+                    value={thresholdType}
+                    onValueChange={(v) => setThresholdType(v as "price" | "percent")}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="price">Price hits target</SelectItem>
+                      <SelectItem value="percent">% change</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-[11px] text-muted-foreground">Direction</Label>
@@ -229,22 +256,57 @@ export const AlertRuleDialog = ({ open, onOpenChange }: Props) => {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="above">Rises above</SelectItem>
-                      <SelectItem value="below">Falls below</SelectItem>
+                      {thresholdType === "price" ? (
+                        <>
+                          <SelectItem value="above">Rises above</SelectItem>
+                          <SelectItem value="below">Falls below</SelectItem>
+                        </>
+                      ) : (
+                        <>
+                          <SelectItem value="above">Pumps up</SelectItem>
+                          <SelectItem value="below">Drops down</SelectItem>
+                        </>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-[11px] text-muted-foreground">Price (USD)</Label>
-                <Input
-                  type="number"
-                  inputMode="decimal"
-                  value={thresholdUsd}
-                  onChange={(e) => setThresholdUsd(e.target.value)}
-                  placeholder="200"
-                />
-              </div>
+
+              {thresholdType === "price" ? (
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] text-muted-foreground">Price (USD)</Label>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    value={thresholdUsd}
+                    onChange={(e) => setThresholdUsd(e.target.value)}
+                    placeholder="200"
+                  />
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] text-muted-foreground">Percent change</Label>
+                    <Input
+                      type="number"
+                      inputMode="decimal"
+                      value={pricePercent}
+                      onChange={(e) => setPricePercent(e.target.value)}
+                      placeholder="10"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] text-muted-foreground">Window (hours)</Label>
+                    <Input
+                      type="number"
+                      inputMode="numeric"
+                      value={priceWindow}
+                      onChange={(e) => setPriceWindow(e.target.value)}
+                      placeholder="24"
+                    />
+                  </div>
+                </div>
+              )}
             </>
           )}
 
