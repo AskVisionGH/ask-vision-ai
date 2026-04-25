@@ -186,6 +186,15 @@ const Onboarding = () => {
       });
       return;
     }
+    // Wallet-only accounts must attach a real email — they can't skip past it
+    // without giving us a way to reach them.
+    if (needsRealEmail && !emailSubmitted) {
+      toast.error("Add an email first", {
+        description: "We need somewhere to send receipts and alerts.",
+      });
+      setStep("email");
+      return;
+    }
     setSkipping(true);
     const ok = await updateProfile({
       display_name: trimmedName,
