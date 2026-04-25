@@ -16,6 +16,7 @@ interface WalletMeta {
   label: string;
   twitterHandle: string | null;
   category: string | null;
+  notes: string | null;
   isCurated: boolean;
   isUserAdded: boolean;
 }
@@ -101,6 +102,13 @@ const NOISE_ADDRESSES = new Set<string>([
 ]);
 
 const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+const ACTIVE_CATEGORIES = new Set(["trader", "kol"]);
+const LOW_PRIORITY_CATEGORIES = new Set(["founder"]);
+const MAX_TRACKED_WALLETS = 24;
+const PINNED_WALLETS = 8;
+const ROTATION_WINDOW_MS = 2 * 60 * 60 * 1000;
+const HELIUS_BATCH_SIZE = 3;
+const HELIUS_RETRY_DELAYS_MS = [250, 700, 1400];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Handler
@@ -146,31 +154,24 @@ serve(async (req) => {
       });
     }
 
-    // 2. Sample wallets. Prioritize user-added, then curated traders/KOLs/founders.
-    //    Skip categories that don't actively trade (protocol treasuries,
-    //    market makers, VCs) and filter out invalid placeholder addresses.
-    const NON_TRADING_CATEGORIES = new Set(["protocol", "mm", "vc"]);
-    const sortedWallets = [...wallets.values()]
-      .filter((w) => BASE58_RE.test(w.address))
-      .filter((w) => !NOISE_ADDRESSES.has(w.address))
-      .filter((w) => w.isUserAdded || !NON_TRADING_CATEGORIES.has(w.category ?? ""))
-      .sort((a, b) => {
-        const aScore = (a.isUserAdded ? 2 : 0) + (a.isCurated ? 1 : 0);
-        const bScore = (b.isUserAdded ? 2 : 0) + (b.isCurated ? 1 : 0);
-        return bScore - aScore;
-      })
-      .slice(0, 18);
+    // 2. Select wallets. Keep user-added + verified wallets pinned, then rotate
+    //    through the broader trader/KOL pool so we don't query the same low-
+    //    signal addresses every request.
+    const sortedWallets = selectWallets(wallets, Date.now());
 
     // 3. Fetch wallet activity with a conservative concurrency limit so we
     //    don't get Helius 429s and collapse to an empty result set.
     const rawTrades: RawTrade[] = [];
-    for (let i = 0; i < sortedWallets.length; i += 6) {
-      const batch = sortedWallets.slice(i, i + 6);
+    for (let i = 0; i < sortedWallets.length; i += HELIUS_BATCH_SIZE) {
+      const batch = sortedWallets.slice(i, i + HELIUS_BATCH_SIZE);
       const results = await Promise.allSettled(
-        batch.map((meta) => fetchWalletTrades(meta, HELIUS_API_KEY, cutoff)),
+        batch.map((meta) => fetchWalletTrades(meta, HELIUS_API_KEY, cutoff, windowHours)),
       );
       for (const r of results) {
         if (r.status === "fulfilled") rawTrades.push(...r.value);
+      }
+      if (i + HELIUS_BATCH_SIZE < sortedWallets.length) {
+        await sleep(150);
       }
     }
 
