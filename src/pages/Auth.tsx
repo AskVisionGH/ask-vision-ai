@@ -171,8 +171,8 @@ const Auth = () => {
 
         <div className="relative z-10 max-w-sm">
           <h2 className="text-3xl font-light leading-tight tracking-tight sm:text-4xl">
-            Talk to crypto.{" "}
-            <span className="font-serif-italic text-primary">Naturally.</span>
+            Ask anything.{" "}
+            <span className="font-serif-italic text-primary">Unlock everything.</span>
           </h2>
           <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
             Sign in to keep your conversations, contacts, and on-chain history
