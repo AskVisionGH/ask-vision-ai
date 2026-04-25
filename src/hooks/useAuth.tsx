@@ -17,6 +17,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // One-time cleanup: previous versions tracked welcome-email sends in
+    // localStorage. The trigger now lives server-side, so these flags are
+    // dead weight. Sweep them once per browser.
+    if (typeof window !== "undefined") {
+      try {
+        const cleaned = localStorage.getItem("vision:welcome-flags-cleaned");
+        if (!cleaned) {
+          for (let i = localStorage.length - 1; i >= 0; i--) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith("vision:welcome-sent:")) {
+              localStorage.removeItem(key);
+            }
+          }
+          localStorage.setItem("vision:welcome-flags-cleaned", "1");
+        }
+      } catch {
+        /* storage may be disabled */
+      }
+    }
+
     // Subscribe FIRST so we don't miss the initial session-restoration event,
     // then hydrate from storage. Supabase's recommended ordering.
     // NOTE: The welcome email is sent server-side by a database trigger on
