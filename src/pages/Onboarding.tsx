@@ -359,7 +359,58 @@ const Onboarding = () => {
               </div>
             )}
 
-            {step === "experience" && (
+            {step === "email" && (
+              <div className="space-y-6">
+                <div>
+                  <div className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-[10px] uppercase tracking-widest text-primary">
+                    <Mail className="h-3 w-3" />
+                    One more thing
+                  </div>
+                  <h2 className="text-xl font-light tracking-tight sm:text-2xl">
+                    Where can we <span className="font-serif-italic text-primary">reach</span> you?
+                  </h2>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    You signed in with a wallet — we still need an email for receipts,
+                    price alerts, and account recovery. We'll send a quick confirmation link.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label
+                    htmlFor="onboarding-email"
+                    className="text-xs uppercase tracking-wider text-muted-foreground"
+                  >
+                    Email <span className="text-primary">*</span>
+                  </Label>
+                  <Input
+                    id="onboarding-email"
+                    type="email"
+                    inputMode="email"
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      // Editing after a submit means they want to send a new
+                      // confirm link — clear the satisfied flag so Continue
+                      // re-triggers the API call.
+                      if (emailSubmitted) setEmailSubmitted(false);
+                    }}
+                    placeholder="you@example.com"
+                    disabled={savingEmail}
+                  />
+                  {emailSubmitted ? (
+                    <p className="text-[11px] text-primary">
+                      Confirmation link sent. Check your inbox — you can keep going in the meantime.
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-muted-foreground/70">
+                      We never share this. Used only for product emails you've enabled.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
               <div className="space-y-6">
                 <div>
                   <h2 className="text-xl font-light tracking-tight sm:text-2xl">
