@@ -229,6 +229,47 @@ const Auth = () => {
             </p>
           </div>
 
+          {inApp.isInApp && (
+            <div className="mb-5 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
+              <div className="flex items-start gap-3">
+                <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" aria-hidden />
+                <div className="min-w-0 space-y-2">
+                  <p className="text-sm font-medium leading-snug text-foreground">
+                    Open this page in your browser
+                  </p>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    You're viewing Vision inside {inApp.label ?? "an in-app browser"}.
+                    Google blocks sign-in from in-app browsers, and other methods
+                    may behave oddly. Tap the <span className="font-medium text-foreground">⋯</span> menu
+                    and choose <span className="font-medium text-foreground">"Open in Safari"</span> or
+                    <span className="font-medium text-foreground"> "Open in Chrome"</span>.
+                  </p>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={copyAuthUrl}
+                      className="h-8 gap-1.5 rounded-full border-amber-500/30 bg-background/40 text-xs text-foreground hover:bg-background/60"
+                    >
+                      <Copy className="h-3 w-3" />
+                      Copy link
+                    </Button>
+                    <a
+                      href={window.location.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex h-8 items-center gap-1.5 rounded-full border border-amber-500/30 bg-background/40 px-3 text-xs text-foreground hover:bg-background/60 ease-vision"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      Open externally
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
             <TabsList className="grid w-full grid-cols-2 bg-secondary">
               <TabsTrigger value="email" className="gap-1.5">
