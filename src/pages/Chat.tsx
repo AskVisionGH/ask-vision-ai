@@ -9,6 +9,7 @@ import { ConnectWalletButton } from "@/components/ConnectWalletButton";
 import { AlertBell } from "@/components/AlertBell";
 import { ShareConversationDialog } from "@/components/ShareConversationDialog";
 import { VisionLogo } from "@/components/VisionLogo";
+import { VisionLoader } from "@/components/VisionLoader";
 import { SEO } from "@/components/SEO";
 import { WalletOnboardingPrompt } from "@/components/WalletOnboardingPrompt";
 import { Button } from "@/components/ui/button";
