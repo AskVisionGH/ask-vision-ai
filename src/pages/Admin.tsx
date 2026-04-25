@@ -828,6 +828,8 @@ const EmailsTab = () => {
   const [range, setRange] = useState<"1d" | "7d" | "30d">("7d");
   const [templateFilter, setTemplateFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
 
   const load = async () => {
     setLoading(true);
