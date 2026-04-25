@@ -187,20 +187,6 @@ export const TokenChartCard = ({ data: initial }: Props) => {
       setLoadingTa(false);
     }
   };
-
-  const zoom = useCallback(
-    (delta: number) => {
-      setView((v) => {
-        const total = data.candles.length;
-        if (!total) return v;
-        const nextCount = Math.max(MIN_VISIBLE, Math.min(MAX_VISIBLE, Math.min(total, v.count + delta)));
-        const nextEnd = Math.min(total, Math.max(nextCount, v.end));
-        return { end: nextEnd, count: nextCount };
-      });
-    },
-    [data.candles.length],
-  );
-
   return (
     <div className="ease-vision animate-fade-up flex flex-col gap-3">
       <div className="overflow-hidden rounded-2xl border border-border bg-card/60 backdrop-blur-sm">
