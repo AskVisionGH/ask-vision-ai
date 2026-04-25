@@ -1421,7 +1421,12 @@ const UsersTab = () => {
                 </TableRow>
               ) : null}
               {filtered.map((p) => {
-                const email = emails[p.user_id];
+                const rawEmail = emails[p.user_id];
+                // Wallet-only signups carry a synthetic `<wallet>@wallet.vision.local`
+                // address — surface that as a "Wallet only" badge so admins
+                // don't think it's a real inbox or try to email it.
+                const isSynthetic = isWalletSyntheticEmail(rawEmail);
+                const email = isSynthetic ? undefined : rawEmail;
                 const wallets = walletsByUser[p.user_id] ?? [];
                 const isResending = resendingId === p.user_id;
                 return (
@@ -1432,6 +1437,11 @@ const UsersTab = () => {
                     <TableCell className="text-xs">
                       {email ? (
                         <CopyId value={email} label={shortEmail(email)} />
+                      ) : isSynthetic ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-secondary/40 px-2 py-0.5 text-[11px] text-muted-foreground">
+                          <Wallet className="h-3 w-3" />
+                          Wallet only
+                        </span>
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
@@ -1469,7 +1479,13 @@ const UsersTab = () => {
                         size="sm"
                         onClick={() => resendWelcome(p)}
                         disabled={!email || isResending}
-                        title={email ? "Resend the welcome email" : "No email on file"}
+                        title={
+                          email
+                            ? "Resend the welcome email"
+                            : isSynthetic
+                              ? "Wallet-only account — no email on file"
+                              : "No email on file"
+                        }
                       >
                         {isResending ? (
                           <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
