@@ -358,57 +358,38 @@ async function fetchWalletTrades(
   apiKey: string,
   cutoff: number,
 ): Promise<RawTrade[]> {
-  const url = new URL(`https://api.helius.xyz/v0/addresses/${meta.address}/transactions`);
-  url.searchParams.set("api-key", apiKey);
-  url.searchParams.set("limit", "20");
-  const resp = await fetch(url.toString());
-  if (!resp.ok) return [];
-  const txs = await resp.json();
-  if (!Array.isArray(txs)) return [];
-
+  const txs = await fetchEnhancedTxs(meta.address, apiKey, cutoff);
   const out: RawTrade[] = [];
+
   for (const tx of txs) {
     const ts = typeof tx?.timestamp === "number" ? tx.timestamp : 0;
     if (ts < cutoff) continue;
 
     const swap = tx?.events?.swap;
-    if (!swap) continue; // only swaps — no plain transfers
+    if (!swap) continue;
 
-    const outs = Array.isArray(swap.tokenOutputs) ? swap.tokenOutputs : [];
-    const ins = Array.isArray(swap.tokenInputs) ? swap.tokenInputs : [];
-
-    const meaningfulOut = outs.find(
-      (o: any) => o?.mint && o.mint !== SOL_MINT && !STABLE_MINTS.has(o.mint),
-    );
-    const meaningfulIn = ins.find(
-      (i: any) => i?.mint && i.mint !== SOL_MINT && !STABLE_MINTS.has(i.mint),
-    );
+    const outSide = pickSwapSide(swap.tokenOutputs, swap.nativeOutput, meta.address);
+    const inSide = pickSwapSide(swap.tokenInputs, swap.nativeInput, meta.address);
 
     let side: "buy" | "sell" | null = null;
-    let mint = "";
-    let amount = 0;
-    let valueUsd: number | null = null;
+    let tokenSide: { mint: string; amount: number } | undefined;
 
-    if (meaningfulOut) {
+    if (outSide && outSide.mint !== SOL_MINT && !STABLE_MINTS.has(outSide.mint)) {
       side = "buy";
-      mint = meaningfulOut.mint;
-      amount = Number(meaningfulOut?.tokenAmount?.uiAmount ?? 0) || 0;
-      valueUsd = sumValueUsd(ins);
-    } else if (meaningfulIn) {
+      tokenSide = outSide;
+    } else if (inSide && inSide.mint !== SOL_MINT && !STABLE_MINTS.has(inSide.mint)) {
       side = "sell";
-      mint = meaningfulIn.mint;
-      amount = Number(meaningfulIn?.tokenAmount?.uiAmount ?? 0) || 0;
-      valueUsd = sumValueUsd(outs);
+      tokenSide = inSide;
     }
 
-    if (!side || !mint) continue;
+    if (!side || !tokenSide || !tx?.signature) continue;
 
     out.push({
       wallet: meta,
       side,
-      tokenMint: mint,
-      tokenAmount: amount,
-      valueUsd,
+      tokenMint: tokenSide.mint,
+      tokenAmount: tokenSide.amount,
+      valueUsd: computeSwapUsd(inSide, outSide),
       timestamp: ts * 1000,
       signature: tx.signature,
       source: typeof tx?.source === "string" ? tx.source : null,
@@ -418,22 +399,74 @@ async function fetchWalletTrades(
   return out;
 }
 
-/** Sum SOL + stable legs into approximate USD. SOL priced at a rough $150. */
-function sumValueUsd(side: any[]): number | null {
-  let usd = 0;
-  let any = false;
-  for (const t of side) {
-    const amt = Number(t?.tokenAmount?.uiAmount ?? 0);
-    if (!amt) continue;
-    if (t.mint === SOL_MINT) {
-      usd += amt * 150;
-      any = true;
-    } else if (STABLE_MINTS.has(t.mint)) {
-      usd += amt;
-      any = true;
+async function fetchEnhancedTxs(address: string, apiKey: string, cutoff: number): Promise<any[]> {
+  const out: any[] = [];
+  let before: string | null = null;
+  const PER_PAGE = 100;
+  const MAX_PAGES = 4;
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const url = new URL(`https://api.helius.xyz/v0/addresses/${address}/transactions`);
+    url.searchParams.set("api-key", apiKey);
+    url.searchParams.set("limit", String(PER_PAGE));
+    if (before) url.searchParams.set("before", before);
+
+    const resp = await fetch(url.toString());
+    if (!resp.ok) {
+      console.error("[smart-money-activity] Helius enhanced txs error:", resp.status);
+      break;
+    }
+
+    const data = await resp.json();
+    if (!Array.isArray(data) || data.length === 0) break;
+
+    out.push(...data);
+    before = data[data.length - 1]?.signature ?? null;
+    const oldestTs = data[data.length - 1]?.timestamp ?? 0;
+    if (!before || oldestTs < cutoff) break;
+  }
+
+  return out.filter((t) => (t.timestamp ?? 0) >= cutoff);
+}
+
+function pickSwapSide(
+  tokenSide: any[] | undefined,
+  nativeSide: any,
+  owner: string,
+): { mint: string; amount: number } | undefined {
+  if (Array.isArray(tokenSide) && tokenSide.length > 0) {
+    const involvingOwner = tokenSide.filter((t) =>
+      t?.userAccount === owner || t?.fromUserAccount === owner || t?.toUserAccount === owner,
+    );
+    const candidates = involvingOwner.length > 0 ? involvingOwner : tokenSide;
+
+    for (const t of candidates) {
+      const raw = Number(t?.rawTokenAmount?.tokenAmount ?? 0);
+      const decimals = Number(t?.rawTokenAmount?.decimals ?? 0);
+      const uiAmount = Number(t?.tokenAmount?.uiAmount ?? t?.tokenAmount ?? 0);
+      const amount = raw > 0 ? raw / Math.pow(10, decimals) : uiAmount;
+      if (!Number.isFinite(amount) || amount <= 0 || !t?.mint) continue;
+      return { mint: t.mint, amount };
     }
   }
-  return any ? usd : null;
+
+  const nativeRaw = Number(nativeSide?.amount ?? nativeSide ?? 0);
+  if (Number.isFinite(nativeRaw) && nativeRaw > 0) {
+    return { mint: SOL_MINT, amount: nativeRaw / 1e9 };
+  }
+
+  return undefined;
+}
+
+function computeSwapUsd(
+  inSide: { mint: string; amount: number } | undefined,
+  outSide: { mint: string; amount: number } | undefined,
+): number | null {
+  if (inSide && STABLE_MINTS.has(inSide.mint)) return inSide.amount;
+  if (outSide && STABLE_MINTS.has(outSide.mint)) return outSide.amount;
+  if (inSide?.mint === SOL_MINT) return inSide.amount * 150;
+  if (outSide?.mint === SOL_MINT) return outSide.amount * 150;
+  return null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
