@@ -7,6 +7,7 @@ import {
   ExternalLink,
   AlertCircle,
   Info,
+  XCircle,
 } from "lucide-react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
