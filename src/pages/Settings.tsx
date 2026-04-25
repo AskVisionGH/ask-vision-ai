@@ -29,8 +29,6 @@ import {
 } from "@/components/ui/select";
 import { UserAvatar } from "@/components/UserAvatar";
 import { DeleteAccountDialog } from "@/components/DeleteAccountDialog";
-import { Switch } from "@/components/ui/switch";
-import { useNotificationPreferences } from "@/hooks/useNotificationPreferences";
 import { Link } from "react-router-dom";
 import {
   Accordion,
@@ -44,7 +42,6 @@ const Settings = () => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const { profile, loading, updateProfile, uploadAvatar } = useProfile();
-  const { prefs, update: updatePrefs } = useNotificationPreferences();
   const [deleteDialog, setDeleteDialog] = useState<null | "wipe" | "full">(null);
 
   const [name, setName] = useState("");
