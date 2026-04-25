@@ -1,7 +1,8 @@
-import { ChangeEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowRight, Camera, Check, ChevronLeft, Sparkles } from "lucide-react";
+import { ArrowRight, Camera, Check, ChevronLeft, Mail, Sparkles } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import {
   CryptoExperience,
@@ -13,6 +14,7 @@ import {
   INTEREST_OPTIONS,
   RISK_OPTIONS,
 } from "@/lib/profile-options";
+import { isWalletSyntheticEmail } from "@/lib/wallet-email";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,11 +22,13 @@ import { UserAvatar } from "@/components/UserAvatar";
 import { VisionLogo } from "@/components/VisionLogo";
 import { cn } from "@/lib/utils";
 
-const STEPS = ["welcome", "experience", "interests", "risk"] as const;
-type Step = (typeof STEPS)[number];
+// "email" is conditionally injected right after "welcome" for wallet-only
+// accounts that signed in via SIWS and don't yet have a real inbox attached.
+type Step = "welcome" | "email" | "experience" | "interests" | "risk";
 
 const STEP_LABELS: Record<Step, string> = {
   welcome: "About you",
+  email: "Email",
   experience: "Experience",
   interests: "Interests",
   risk: "Risk",
