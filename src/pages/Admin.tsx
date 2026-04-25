@@ -1281,10 +1281,44 @@ const UsersTab = () => {
   const [walletsByUser, setWalletsByUser] = useState<Record<string, WalletLink[]>>({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [resendingId, setResendingId] = useState<string | null>(null);
 
   // The two clickable-pill dialogs share open state via the focused user id.
   const [onboardingFor, setOnboardingFor] = useState<ProfileRow | null>(null);
   const [walletsFor, setWalletsFor] = useState<ProfileRow | null>(null);
+
+  const resendWelcome = async (p: ProfileRow) => {
+    const email = emails[p.user_id];
+    if (!email) {
+      toast({ title: "No email on file", variant: "destructive" });
+      return;
+    }
+    setResendingId(p.user_id);
+    try {
+      const name = p.display_name ?? email.split("@")[0];
+      // Use a fresh idempotency key each time so admin re-sends bypass the
+      // server-side dedupe and actually deliver another email.
+      const idempotencyKey = `welcome-resend-${p.user_id}-${Date.now()}`;
+      const { error } = await supabase.functions.invoke("send-transactional-email", {
+        body: {
+          templateName: "welcome",
+          recipientEmail: email,
+          idempotencyKey,
+          templateData: { name },
+        },
+      });
+      if (error) throw error;
+      toast({ title: "Welcome email resent", description: shortEmail(email) });
+    } catch (e) {
+      toast({
+        title: "Resend failed",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setResendingId(null);
+    }
+  };
 
   useEffect(() => {
     (async () => {
