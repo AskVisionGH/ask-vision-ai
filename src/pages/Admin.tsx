@@ -1043,6 +1043,8 @@ const TreasuryTab = () => {
   const [range, setRange] = useState<RangeKey>("all");
   const [customRange, setCustomRange] = useState<DateRange | undefined>();
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
 
   const load = async () => {
     setLoading(true);
@@ -1165,6 +1167,9 @@ const TreasuryTab = () => {
       return true;
     });
   }, [fees, chainFilter, kindFilter, dateBounds]);
+
+  // Reset to first page whenever filters change.
+  useEffect(() => { setPage(1); }, [chainFilter, kindFilter, range, customRange]);
 
   const totals = useMemo(() => {
     const inRange = fees.filter((f) => inDateRange(f.block_time));
@@ -1321,7 +1326,7 @@ const TreasuryTab = () => {
                   </TableCell>
                 </TableRow>
               ) : null}
-              {filtered.map((f) => {
+              {filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((f) => {
                 const explorer = f.chain === "solana"
                   ? `https://solscan.io/tx/${f.signature}`
                   : `https://etherscan.io/tx/${f.signature}`;
@@ -1362,6 +1367,42 @@ const TreasuryTab = () => {
           </Table>
         </CardContent>
       </Card>
+      {filtered.length > 0 ? (() => {
+        const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+        const safePage = Math.min(page, totalPages);
+        const start = (safePage - 1) * PAGE_SIZE + 1;
+        const end = Math.min(safePage * PAGE_SIZE, filtered.length);
+        return (
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">
+              Showing {start}–{end} of {filtered.length}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8"
+                disabled={safePage <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                Previous
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                Page {safePage} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8"
+                disabled={safePage >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        );
+      })() : null}
     </div>
   );
 };
@@ -1386,6 +1427,8 @@ const UsersTab = () => {
   // Confirm-delete dialog: requires typing the user's display name or email.
   const [deleteTarget, setDeleteTarget] = useState<ProfileRow | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
 
   // The two clickable-pill dialogs share open state via the focused user id.
   const [onboardingFor, setOnboardingFor] = useState<ProfileRow | null>(null);
@@ -1542,6 +1585,9 @@ const UsersTab = () => {
     });
   }, [profiles, search, emails]);
 
+  // Reset to first page whenever the search filter changes.
+  useEffect(() => { setPage(1); }, [search]);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
@@ -1582,7 +1628,7 @@ const UsersTab = () => {
                   </TableCell>
                 </TableRow>
               ) : null}
-              {filtered.map((p) => {
+              {filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((p) => {
                 const rawEmail = emails[p.user_id];
                 // Wallet-only signups carry a synthetic `<wallet>@wallet.vision.local`
                 // address — surface that as a "Wallet only" badge so admins
@@ -1690,6 +1736,42 @@ const UsersTab = () => {
           </Table>
         </CardContent>
       </Card>
+      {filtered.length > 0 ? (() => {
+        const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+        const safePage = Math.min(page, totalPages);
+        const start = (safePage - 1) * PAGE_SIZE + 1;
+        const end = Math.min(safePage * PAGE_SIZE, filtered.length);
+        return (
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">
+              Showing {start}–{end} of {filtered.length}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8"
+                disabled={safePage <= 1}
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+              >
+                Previous
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                Page {safePage} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8"
+                disabled={safePage >= totalPages}
+                onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        );
+      })() : null}
 
       <OnboardingDialog
         profile={onboardingFor}
