@@ -282,7 +282,7 @@ serve(async (req) => {
 
     const response: ActivityResponse = {
       tokens: tokens.slice(0, 20),
-      walletsTracked: wallets.size,
+      walletsTracked: sortedWallets.length,
       walletsActive,
       totalTrades: meaningful.length,
       windowHours,
