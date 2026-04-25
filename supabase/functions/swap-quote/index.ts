@@ -58,12 +58,26 @@ async function resolveToken(input: string): Promise<TokenMeta | null> {
   return await fetchMeta(addr, top);
 }
 
+// Stablecoins (USDC, USDT, plus a couple of common Solana variants).
+// DexScreener's `priceUsd` field on a stable's most-liquid pair is sometimes
+// the price of the QUOTE token, not USD — pinning these to $1 prevents the
+// swap card from showing nonsense like "858 USDC ≈ $2,548".
+const STABLE_MINTS = new Set<string>([
+  "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
+  "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", // USDT
+  "USDH1SM1ojwWUga67PGrgFWUHibbjqMvuMaDkRJTgkX", // USDH
+  "USDSwr9ApdHk5bvJKMjzff41FfuX8bSxdKcR81vTwcA", // USDS
+]);
+
 async function fetchMeta(mint: string, dexPair?: any): Promise<TokenMeta | null> {
-  // Get decimals from Jupiter token list (single-token endpoint)
+  // Get decimals + symbol from Jupiter token list. Jupiter v2 also returns
+  // `usdPrice` which is generally more reliable than DexScreener for
+  // mid-cap and stablecoin tokens — use it as the primary price source.
   let decimals = 9;
   let symbol = "?";
   let name = "Unknown";
   let logo: string | null = null;
+  let priceUsd: number | null = null;
 
   try {
     const jupResp = await fetch(`https://lite-api.jup.ag/tokens/v2/search?query=${mint}`);
@@ -75,12 +89,14 @@ async function fetchMeta(mint: string, dexPair?: any): Promise<TokenMeta | null>
         symbol = tok.symbol ?? symbol;
         name = tok.name ?? name;
         logo = tok.icon ?? null;
+        if (tok.usdPrice != null && Number.isFinite(Number(tok.usdPrice))) {
+          priceUsd = Number(tok.usdPrice);
+        }
       }
     }
   } catch (_) { /* ignore */ }
 
-  // Enrich with DexScreener for price + logo fallback
-  let priceUsd: number | null = null;
+  // DexScreener fallback for price + logo (only if Jupiter didn't have a price)
   try {
     const pair = dexPair ?? await (async () => {
       const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
@@ -91,12 +107,20 @@ async function fetchMeta(mint: string, dexPair?: any): Promise<TokenMeta | null>
       return ps[0] ?? null;
     })();
     if (pair) {
-      priceUsd = pair.priceUsd ? Number(pair.priceUsd) : null;
+      // Only adopt DexScreener's price if Jupiter didn't give us one AND
+      // the pair has the token as the BASE (so priceUsd is in real USD).
+      if (priceUsd == null && pair.priceUsd && pair.baseToken?.address === mint) {
+        priceUsd = Number(pair.priceUsd);
+      }
       if (!logo) logo = pair.info?.imageUrl ?? null;
       if (symbol === "?") symbol = pair.baseToken?.symbol ?? symbol;
       if (name === "Unknown") name = pair.baseToken?.name ?? name;
     }
   } catch (_) { /* ignore */ }
+
+  // Hard pin known stablecoins to $1. Even if Jupiter/DexScreener returned
+  // a slightly off-peg figure, the swap-card math expects ~$1 here.
+  if (STABLE_MINTS.has(mint)) priceUsd = 1;
 
   return { symbol, name, address: mint, decimals, logo, priceUsd };
 }
