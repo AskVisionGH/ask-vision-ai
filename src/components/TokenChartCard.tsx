@@ -255,7 +255,7 @@ export const TokenChartCard = ({ data: initial }: Props) => {
                     : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
                 )}
               >
-                {iv}
+                {INTERVAL_DISPLAY[iv]}
               </button>
             ))}
             {loadingInterval && <Loader2 className="ml-2 h-3 w-3 animate-spin text-muted-foreground" />}
