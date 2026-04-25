@@ -395,6 +395,7 @@ export type Database = {
           risk_tolerance: Database["public"]["Enums"]["risk_tolerance"] | null
           updated_at: string
           user_id: string
+          welcome_email_sent_at: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -408,6 +409,7 @@ export type Database = {
           risk_tolerance?: Database["public"]["Enums"]["risk_tolerance"] | null
           updated_at?: string
           user_id: string
+          welcome_email_sent_at?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -421,6 +423,7 @@ export type Database = {
           risk_tolerance?: Database["public"]["Enums"]["risk_tolerance"] | null
           updated_at?: string
           user_id?: string
+          welcome_email_sent_at?: string | null
         }
         Relationships: []
       }
