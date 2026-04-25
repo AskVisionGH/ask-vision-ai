@@ -1505,6 +1505,12 @@ const UsersTab = () => {
                 const email = isSynthetic ? undefined : rawEmail;
                 const wallets = walletsByUser[p.user_id] ?? [];
                 const isResending = resendingId === p.user_id;
+                const isGranting = grantingId === p.user_id;
+                const isDeleting = deletingId === p.user_id;
+                const isAlreadyAdmin = adminUserIds.has(p.user_id);
+                const isTargetSuperAdmin = superAdminUserIds.has(p.user_id);
+                const isSelf = p.user_id === user?.id;
+                const busy = isResending || isGranting || isDeleting;
                 return (
                   <TableRow key={p.user_id}>
                     <TableCell className="font-medium">
