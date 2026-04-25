@@ -148,9 +148,10 @@ serve(async (req) => {
 
     // 2. Sample wallets. Prioritize user-added, then curated traders/KOLs/founders.
     //    Skip categories that don't actively trade (protocol treasuries,
-    //    market makers, VCs) — they pollute results without contributing signal.
+    //    market makers, VCs) and filter out invalid placeholder addresses.
     const NON_TRADING_CATEGORIES = new Set(["protocol", "mm", "vc"]);
     const sortedWallets = [...wallets.values()]
+      .filter((w) => BASE58_RE.test(w.address))
       .filter((w) => !NOISE_ADDRESSES.has(w.address))
       .filter((w) => w.isUserAdded || !NON_TRADING_CATEGORIES.has(w.category ?? ""))
       .sort((a, b) => {
@@ -158,15 +159,19 @@ serve(async (req) => {
         const bScore = (b.isUserAdded ? 2 : 0) + (b.isCurated ? 1 : 0);
         return bScore - aScore;
       })
-      .slice(0, 60);
+      .slice(0, 18);
 
-    // 3. Fetch each wallet's recent activity in parallel.
-    const results = await Promise.allSettled(
-      sortedWallets.map((meta) => fetchWalletTrades(meta, HELIUS_API_KEY, cutoff)),
-    );
+    // 3. Fetch wallet activity with a conservative concurrency limit so we
+    //    don't get Helius 429s and collapse to an empty result set.
     const rawTrades: RawTrade[] = [];
-    for (const r of results) {
-      if (r.status === "fulfilled") rawTrades.push(...r.value);
+    for (let i = 0; i < sortedWallets.length; i += 6) {
+      const batch = sortedWallets.slice(i, i + 6);
+      const results = await Promise.allSettled(
+        batch.map((meta) => fetchWalletTrades(meta, HELIUS_API_KEY, cutoff)),
+      );
+      for (const r of results) {
+        if (r.status === "fulfilled") rawTrades.push(...r.value);
+      }
     }
 
     // 4. Filter noise: skip pure SOL/stable transfers (they have no token side
