@@ -1080,7 +1080,6 @@ const TreasuryTab = () => {
       all: sum(inRange),
       sol: sum(inRange.filter((f) => f.chain === "solana")),
       eth: sum(inRange.filter((f) => f.chain === "ethereum")),
-      bridge: sum(inRange.filter((f) => f.source_kind === "bridge_fee")),
       count: inRange.length,
     };
   }, [fees, dateBounds]);
