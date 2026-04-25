@@ -1086,6 +1086,8 @@ const TreasuryTab = () => {
           title: "Nothing to sweep",
           description: result.reason ?? `Below $${1} dust threshold (~$${(result.totalValueUsd ?? 0).toFixed(2)})`,
         });
+        // Still refresh the ledger so any out-of-band fees get indexed.
+        await triggerSync();
       } else {
         toast({
           title: "Sweep failed",
