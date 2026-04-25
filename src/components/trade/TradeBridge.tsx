@@ -70,6 +70,7 @@ type Phase =
   | { name: "submitting" }
   | { name: "bridging"; signature: string; startedAt: number; estimatedSec: number | null }
   | { name: "success"; signature: string; durationMs: number; toAmountUi: number; toSymbol: string; destExplorer: string | null }
+  | { name: "cancelled"; fromAmountUi: number; fromSymbol: string; toAmountUi: number; toSymbol: string }
   | { name: "error"; message: string };
 
 const QUOTE_DEBOUNCE_MS = 400;
