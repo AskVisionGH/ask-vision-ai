@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { toast } from "sonner";
-import { Apple, Mail, Wallet } from "lucide-react";
+import { Apple, Copy, ExternalLink, Mail, ShieldAlert, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
 import { useAuth } from "@/hooks/useAuth";
@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SEO } from "@/components/SEO";
 import { cn } from "@/lib/utils";
+import { detectInAppBrowser, type InAppBrowserInfo } from "@/lib/in-app-browser";
 
 const GoogleGlyph = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden>
@@ -43,10 +44,24 @@ const Auth = () => {
   // disconnected, we open the modal and remember the intent so we can
   // auto-trigger signing the moment a wallet connects.
   const [pendingSign, setPendingSign] = useState(false);
+  const [inApp, setInApp] = useState<InAppBrowserInfo>({ isInApp: false, app: null, label: null });
+
+  useEffect(() => {
+    setInApp(detectInAppBrowser());
+  }, []);
 
   useEffect(() => {
     if (!loading && session) navigate("/chat", { replace: true });
   }, [loading, session, navigate]);
+
+  const copyAuthUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      toast.success("Link copied", { description: "Paste it into Safari or Chrome." });
+    } catch {
+      toast.error("Couldn't copy link", { description: "Long-press the address bar to copy it manually." });
+    }
+  };
 
   const submitEmail = async (e: FormEvent) => {
     e.preventDefault();
@@ -213,6 +228,47 @@ const Auth = () => {
               Choose how you'd like to sign in.
             </p>
           </div>
+
+          {inApp.isInApp && (
+            <div className="mb-5 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
+              <div className="flex items-start gap-3">
+                <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" aria-hidden />
+                <div className="min-w-0 space-y-2">
+                  <p className="text-sm font-medium leading-snug text-foreground">
+                    Open this page in your browser
+                  </p>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    You're viewing Vision inside {inApp.label ?? "an in-app browser"}.
+                    Google blocks sign-in from in-app browsers, and other methods
+                    may behave oddly. Tap the <span className="font-medium text-foreground">⋯</span> menu
+                    and choose <span className="font-medium text-foreground">"Open in Safari"</span> or
+                    <span className="font-medium text-foreground"> "Open in Chrome"</span>.
+                  </p>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={copyAuthUrl}
+                      className="h-8 gap-1.5 rounded-full border-amber-500/30 bg-background/40 text-xs text-foreground hover:bg-background/60"
+                    >
+                      <Copy className="h-3 w-3" />
+                      Copy link
+                    </Button>
+                    <a
+                      href={window.location.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex h-8 items-center gap-1.5 rounded-full border border-amber-500/30 bg-background/40 px-3 text-xs text-foreground hover:bg-background/60 ease-vision"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      Open externally
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
             <TabsList className="grid w-full grid-cols-2 bg-secondary">
