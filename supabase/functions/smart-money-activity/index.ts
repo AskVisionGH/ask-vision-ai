@@ -516,8 +516,9 @@ async function fetchWalletTrades(
   meta: WalletMeta,
   apiKey: string,
   cutoff: number,
+  windowHours: number,
 ): Promise<RawTrade[]> {
-  const txs = await fetchEnhancedTxs(meta.address, apiKey, cutoff);
+  const txs = await fetchEnhancedTxs(meta.address, apiKey, cutoff, windowHours);
   const out: RawTrade[] = [];
 
   for (const tx of txs) {
@@ -561,8 +562,8 @@ async function fetchWalletTrades(
 async function fetchEnhancedTxs(address: string, apiKey: string, cutoff: number): Promise<any[]> {
   const out: any[] = [];
   let before: string | null = null;
-  const PER_PAGE = 100;
-  const MAX_PAGES = 4;
+  const PER_PAGE = 50;
+  const MAX_PAGES = 2;
 
   for (let page = 0; page < MAX_PAGES; page++) {
     const url = new URL(`https://api.helius.xyz/v0/addresses/${address}/transactions`);
@@ -570,7 +571,7 @@ async function fetchEnhancedTxs(address: string, apiKey: string, cutoff: number)
     url.searchParams.set("limit", String(PER_PAGE));
     if (before) url.searchParams.set("before", before);
 
-    const resp = await fetch(url.toString());
+    const resp = await fetchWithRetry(url.toString());
     if (!resp.ok) {
       console.error("[smart-money-activity] Helius enhanced txs error:", resp.status);
       break;
@@ -586,6 +587,21 @@ async function fetchEnhancedTxs(address: string, apiKey: string, cutoff: number)
   }
 
   return out.filter((t) => (t.timestamp ?? 0) >= cutoff);
+}
+
+async function fetchWithRetry(url: string) {
+  let lastResp: Response | null = null;
+
+  for (let attempt = 0; attempt <= HELIUS_RETRY_DELAYS_MS.length; attempt++) {
+    const resp = await fetch(url);
+    if (resp.status !== 429) return resp;
+    lastResp = resp;
+    const delay = HELIUS_RETRY_DELAYS_MS[attempt];
+    if (delay == null) break;
+    await sleep(delay);
+  }
+
+  return lastResp ?? fetch(url);
 }
 
 function pickSwapSide(
