@@ -246,7 +246,7 @@ const TOOLS = [
           },
           interval: {
             type: "string",
-            enum: ["5m", "15m", "1h", "4h", "1d"],
+            enum: ["5m", "30m", "1h", "4h", "1d", "1w", "1mo"],
             description: "Candle interval. Default to '1h' if user doesn't specify.",
           },
         },
