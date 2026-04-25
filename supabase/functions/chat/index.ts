@@ -480,6 +480,27 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "prepare_bridge",
+      description:
+        "Preview a cross-chain bridge OUT of Solana via LI.FI. Use for 'bridge X to ETH/Base/etc', 'move tokens to another chain', 'send my SOL to Ethereum'. Returns a card with the route, fees, and a sign button. NEVER executes — user signs in the card. Phase 1 only supports Solana as the source chain.",
+      parameters: {
+        type: "object",
+        properties: {
+          inputToken: { type: "string", description: "Ticker or mint of the SOLANA token being bridged out (e.g. 'SOL', 'USDC')." },
+          outputToken: { type: "string", description: "Ticker/symbol of the token to receive on the destination chain (e.g. 'ETH', 'USDC', 'WBTC')." },
+          toChain: { type: "string", description: "Destination chain — accepts names like 'ethereum', 'eth', 'base', 'arbitrum', 'polygon', 'bsc', 'avalanche', 'optimism'." },
+          amount: { type: "number", description: "Decimal amount of inputToken to bridge (e.g. 0.5 for 0.5 SOL)." },
+          toAddress: { type: "string", description: "The user's wallet address on the DESTINATION chain. REQUIRED for cross-family bridges (Solana → EVM). EVM addresses are 0x… 42 chars." },
+          slippageBps: { type: "number", description: "Optional slippage in bps. Default 50 = 0.5%." },
+        },
+        required: ["inputToken", "outputToken", "toChain", "amount"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 serve(async (req) => {
