@@ -263,7 +263,7 @@ const Onboarding = () => {
         {/* Progress: smooth bar + numbered step */}
         <div className="mb-2 flex items-center justify-between font-mono text-[10px] tracking-widest uppercase text-muted-foreground/70">
           <span>
-            Step {stepIndex + 1} of {STEPS.length} · {STEP_LABELS[step]}
+            Step {stepIndex + 1} of {steps.length} · {STEP_LABELS[step]}
           </span>
           <span>{Math.round(progress)}%</span>
         </div>
