@@ -144,15 +144,19 @@ serve(async (req) => {
       });
     }
 
-    // 2. Sample at most 25 wallets (CPU budget). Prioritize user-added.
+    // 2. Sample wallets. Prioritize user-added, then curated traders/KOLs/founders.
+    //    Skip categories that don't actively trade (protocol treasuries,
+    //    market makers, VCs) — they pollute results without contributing signal.
+    const NON_TRADING_CATEGORIES = new Set(["protocol", "mm", "vc"]);
     const sortedWallets = [...wallets.values()]
+      .filter((w) => !NOISE_ADDRESSES.has(w.address))
+      .filter((w) => w.isUserAdded || !NON_TRADING_CATEGORIES.has(w.category ?? ""))
       .sort((a, b) => {
         const aScore = (a.isUserAdded ? 2 : 0) + (a.isCurated ? 1 : 0);
         const bScore = (b.isUserAdded ? 2 : 0) + (b.isCurated ? 1 : 0);
         return bScore - aScore;
       })
-      .filter((w) => !NOISE_ADDRESSES.has(w.address))
-      .slice(0, 25);
+      .slice(0, 60);
 
     // 3. Fetch each wallet's recent activity in parallel.
     const results = await Promise.allSettled(

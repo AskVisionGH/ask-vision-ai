@@ -221,7 +221,9 @@ export const SmartMoneyActivityCard = ({ data }: ActivityProps) => {
 
       {tokens.length === 0 ? (
         <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-          No tracked wallets traded any tokens in the last {data.windowHours}h.
+          {data.walletsActive === 0
+            ? `None of the ${data.walletsTracked} tracked wallets made a trade in the last ${data.windowHours}h. Try a longer window.`
+            : `${data.walletsActive} wallets were active but none of their trades cleared the noise filter in the last ${data.windowHours}h.`}
         </div>
       ) : (
         <ul className="divide-y divide-border">
