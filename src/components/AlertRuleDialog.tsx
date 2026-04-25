@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,6 +19,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { TokenLogo } from "@/components/TokenLogo";
+import {
+  TokenPickerDialog,
+  type TokenMeta,
+} from "@/components/trade/TokenPickerDialog";
 import {
   useAlertRules,
   type AlertRuleKind,
