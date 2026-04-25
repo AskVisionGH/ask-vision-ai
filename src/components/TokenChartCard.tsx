@@ -204,14 +204,15 @@ export const TokenChartCard = ({ data: initial }: Props) => {
           {data.priceChangePct != null && (
             <div
               className={cn(
-                "flex items-center gap-1 rounded-full border px-2.5 py-1 font-mono text-[11px]",
+                "flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-mono text-[11px]",
                 isUp
                   ? "border-up/30 bg-up/10 text-up"
                   : "border-down/30 bg-down/10 text-down",
               )}
             >
               {isUp ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-              {fmtPct(data.priceChangePct)}
+              <span>{fmtPct(data.priceChangePct)}</span>
+              <span className="opacity-60">· {periodLabel(data.interval)}</span>
             </div>
           )}
         </div>
