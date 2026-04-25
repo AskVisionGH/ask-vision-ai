@@ -333,11 +333,11 @@ const SignupsSparkline = ({ data }: { data: { date: string; count: number }[] })
   const max = Math.max(1, ...data.map((d) => d.count));
   return (
     <div className="flex h-24 items-end gap-0.5">
-      {data.map((d) => {
+      {data.map((d, i) => {
         const heightPct = (d.count / max) * 100;
         return (
           <div
-            key={d.date}
+            key={`${i}-${d.date}`}
             className="group relative flex-1 rounded-sm bg-primary/30 ease-vision hover:bg-primary"
             style={{ height: `${Math.max(2, heightPct)}%` }}
             title={`${d.date}: ${d.count} signup${d.count === 1 ? "" : "s"}`}
