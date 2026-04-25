@@ -1614,6 +1614,58 @@ const UsersTab = () => {
         wallets={walletsFor ? walletsByUser[walletsFor.user_id] ?? [] : []}
         onOpenChange={(open) => !open && setWalletsFor(null)}
       />
+
+
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteTarget(null);
+            setDeleteConfirm("");
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this user?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm">
+                <p>
+                  This permanently deletes the auth account, profile, conversations,
+                  messages, contacts, wallet links, and avatar files for{" "}
+                  <span className="font-medium text-foreground">
+                    {deleteTarget?.display_name ?? emails[deleteTarget?.user_id ?? ""] ?? shortId(deleteTarget?.user_id ?? "")}
+                  </span>
+                  . This action cannot be undone.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Type <span className="font-mono text-foreground">DELETE</span> to confirm.
+                </p>
+                <Input
+                  value={deleteConfirm}
+                  onChange={(e) => setDeleteConfirm(e.target.value)}
+                  placeholder="DELETE"
+                  autoFocus
+                />
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                deleteUser();
+              }}
+              disabled={deleteConfirm !== "DELETE" || !!deletingId}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deletingId ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Trash2 className="mr-1 h-3.5 w-3.5" />}
+              Delete user
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
