@@ -1434,6 +1434,7 @@ const UsersTab = () => {
           (map[w.user_id] ??= []).push(w);
         }
         setWalletsByUser(map);
+      }
       reloadRoles();
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
