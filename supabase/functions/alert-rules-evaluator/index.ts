@@ -48,8 +48,45 @@ const notificationCategory: Record<RuleKind, string> = {
 // (JWT parsing no longer needed — evaluator is gated by being reachable only
 // via the internal cron shared-secret header or a service-role Bearer.)
 
-// Fetch USD prices for a set of token symbols via Jupiter's token search.
-// Returns a Map<UPPER_SYMBOL, priceUsd>. Missing tokens are simply absent.
+/**
+ * Pull live USD prices for a set of mint addresses via Jupiter's mint-keyed
+ * price endpoint. Deterministic — no ticker collisions.
+ * Returns Map<mint, priceUsd>.
+ */
+async function fetchPricesByMint(
+  mints: string[],
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  const unique = [...new Set(mints.filter(Boolean))];
+  if (unique.length === 0) return out;
+  // Jupiter accepts up to ~100 ids per call.
+  const chunks: string[][] = [];
+  for (let i = 0; i < unique.length; i += 80) chunks.push(unique.slice(i, i + 80));
+  await Promise.all(
+    chunks.map(async (chunk) => {
+      try {
+        const r = await fetch(
+          `https://lite-api.jup.ag/price/v3?ids=${chunk.join(",")}`,
+        );
+        if (!r.ok) return;
+        const data = (await r.json()) as Record<string, { usdPrice?: number | string }>;
+        for (const [mint, info] of Object.entries(data ?? {})) {
+          const p = Number(info?.usdPrice ?? 0);
+          if (Number.isFinite(p) && p > 0) out.set(mint, p);
+        }
+      } catch (err) {
+        console.error("price-by-mint fetch failed", { err: String(err) });
+      }
+    }),
+  );
+  return out;
+}
+
+/**
+ * Legacy fallback: when a price rule was created before we captured the mint
+ * address, look up the most-liquid token matching the symbol on Jupiter.
+ * Returns Map<UPPER_SYMBOL, priceUsd>.
+ */
 async function fetchPricesBySymbol(
   symbols: string[],
 ): Promise<Map<string, number>> {
@@ -136,13 +173,21 @@ Deno.serve(async (req) => {
     return now - last >= DEBOUNCE_MS[r.kind];
   });
 
-  // Pre-fetch prices for all unique token symbols in enabled+ready price rules.
+  // Pre-fetch prices for all enabled+ready price rules.
+  // Prefer mint-keyed lookup (deterministic — no ticker collisions). For
+  // legacy rules that lack a mint, fall back to symbol search.
   const priceRules = ready.filter((r) => r.kind === "price");
+  const mints = priceRules
+    .map((r) => String(r.config.token_address ?? ""))
+    .filter(Boolean);
   const symbols = priceRules
+    .filter((r) => !r.config.token_address)
     .map((r) => String(r.config.token_symbol ?? ""))
     .filter(Boolean);
-  const prices =
-    symbols.length > 0 ? await fetchPricesBySymbol(symbols) : new Map<string, number>();
+  const [pricesByMint, pricesBySym] = await Promise.all([
+    mints.length > 0 ? fetchPricesByMint(mints) : Promise.resolve(new Map<string, number>()),
+    symbols.length > 0 ? fetchPricesBySymbol(symbols) : Promise.resolve(new Map<string, number>()),
+  ]);
 
   const fires: Array<{
     rule: AlertRuleRow;
@@ -155,18 +200,89 @@ Deno.serve(async (req) => {
     try {
       if (rule.kind === "price") {
         const sym = String(rule.config.token_symbol ?? "").toUpperCase();
+        const mint = String(rule.config.token_address ?? "");
         const dir = rule.config.direction === "below" ? "below" : "above";
-        const threshold = Number(rule.config.threshold_usd ?? 0);
-        const price = prices.get(sym);
-        if (!price || !Number.isFinite(threshold) || threshold <= 0) continue;
-        const matched = dir === "above" ? price >= threshold : price <= threshold;
-        if (!matched) continue;
-        fires.push({
-          rule,
-          title: `${sym} ${dir === "above" ? "rose above" : "fell below"} $${threshold.toLocaleString()}`,
-          body: `${sym} is now $${price.toFixed(price >= 1 ? 2 : 6)}.`,
-          metadata: { rule_id: rule.id, kind: rule.kind, sym, price, threshold, direction: dir },
-        });
+        const price = mint ? pricesByMint.get(mint) : pricesBySym.get(sym);
+        if (!price || price <= 0) continue;
+
+        const ttype = rule.config.threshold_type === "percent" ? "percent" : "price";
+
+        if (ttype === "price") {
+          const threshold = Number(rule.config.threshold_usd ?? 0);
+          if (!Number.isFinite(threshold) || threshold <= 0) continue;
+          const matched = dir === "above" ? price >= threshold : price <= threshold;
+          if (!matched) continue;
+          fires.push({
+            rule,
+            title: `${sym} ${dir === "above" ? "rose above" : "fell below"} $${threshold.toLocaleString()}`,
+            body: `${sym} is now $${price.toFixed(price >= 1 ? 2 : 6)}.`,
+            metadata: { rule_id: rule.id, kind: rule.kind, sym, mint, price, threshold, direction: dir },
+          });
+        } else {
+          // Percent-change mode. We anchor to a baseline price + timestamp
+          // captured the first time we evaluate the rule. When the elapsed
+          // time exceeds `window_hours`, we re-anchor to roll the window
+          // forward — keeps memory tiny vs. fetching historical candles.
+          const pctThreshold = Number(rule.config.percent_change ?? 0);
+          const windowHours = Number(rule.config.window_hours ?? 24);
+          if (!Number.isFinite(pctThreshold) || pctThreshold <= 0) continue;
+          if (!Number.isFinite(windowHours) || windowHours <= 0) continue;
+
+          const basePrice = Number(rule.config.baseline_price_usd ?? 0);
+          const baseAt = rule.config.baseline_at
+            ? new Date(String(rule.config.baseline_at)).getTime()
+            : 0;
+          const windowMs = windowHours * 60 * 60 * 1000;
+          const expired = baseAt > 0 && now - baseAt > windowMs;
+
+          if (basePrice <= 0 || expired) {
+            // Seed (or re-seed) the baseline; can't fire on this tick.
+            await admin
+              .from("alert_rules")
+              .update({
+                config: {
+                  ...rule.config,
+                  baseline_price_usd: price,
+                  baseline_at: new Date(now).toISOString(),
+                },
+              })
+              .eq("id", rule.id);
+            continue;
+          }
+
+          const pct = ((price - basePrice) / basePrice) * 100;
+          const matched =
+            dir === "above" ? pct >= pctThreshold : pct <= -pctThreshold;
+          if (!matched) continue;
+          fires.push({
+            rule,
+            title: `${sym} ${pct >= 0 ? "+" : ""}${pct.toFixed(1)}% in ${windowHours}h`,
+            body: `${sym} moved from $${basePrice.toFixed(basePrice >= 1 ? 2 : 6)} to $${price.toFixed(price >= 1 ? 2 : 6)}.`,
+            metadata: {
+              rule_id: rule.id,
+              kind: rule.kind,
+              sym,
+              mint,
+              price,
+              baseline: basePrice,
+              pct,
+              threshold_pct: pctThreshold,
+              window_hours: windowHours,
+              direction: dir,
+            },
+          });
+          // Reset baseline so the next window measures fresh.
+          await admin
+            .from("alert_rules")
+            .update({
+              config: {
+                ...rule.config,
+                baseline_price_usd: price,
+                baseline_at: new Date(now).toISOString(),
+              },
+            })
+            .eq("id", rule.id);
+        }
       } else if (rule.kind === "wallet_activity") {
         const wallet = String(rule.config.wallet_address ?? "");
         const minUsd = Number(rule.config.min_value_usd ?? 0);

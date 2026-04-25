@@ -277,7 +277,15 @@ const AlertsRules = () => {
   const summarize = (r: AlertRule): string => {
     const c = r.config as unknown as Record<string, unknown>;
     if (r.kind === "price") {
-      return `${(c.token_symbol as string) ?? "Token"} ${
+      const sym = (c.token_symbol as string) ?? "Token";
+      const ttype = (c.threshold_type as string) ?? "price";
+      if (ttype === "percent") {
+        const pct = Number(c.percent_change ?? 0);
+        const win = Number(c.window_hours ?? 24);
+        const word = c.direction === "below" ? "drops" : "pumps";
+        return `${sym} ${word} ${pct}% in ${win}h`;
+      }
+      return `${sym} ${
         c.direction === "above" ? "rises above" : "falls below"
       } $${Number(c.threshold_usd).toLocaleString()}`;
     }
