@@ -11,6 +11,9 @@ import {
   createDefaultAuthorizationResultCache,
   createDefaultWalletNotFoundHandler,
 } from "@solana-mobile/wallet-adapter-mobile";
+import { WalletConnectWalletAdapter } from "@walletconnect/solana-adapter";
+import { WalletAdapterNetwork } from "@solana/wallet-adapter-base";
+import { WALLETCONNECT_PROJECT_ID } from "@/lib/walletconnect";
 
 // Modal styles must be imported once at the app root.
 import "@solana/wallet-adapter-react-ui/styles.css";
@@ -92,6 +95,25 @@ export const WalletContextProvider = ({ children }: Props) => {
         authorizationResultCache: createDefaultAuthorizationResultCache(),
         cluster: "mainnet-beta",
         onWalletNotFound: createDefaultWalletNotFoundHandler(),
+      }),
+      // iOS / desktop fallback: WalletConnect (Reown) lets Phantom, Solflare,
+      // Trust, and most other Solana wallets connect from a regular Safari/
+      // Chrome tab — no in-app browser hop required.
+      new WalletConnectWalletAdapter({
+        network: WalletAdapterNetwork.Mainnet,
+        options: {
+          projectId: WALLETCONNECT_PROJECT_ID,
+          metadata: {
+            name: "Vision",
+            description: "Ask anything. Unlock everything.",
+            url: typeof window !== "undefined" ? window.location.origin : "https://askvision.ai",
+            icons: [
+              typeof window !== "undefined"
+                ? `${window.location.origin}/favicon.ico`
+                : "https://askvision.ai/favicon.ico",
+            ],
+          },
+        },
       }),
       new PhantomWalletAdapter(),
       new SolflareWalletAdapter(),
