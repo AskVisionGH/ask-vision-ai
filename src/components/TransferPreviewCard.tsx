@@ -661,7 +661,13 @@ export const TransferPreviewCard = ({ data: initial }: Props) => {
           <Button
             variant="ghost"
             disabled={isBusy}
-            onClick={() => setDismissed(true)}
+            onClick={() =>
+              setPhase({
+                name: "error",
+                message: "Cancelled — try again or adjust the amount.",
+                cancelled: true,
+              })
+            }
             className="ease-vision font-mono text-[11px] tracking-wider uppercase text-muted-foreground hover:text-foreground"
           >
             Cancel
