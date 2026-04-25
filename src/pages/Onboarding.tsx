@@ -50,6 +50,17 @@ const Onboarding = () => {
   const [transitioning, setTransitioning] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Wallet-only signups have a synthetic `<wallet>@wallet.vision.local` email
+  // attached to the auth user. We surface a dedicated step asking them to
+  // attach a real inbox so they can receive welcome / receipt / alert emails.
+  const needsRealEmail = isWalletSyntheticEmail(user?.email);
+  const [email, setEmail] = useState("");
+  const [savingEmail, setSavingEmail] = useState(false);
+  // Once we successfully kick off Supabase's confirm-link flow we mark this
+  // step "satisfied" locally so the user can move on without waiting for the
+  // confirmation click — the address change finalizes whenever they click it.
+  const [emailSubmitted, setEmailSubmitted] = useState(false);
+
   // Hydrate any existing values so re-running onboarding pre-fills.
   useEffect(() => {
     if (!profile) return;
@@ -67,9 +78,17 @@ const Onboarding = () => {
     }
   }, [loading, profile, navigate]);
 
-  const stepIndex = STEPS.indexOf(step);
-  const isLast = stepIndex === STEPS.length - 1;
-  const progress = ((stepIndex + 1) / STEPS.length) * 100;
+  // Step list is dynamic: only show the email step when we actually need one.
+  const steps = useMemo<Step[]>(
+    () =>
+      needsRealEmail
+        ? ["welcome", "email", "experience", "interests", "risk"]
+        : ["welcome", "experience", "interests", "risk"],
+    [needsRealEmail],
+  );
+  const stepIndex = steps.indexOf(step);
+  const isLast = stepIndex === steps.length - 1;
+  const progress = ((stepIndex + 1) / steps.length) * 100;
 
   // Brief fade between steps so the transition feels intentional rather than snappy.
   const advance = (next: Step | "finish") => {
