@@ -71,6 +71,7 @@ type Phase =
   | { name: "awaiting_signature" }
   | { name: "submitting" }
   | { name: "success"; signature: string; durationMs: number; sellUi: number; sellSymbol: string; buyUi: number; buySymbol: string }
+  | { name: "cancelled"; sellUi: number; sellSymbol: string; buyUi: number; buySymbol: string }
   | { name: "error"; message: string };
 
 const fmtUsd = (n: number | null | undefined) => {
