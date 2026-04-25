@@ -1168,6 +1168,9 @@ const TreasuryTab = () => {
     });
   }, [fees, chainFilter, kindFilter, dateBounds]);
 
+  // Reset to first page whenever filters change.
+  useEffect(() => { setPage(1); }, [chainFilter, kindFilter, range, customRange]);
+
   const totals = useMemo(() => {
     const inRange = fees.filter((f) => inDateRange(f.block_time));
     const sum = (rows: TreasuryFee[]) => rows.reduce((acc, r) => acc + (r.amount_usd ?? 0), 0);
