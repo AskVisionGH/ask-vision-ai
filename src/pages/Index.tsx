@@ -37,7 +37,7 @@ const Index = () => {
             Sign in
           </button>
           <span className="hidden font-mono text-[11px] tracking-widest uppercase text-muted-foreground sm:inline">
-            v1 · solana
+            v1
           </span>
         </div>
       </header>
@@ -50,12 +50,12 @@ const Index = () => {
           </div>
 
           <h1 className="text-4xl font-light leading-tight tracking-tight sm:text-6xl">
-            Talk to crypto.{" "}
-            <span className="font-serif-italic text-primary">Naturally.</span>
+            Ask anything.{" "}
+            <span className="font-serif-italic text-primary">Unlock everything.</span>
           </h1>
 
           <p className="mx-auto mt-6 max-w-md text-base leading-relaxed text-muted-foreground sm:text-lg">
-            Vision turns plain English into on-chain action. Swap, send, and explore Solana — through one conversation.
+            Vision turns plain English into on-chain action. Swap, send, and explore — all through one conversation.
           </p>
 
           <div className="mt-10 flex flex-col items-center gap-3">
