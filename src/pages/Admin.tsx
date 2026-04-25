@@ -49,6 +49,7 @@ import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { EXPERIENCE_OPTIONS, INTEREST_OPTIONS, RISK_OPTIONS } from "@/lib/profile-options";
+import { isWalletSyntheticEmail } from "@/lib/wallet-email";
 
 type SweepRun = {
   id: string;
