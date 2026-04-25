@@ -10,6 +10,8 @@ import {
   type NotificationPreferences,
 } from "@/hooks/useNotificationPreferences";
 import { useWebPush } from "@/hooks/useWebPush";
+import { PushEnableDialog } from "@/components/PushEnableDialog";
+import { PushDeniedDialog } from "@/components/PushDeniedDialog";
 import { cn } from "@/lib/utils";
 
 /**
@@ -27,6 +29,8 @@ export const AlertPreferences = () => {
   const [savingQuiet, setSavingQuiet] = useState(false);
   const [quietStart, setQuietStart] = useState<string>("22:00");
   const [quietEnd, setQuietEnd] = useState<string>("08:00");
+  const [showEnableDialog, setShowEnableDialog] = useState(false);
+  const [showDeniedDialog, setShowDeniedDialog] = useState(false);
 
   // Hydrate quiet-hours inputs from prefs the first time they arrive.
   useEffect(() => {
@@ -34,6 +38,23 @@ export const AlertPreferences = () => {
     if (prefs.quiet_start) setQuietStart(prefs.quiet_start.slice(0, 5));
     if (prefs.quiet_end) setQuietEnd(prefs.quiet_end.slice(0, 5));
   }, [prefs]);
+
+  // Auto-open the friendly pre-prompt the first time a user lands here, but
+  // ONLY when (a) push is supported, (b) permission is still "default" (so
+  // we won't get permanently denied), (c) the user hasn't already turned
+  // push on, and (d) we haven't asked yet. The localStorage flag prevents
+  // nagging — denied users only see the recovery dialog if they click the
+  // toggle themselves.
+  useEffect(() => {
+    if (!prefs || !prefs.master_enabled) return;
+    if (!push.supported) return;
+    if (push.permission !== "default") return;
+    if (prefs.channel_web_push && push.subscribed) return;
+    if (typeof window === "undefined") return;
+    if (window.localStorage.getItem("vision:push-prompted") === "1") return;
+    window.localStorage.setItem("vision:push-prompted", "1");
+    setShowEnableDialog(true);
+  }, [prefs, push.supported, push.permission, push.subscribed]);
 
   if (loading || !prefs) {
     return <p className="text-xs text-muted-foreground/70">Loading…</p>;
@@ -46,20 +67,46 @@ export const AlertPreferences = () => {
     if (!ok) toast.error("Couldn't save preference");
   };
 
+  // Actually trigger the native permission flow + subscribe. Used both by
+  // the pre-prompt dialog (default state) and the recovery dialog (denied
+  // state, after the user has flipped permissions back to allow).
+  const runEnable = async () => {
+    const ok = await push.enable();
+    if (ok) {
+      await update({ channel_web_push: true });
+      setShowEnableDialog(false);
+      setShowDeniedDialog(false);
+      toast.success("Push notifications enabled");
+      return;
+    }
+    // Failure paths:
+    //  - "denied": browser already blocked; show recovery instructions.
+    //  - other: probably unsupported / network — surface a toast.
+    if (push.permission === "denied") {
+      setShowEnableDialog(false);
+      setShowDeniedDialog(true);
+    } else {
+      toast.error("Couldn't enable push", {
+        description: "Your browser may not support Web Push.",
+      });
+    }
+  };
+
   const toggleWebPush = async (on: boolean) => {
     if (on) {
-      const ok = await push.enable();
-      if (!ok) {
-        toast.error("Couldn't enable push", {
-          description:
-            push.permission === "denied"
-              ? "Browser blocked notifications. Allow them in your site settings and retry."
-              : "Your browser may not support Web Push.",
-        });
+      // Route based on current permission state so we never fire the native
+      // prompt cold (which is what causes the un-recoverable denial).
+      if (push.permission === "denied") {
+        setShowDeniedDialog(true);
         return;
       }
-      await update({ channel_web_push: true });
-      toast.success("Push notifications enabled");
+      if (push.permission === "granted") {
+        // Already allowed at the OS level — just subscribe quietly.
+        await runEnable();
+        return;
+      }
+      // "default" — show our friendly explainer first.
+      setShowEnableDialog(true);
     } else {
       await push.disable();
       await update({ channel_web_push: false });
@@ -123,7 +170,7 @@ export const AlertPreferences = () => {
             !push.supported
               ? "Not supported on this browser."
               : push.permission === "denied"
-                ? "Blocked by browser — allow notifications in site settings."
+                ? "Blocked — tap to see how to re-enable."
                 : "Desktop + mobile browser notifications."
           }
           checked={prefs.channel_web_push && push.subscribed}
@@ -228,6 +275,19 @@ export const AlertPreferences = () => {
           </div>
         )}
       </section>
+
+      <PushEnableDialog
+        open={showEnableDialog}
+        busy={push.busy}
+        onEnable={() => void runEnable()}
+        onDismiss={() => setShowEnableDialog(false)}
+      />
+      <PushDeniedDialog
+        open={showDeniedDialog}
+        busy={push.busy}
+        onRetry={() => void runEnable()}
+        onDismiss={() => setShowDeniedDialog(false)}
+      />
     </div>
   );
 };
