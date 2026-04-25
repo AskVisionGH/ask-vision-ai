@@ -1151,8 +1151,10 @@ function inferForcedToolCall(message: string):
 
   const interval =
     lower.includes("5m") ? "5m"
-      : lower.includes("15m") ? "15m"
+      : lower.includes("30m") ? "30m"
       : lower.includes("4h") ? "4h"
+      : lower.includes("1w") || lower.includes("weekly") ? "1w"
+      : lower.includes("1mo") || lower.includes("monthly") ? "1mo"
       : lower.includes("1d") || lower.includes("daily") ? "1d"
       : "1h";
 
