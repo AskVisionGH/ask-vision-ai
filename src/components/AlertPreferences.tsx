@@ -50,20 +50,46 @@ export const AlertPreferences = () => {
     if (!ok) toast.error("Couldn't save preference");
   };
 
+  // Actually trigger the native permission flow + subscribe. Used both by
+  // the pre-prompt dialog (default state) and the recovery dialog (denied
+  // state, after the user has flipped permissions back to allow).
+  const runEnable = async () => {
+    const ok = await push.enable();
+    if (ok) {
+      await update({ channel_web_push: true });
+      setShowEnableDialog(false);
+      setShowDeniedDialog(false);
+      toast.success("Push notifications enabled");
+      return;
+    }
+    // Failure paths:
+    //  - "denied": browser already blocked; show recovery instructions.
+    //  - other: probably unsupported / network — surface a toast.
+    if (push.permission === "denied") {
+      setShowEnableDialog(false);
+      setShowDeniedDialog(true);
+    } else {
+      toast.error("Couldn't enable push", {
+        description: "Your browser may not support Web Push.",
+      });
+    }
+  };
+
   const toggleWebPush = async (on: boolean) => {
     if (on) {
-      const ok = await push.enable();
-      if (!ok) {
-        toast.error("Couldn't enable push", {
-          description:
-            push.permission === "denied"
-              ? "Browser blocked notifications. Allow them in your site settings and retry."
-              : "Your browser may not support Web Push.",
-        });
+      // Route based on current permission state so we never fire the native
+      // prompt cold (which is what causes the un-recoverable denial).
+      if (push.permission === "denied") {
+        setShowDeniedDialog(true);
         return;
       }
-      await update({ channel_web_push: true });
-      toast.success("Push notifications enabled");
+      if (push.permission === "granted") {
+        // Already allowed at the OS level — just subscribe quietly.
+        await runEnable();
+        return;
+      }
+      // "default" — show our friendly explainer first.
+      setShowEnableDialog(true);
     } else {
       await push.disable();
       await update({ channel_web_push: false });
