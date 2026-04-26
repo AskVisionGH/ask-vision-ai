@@ -328,8 +328,8 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
       (async () => {
         try {
           const { getPublicClient } = await import("wagmi/actions");
-          const { config } = await import("@/providers/EvmWalletProvider");
-          const pc = getPublicClient(config as any, { chainId: Number(fromChain.id) });
+          const { wagmiConfig } = await import("@/providers/EvmWalletProvider");
+          const pc = getPublicClient(wagmiConfig as any, { chainId: Number(fromChain.id) });
           if (!pc) return;
           const raw = (await (pc as any).readContract({
             address: fromToken.address as Hex,

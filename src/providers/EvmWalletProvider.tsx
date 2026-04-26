@@ -44,7 +44,7 @@ const connectors = connectorsForWallets(
   },
 );
 
-const wagmiConfig = createConfig({
+export const wagmiConfig = createConfig({
   chains: SUPPORTED_EVM_CHAINS,
   connectors,
   transports: Object.fromEntries(
