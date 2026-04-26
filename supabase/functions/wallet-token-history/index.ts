@@ -695,6 +695,46 @@ function mergeEvents(a: HistoryEvent[], b: HistoryEvent[]): HistoryEvent[] {
   return out;
 }
 
+/**
+ * Many DEXes price against SOL, not stables, so `valueUsd` is null when the
+ * pair is SOL. We do a single SOL price fetch and apply it to those events.
+ *
+ * This is intentionally a *spot* SOL price, not historical — it's good enough
+ * for the rough net P&L stat the card surfaces. Historical pricing per-tx
+ * would require an OHLC lookup per signature which is too expensive for the
+ * scan loop.
+ */
+async function enrichSolPriceUsd(events: HistoryEvent[]): Promise<HistoryEvent[]> {
+  const needsPricing = events.some(
+    (e) => !e.valueUsd && e.pairMint === SOL_MINT && (e.pairAmount ?? 0) > 0,
+  );
+  if (!needsPricing) return events;
+
+  let solPrice: number | null = null;
+  try {
+    const res = await fetch(
+      "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd",
+      { signal: AbortSignal.timeout(4000) },
+    );
+    if (res.ok) {
+      const data = await res.json();
+      const px = Number(data?.solana?.usd);
+      if (Number.isFinite(px) && px > 0) solPrice = px;
+    }
+  } catch {
+    // ignore — we just won't enrich
+  }
+  if (!solPrice) return events;
+
+  return events.map((e) => {
+    if (e.valueUsd) return e;
+    if (e.pairMint !== SOL_MINT) return e;
+    const amt = Number(e.pairAmount ?? 0);
+    if (!amt) return e;
+    return { ...e, valueUsd: amt * solPrice };
+  });
+}
+
 function computeAggregates(events: HistoryEvent[]): {
   firstBuy: HistoryEvent | null;
   firstAcquisition: HistoryEvent | null;
