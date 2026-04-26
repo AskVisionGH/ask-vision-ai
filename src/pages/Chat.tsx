@@ -12,6 +12,7 @@ import { VisionLogo } from "@/components/VisionLogo";
 import { VisionLoader } from "@/components/VisionLoader";
 import { SEO } from "@/components/SEO";
 import { WalletOnboardingPrompt } from "@/components/WalletOnboardingPrompt";
+import { ChatPushPrompt } from "@/components/ChatPushPrompt";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Menu } from "lucide-react";
