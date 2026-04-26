@@ -264,6 +264,7 @@ export const SwapPreviewCard = ({ data: initial }: Props) => {
         outputToken: data.output.address,
         amount: data.input.amountUi,
         slippageBps: data.slippageBps,
+        dynamicSlippage: data.dynamicSlippage !== false,
       });
       if (mounted.current && !fresh.error) setData(fresh);
     } catch {
