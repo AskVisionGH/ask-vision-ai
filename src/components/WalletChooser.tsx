@@ -108,44 +108,6 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
     }
   }, [open]);
 
-  useEffect(() => {
-    if (!pendingSolanaWalletName) return;
-    if (selectedSolWallet?.adapter.name !== pendingSolanaWalletName) return;
-    if (solConnected || solConnecting) return;
-
-    let cancelled = false;
-    void (async () => {
-      try {
-        onOpenChange(false);
-        await connectSolWallet();
-      } catch (e) {
-        if (cancelled) return;
-        const msg = e instanceof Error ? e.message : String(e);
-        if (!/user rejected|user cancel|user closed/i.test(msg)) {
-          toast.error("Couldn't connect that wallet", {
-            description: msg,
-          });
-        }
-      } finally {
-        if (!cancelled) {
-          setPendingSolanaWalletName(null);
-          setBusyAddress(null);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    pendingSolanaWalletName,
-    selectedSolWallet?.adapter.name,
-    solConnected,
-    solConnecting,
-    connectSolWallet,
-    onOpenChange,
-  ]);
-
   // Refresh last-used + linked rows every time the chooser opens, so newly
   // connected wallets show up without remounting.
   useEffect(() => {
@@ -279,17 +241,32 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
 
   const handleSelectNewSolanaWallet = async (walletName: WalletName) => {
     setPendingSolanaWalletName(walletName);
-    setShowSolanaOptions(false);
 
-    if (solConnected) {
-      try {
-        await disconnectSolWallet();
-      } catch {
-        /* ignore */
+    try {
+      if (solConnected) {
+        try {
+          await disconnectSolWallet();
+        } catch {
+          /* ignore */
+        }
       }
-    }
 
-    selectSolWallet(walletName);
+      selectSolWallet(walletName);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await connectSolWallet();
+      setShowSolanaOptions(false);
+      onOpenChange(false);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/user rejected|user cancel|user closed/i.test(msg)) {
+        toast.error("Couldn't connect that wallet", {
+          description: msg,
+        });
+      }
+    } finally {
+      setPendingSolanaWalletName(null);
+      setBusyAddress(null);
+    }
   };
 
   const handleNewEvm = () => {
@@ -302,19 +279,19 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
     const target = evmConnectors.find((c) => c.id === connectorId);
     if (!target) return;
     setPendingEvmConnectorId(connectorId);
-    setShowEvmOptions(false);
-
-    if (evmConnected) {
-      try {
-        await disconnectEvm();
-      } catch {
-        /* ignore */
-      }
-    }
 
     try {
-      onOpenChange(false);
+      if (evmConnected) {
+        try {
+          await disconnectEvm();
+        } catch {
+          /* ignore */
+        }
+      }
+
       await connectEvm({ connector: target });
+      setShowEvmOptions(false);
+      onOpenChange(false);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (!/user rejected|user cancel|user closed/i.test(msg)) {
