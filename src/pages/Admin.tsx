@@ -1316,15 +1316,14 @@ const TreasuryTab = () => {
                 <TableHead>Chain</TableHead>
                 <TableHead>Source</TableHead>
                 <TableHead>Asset</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead className="text-right">USD</TableHead>
+                <TableHead className="text-right">Fee</TableHead>
                 <TableHead>Tx</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 && !loading ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-10 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
                     No fees recorded yet. Press "Refresh" to backfill from sweeps and the ETH treasury.
                   </TableCell>
                 </TableRow>
@@ -1354,9 +1353,6 @@ const TreasuryTab = () => {
                       <Badge variant="secondary" className="text-xs">{SOURCE_LABELS[f.source_kind]}</Badge>
                     </TableCell>
                     <TableCell className="text-xs font-medium">{f.asset_symbol ?? (f.chain === "solana" ? "SOL" : "ETH")}</TableCell>
-                    <TableCell className="text-right text-xs tabular-nums">
-                      {f.amount > 0 ? f.amount.toLocaleString("en-US", { maximumFractionDigits: 6 }) : "—"}
-                    </TableCell>
                     <TableCell className="text-right text-xs tabular-nums">{formatUsd(f.amount_usd)}</TableCell>
                     <TableCell className="text-xs">
                       <a href={explorer} target="_blank" rel="noreferrer" className="text-primary hover:underline">
