@@ -238,15 +238,21 @@ export const TokenPickerDialog = ({ open, onOpenChange, onSelect, excludeAddress
     onOpenChange(false);
   };
 
+  // Hydrate any token whose price is null with the live price we fetched.
+  const withLivePrice = <T extends TokenMeta>(t: T): T =>
+    t.priceUsd != null ? t : { ...t, priceUsd: livePrices[t.address] ?? null };
+
   // Section dedupe: holdings → recent → popular. A token only appears in its
   // first matching section so the picker doesn't repeat the same row.
   const visibleHoldings = filterExcluded(holdings);
   const holdingMints = new Set(visibleHoldings.map((h) => h.address));
-  const visibleRecent = filterExcluded(recent).filter((t) => !holdingMints.has(t.address));
+  const visibleRecent = filterExcluded(recent)
+    .filter((t) => !holdingMints.has(t.address))
+    .map(withLivePrice);
   const recentMints = new Set(visibleRecent.map((t) => t.address));
-  const visiblePopular = filterExcluded(POPULAR).filter(
-    (t) => !holdingMints.has(t.address) && !recentMints.has(t.address),
-  );
+  const visiblePopular = filterExcluded(POPULAR)
+    .filter((t) => !holdingMints.has(t.address) && !recentMints.has(t.address))
+    .map(withLivePrice);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
