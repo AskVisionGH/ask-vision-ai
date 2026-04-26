@@ -745,6 +745,8 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
   // ---------- CTA ----------
   const isBusy =
     phase.name === "building" ||
+    phase.name === "switching_chain" ||
+    phase.name === "approving" ||
     phase.name === "awaiting_signature" ||
     phase.name === "submitting" ||
     phase.name === "bridging";
@@ -758,6 +760,8 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
 
   let busyLabel = "";
   if (phase.name === "building") busyLabel = "Building transaction…";
+  else if (phase.name === "switching_chain") busyLabel = "Switch network in wallet…";
+  else if (phase.name === "approving") busyLabel = "Approving token…";
   else if (phase.name === "awaiting_signature") busyLabel = "Approve in wallet…";
   else if (phase.name === "submitting") busyLabel = "Submitting…";
   else if (phase.name === "bridging") {
@@ -776,12 +780,18 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
     }
   }
 
+  // CTA needs to know whether the *source-chain* wallet is connected.
+  const sourceConnected = !!fromAddress;
+
   let ctaLabel = "Bridge";
   let ctaDisabled = false;
   let ctaAction: (() => void) | null = handleBridge;
-  if (!connected) {
-    ctaLabel = "Connect wallet";
-    ctaAction = () => setVisible(true);
+  if (!fromChain || !fromToken) {
+    ctaLabel = "Select source chain";
+    ctaDisabled = true; ctaAction = null;
+  } else if (!sourceConnected) {
+    ctaLabel = fromIsEvm ? "Connect EVM wallet" : "Connect Solana wallet";
+    ctaAction = null; // The Connect button is rendered separately below.
   } else if (!toChain || !toToken) {
     ctaLabel = "Select destination";
     ctaDisabled = true; ctaAction = null;
@@ -790,11 +800,14 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
     ctaDisabled = true; ctaAction = null;
   } else if (
     fromBalance != null &&
-    fromToken?.chainId === SOLANA_CHAIN_ID &&
     numericAmount >
-      ((fromToken.address === SOL_NATIVE_ADDRESS || fromToken.address === WSOL_MINT)
-        ? Math.max(0, fromBalance - 0.005)
-        : fromBalance)
+      (fromIsSvm
+        ? ((fromToken.address === SOL_NATIVE_ADDRESS || fromToken.address === WSOL_MINT)
+            ? Math.max(0, fromBalance - 0.005)
+            : fromBalance)
+        : (fromToken.address.toLowerCase() === EVM_NATIVE_ADDRESS
+            ? Math.max(0, fromBalance - 0.005)
+            : fromBalance))
   ) {
     ctaLabel = "Insufficient balance";
     ctaDisabled = true; ctaAction = null;
