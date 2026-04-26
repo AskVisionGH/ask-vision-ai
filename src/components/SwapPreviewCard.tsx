@@ -181,6 +181,15 @@ export const SwapPreviewCard = ({ data: initial }: Props) => {
           inputMint: data.input.address,
           inputAmount: data.platformFee?.amountUi ?? null,
           walletAddress: publicKey.toBase58(),
+          // Tag so treasury-fees-sync picks this up as platform revenue.
+          metadata: {
+            kind: "swap_upfront_fee",
+            platform_fee: true,
+            symbol: data.platformFee?.symbol ?? data.input.symbol,
+            feeAmount: data.platformFee?.amountUi ?? null,
+            outputMint: data.output.address,
+            outputSymbol: data.output.symbol,
+          },
         });
         const feeSig = feeSubmitted?.signature as string | undefined;
         if (!feeSig) throw new Error("Failed to submit platform fee transaction");
