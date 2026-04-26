@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, ChevronDown, ChevronUp, ExternalLink, Repeat, TrendingDown, TrendingUp } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, ChevronDown, ChevronUp, ExternalLink, Loader2, Repeat, Share2, TrendingDown, TrendingUp } from "lucide-react";
 import { TokenLogo } from "@/components/TokenLogo";
+import { PnLShareCard } from "@/components/PnLShareCard";
+import { usePnLShare } from "@/hooks/usePnLShare";
 import { cn } from "@/lib/utils";
 import { txExplorerUrl, explorerLabel } from "@/lib/explorer";
 import type {
