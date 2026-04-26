@@ -342,15 +342,14 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
         try { await disconnectEvm(); } catch { /* ignore */ }
       }
       if (isSameAdapter) {
-        // wallet-adapter ignores `select(name)` if it matches the current
-        // adapter, AND the wallet's `connect()` after a `disconnect()` will
-        // silently reconnect to the same account (Phantom auto-trust). We
-        // can't force Phantom's account picker from a dApp, so we tell the
-        // user how to switch accounts inside the wallet itself.
-        toast.info("To switch Phantom accounts", {
+        // Hard browser security limit: dApps cannot open another wallet
+        // extension's account picker, and Phantom auto-trusts the previous
+        // account on `connect()`. The only way to switch accounts is for
+        // the user to do it inside Phantom itself.
+        toast.info(`Already connected to ${walletName}`, {
           description:
-            "Open Phantom → tap your account name → choose another account, then disconnect this site from Phantom and reconnect.",
-          duration: 8000,
+            "To switch accounts: open the Phantom extension, click your account name at the top, then pick a different account. Vision will follow your active account automatically.",
+          duration: 10000,
         });
         setBusyId(null);
         return;
