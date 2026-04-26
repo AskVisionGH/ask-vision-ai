@@ -378,8 +378,20 @@ export const ChatComposer = ({
           <textarea
             ref={ref}
             value={value}
-            onChange={(e) => onChange(e.target.value)}
+            onChange={handleChange}
             onKeyDown={handleKey}
+            // Re-evaluate the mention token whenever the caret moves, so
+            // clicking back into a `@token` reopens the dropdown.
+            onClick={(e) => detectMention(value, e.currentTarget.selectionStart ?? value.length)}
+            onKeyUp={(e) => {
+              const navKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"];
+              if (navKeys.includes(e.key)) {
+                detectMention(value, e.currentTarget.selectionStart ?? value.length);
+              }
+            }}
+            // Close the dropdown when focus leaves the textarea (we use
+            // mousedown on items so the click still registers first).
+            onBlur={closeMention}
             placeholder={placeholder}
             rows={1}
             className={cn(
