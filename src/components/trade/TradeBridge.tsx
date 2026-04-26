@@ -879,9 +879,15 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
           />
 
           <div className="flex justify-center">
-            <div className="rounded-full border border-border/60 bg-secondary/60 p-1.5">
-              <ArrowDown className="h-3.5 w-3.5 text-muted-foreground" />
-            </div>
+            <button
+              type="button"
+              onClick={handleFlipChains}
+              disabled={!fromChain || !toChain}
+              aria-label="Flip source and destination chains"
+              className="group rounded-full border border-border/60 bg-secondary/60 p-1.5 text-muted-foreground transition-all duration-200 ease-vision hover:border-primary/40 hover:bg-secondary hover:text-foreground hover:rotate-180 disabled:opacity-50 disabled:hover:rotate-0"
+            >
+              <ArrowUpDown className="h-3.5 w-3.5" />
+            </button>
           </div>
 
           {/* To row */}
