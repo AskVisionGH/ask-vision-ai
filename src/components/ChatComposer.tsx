@@ -1,10 +1,11 @@
-import { ArrowUp, Mic, Loader2, Square } from "lucide-react";
+import { ArrowUp, Mic, Loader2, Square, AtSign } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useProfile } from "@/hooks/useProfile";
 import { getLanguageOption } from "@/lib/languages";
+import { useContacts, type ContactRow } from "@/hooks/useContacts";
 
 interface Props {
   value: string;
@@ -25,6 +26,7 @@ export const ChatComposer = ({
 }: Props) => {
   const ref = useRef<HTMLTextAreaElement>(null);
   const { profile } = useProfile();
+  const { contacts } = useContacts();
   const [recState, setRecState] = useState<RecState>("idle");
   const [elapsedMs, setElapsedMs] = useState(0);
 
@@ -33,6 +35,101 @@ export const ChatComposer = ({
   const streamRef = useRef<MediaStream | null>(null);
   const startedAtRef = useRef<number>(0);
   const tickRef = useRef<number | null>(null);
+
+  // --- @mention dropdown state ---------------------------------------------
+  // We watch the textarea caret for a `@<query>` token (no whitespace inside)
+  // and surface matching contacts. Selecting one replaces the token with the
+  // contact's display name so downstream chat handlers can resolve it via
+  // findContactByName().
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionStart, setMentionStart] = useState<number>(-1);
+  const [mentionIndex, setMentionIndex] = useState(0);
+
+  const mentionMatches = useMemo<ContactRow[]>(() => {
+    if (mentionQuery === null) return [];
+    const q = mentionQuery.toLowerCase();
+    const filtered = q
+      ? contacts.filter((c) => c.name.toLowerCase().startsWith(q))
+      : contacts;
+    return filtered.slice(0, 6);
+  }, [contacts, mentionQuery]);
+
+  const mentionOpen = mentionQuery !== null && mentionMatches.length > 0;
+
+  // Reset highlight when the candidate list changes so we never point past
+  // the end of the array.
+  useEffect(() => {
+    setMentionIndex(0);
+  }, [mentionQuery, mentionMatches.length]);
+
+  /** Inspect the text around the caret to decide whether a `@token` is active. */
+  const detectMention = (text: string, caret: number) => {
+    // Walk backwards from the caret looking for `@` — stop on whitespace.
+    let i = caret - 1;
+    while (i >= 0) {
+      const ch = text[i];
+      if (ch === "@") {
+        // `@` must be at start of input OR preceded by whitespace, otherwise
+        // it's part of an email/handle inside another word.
+        if (i === 0 || /\s/.test(text[i - 1])) {
+          const query = text.slice(i + 1, caret);
+          // Bail if the query already has whitespace (mention "closed").
+          if (/\s/.test(query)) {
+            setMentionQuery(null);
+            setMentionStart(-1);
+            return;
+          }
+          setMentionQuery(query);
+          setMentionStart(i);
+          return;
+        }
+        setMentionQuery(null);
+        setMentionStart(-1);
+        return;
+      }
+      if (/\s/.test(ch)) {
+        setMentionQuery(null);
+        setMentionStart(-1);
+        return;
+      }
+      i--;
+    }
+    setMentionQuery(null);
+    setMentionStart(-1);
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const next = e.target.value;
+    onChange(next);
+    detectMention(next, e.target.selectionStart ?? next.length);
+  };
+
+  const insertMention = (contact: ContactRow) => {
+    if (mentionStart < 0) return;
+    const el = ref.current;
+    const caret = el?.selectionStart ?? value.length;
+    // Replace `@<query>` with `@Name ` (trailing space so user can keep typing).
+    const before = value.slice(0, mentionStart);
+    const after = value.slice(caret);
+    const inserted = `@${contact.name} `;
+    const next = `${before}${inserted}${after}`;
+    onChange(next);
+    setMentionQuery(null);
+    setMentionStart(-1);
+    // Restore caret right after the inserted mention.
+    requestAnimationFrame(() => {
+      const pos = before.length + inserted.length;
+      if (el) {
+        el.focus();
+        el.setSelectionRange(pos, pos);
+      }
+    });
+  };
+
+  const closeMention = () => {
+    setMentionQuery(null);
+    setMentionStart(-1);
+  };
 
   // Auto-grow up to ~6 lines.
   useEffect(() => {
@@ -56,6 +153,30 @@ export const ChatComposer = ({
   };
 
   const handleKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // When the @mention list is open, intercept nav keys.
+    if (mentionOpen) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setMentionIndex((i) => (i + 1) % mentionMatches.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setMentionIndex((i) => (i - 1 + mentionMatches.length) % mentionMatches.length);
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        const pick = mentionMatches[mentionIndex];
+        if (pick) insertMention(pick);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeMention();
+        return;
+      }
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       if (value.trim() && !disabled) onSubmit();
@@ -185,6 +306,52 @@ export const ChatComposer = ({
       }}
       className="relative w-full"
     >
+      {/* @mention dropdown — anchored above the composer. */}
+      {mentionOpen && (
+        <div
+          className="absolute bottom-full left-0 z-30 mb-2 w-full max-w-xs overflow-hidden rounded-xl border border-border bg-popover shadow-soft"
+          role="listbox"
+          aria-label="Contacts"
+        >
+          <div className="flex items-center gap-1.5 border-b border-border px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            <AtSign className="h-3 w-3" />
+            Contacts
+          </div>
+          <ul className="max-h-60 overflow-y-auto py-1">
+            {mentionMatches.map((c, idx) => {
+              const active = idx === mentionIndex;
+              return (
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={active}
+                    // Use mousedown so the click registers before the textarea
+                    // blur fires and we lose the caret position.
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      insertMention(c);
+                    }}
+                    onMouseEnter={() => setMentionIndex(idx)}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-3 px-3 py-2 text-left ease-vision",
+                      active ? "bg-primary/10 text-foreground" : "text-muted-foreground hover:bg-accent/40 hover:text-foreground",
+                    )}
+                  >
+                    <span className="truncate text-sm font-medium">{c.name}</span>
+                    <span className="font-mono text-[10px] text-muted-foreground/70">
+                      {c.address.length > 12
+                        ? `${c.address.slice(0, 4)}…${c.address.slice(-4)}`
+                        : c.address}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
       <div
         className={cn(
           "flex items-end gap-2 rounded-2xl border border-border bg-popover px-4 py-3 shadow-soft ease-vision",
@@ -211,8 +378,20 @@ export const ChatComposer = ({
           <textarea
             ref={ref}
             value={value}
-            onChange={(e) => onChange(e.target.value)}
+            onChange={handleChange}
             onKeyDown={handleKey}
+            // Re-evaluate the mention token whenever the caret moves, so
+            // clicking back into a `@token` reopens the dropdown.
+            onClick={(e) => detectMention(value, e.currentTarget.selectionStart ?? value.length)}
+            onKeyUp={(e) => {
+              const navKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"];
+              if (navKeys.includes(e.key)) {
+                detectMention(value, e.currentTarget.selectionStart ?? value.length);
+              }
+            }}
+            // Close the dropdown when focus leaves the textarea (we use
+            // mousedown on items so the click still registers first).
+            onBlur={closeMention}
             placeholder={placeholder}
             rows={1}
             className={cn(
