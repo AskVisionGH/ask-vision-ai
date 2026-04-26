@@ -127,8 +127,18 @@ const TOOLS = [
     function: {
       name: "get_trending",
       description:
-        "Fetch the top 10 trending Solana tokens right now, ranked by 24h trading volume. Use for 'what's trending', 'top tokens', 'what's hot on Solana', etc.",
-      parameters: { type: "object", properties: {}, additionalProperties: false },
+        "Fetch the top 10 trending Solana tokens right now, ranked by trading volume in the chosen window. Use for 'what's trending', 'top tokens', 'what's hot on Solana', etc. Pick the timeframe that matches the user — '5m' for 'last few minutes / right now', '1h' for 'last hour', '6h' for 'last 6 hours / this morning', '24h' for 'today / 24h / day' (default).",
+      parameters: {
+        type: "object",
+        properties: {
+          timeframe: {
+            type: "string",
+            enum: ["5m", "1h", "6h", "24h"],
+            description: "Volume window. Defaults to 24h if omitted.",
+          },
+        },
+        additionalProperties: false,
+      },
     },
   },
   {
@@ -802,7 +812,9 @@ serve(async (req) => {
               result = await invokeFn("token-info", { query: args.query ?? "" }, req);
               eventType = silent ? null : "token_info";
             } else if (name === "get_trending") {
-              result = await invokeFn("trending-tokens", {}, req);
+              const args = safeJson(tc.function?.arguments);
+              const tf = ["5m", "1h", "6h", "24h"].includes(args.timeframe) ? args.timeframe : "24h";
+              result = await invokeFn("trending-tokens", { timeframe: tf }, req);
               eventType = "trending";
             } else if (name === "prepare_swap") {
               const args = safeJson(tc.function?.arguments);

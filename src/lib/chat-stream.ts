@@ -35,14 +35,16 @@ export interface TokenInfoData {
   error?: string;
 }
 
+export type TrendingTimeframe = "5m" | "1h" | "6h" | "24h";
+
 export interface TrendingToken {
   symbol: string;
   name: string;
   address: string;
   logo: string | null;
   priceUsd: number | null;
-  priceChange24h: number | null;
-  volume24hUsd: number | null;
+  priceChange: number | null;
+  volumeUsd: number | null;
   liquidityUsd: number | null;
   marketCapUsd: number | null;
   pairUrl: string | null;
@@ -50,6 +52,7 @@ export interface TrendingToken {
 
 export interface TrendingData {
   tokens: TrendingToken[];
+  timeframe?: TrendingTimeframe;
   error?: string;
 }
 
