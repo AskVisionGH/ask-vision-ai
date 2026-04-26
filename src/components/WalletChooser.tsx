@@ -138,8 +138,8 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
   const rows: Row[] = useMemo(() => {
     const activeSol = solConnected && solPublicKey ? solPublicKey.toBase58() : null;
     const activeEvm = evmConnected && evmAddress ? evmAddress.toLowerCase() : null;
-    const recentByKey = new Map(
-      recent.map((r) => [`${r.chain}:${r.address.toLowerCase()}`, r] as const),
+    const recentByKey = new Map<string, LastUsedWallet>(
+      recent.map((r) => [`${r.chain}:${r.address.toLowerCase()}`, r]),
     );
     const seen = new Set<string>();
     const out: Row[] = [];
