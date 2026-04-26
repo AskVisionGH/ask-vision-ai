@@ -1,9 +1,31 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-// We avoid @solana/web3.js here — its 1MB+ bundle blows the edge function's
-// CPU budget on cold start (WORKER_RESOURCE_LIMIT). The only Solana primitive
-// we need is PDA derivation for the Jupiter referral fee account, which we
-// implement directly below using the Web Crypto sha256 + a tiny base58 codec.
+// We avoid @solana/web3.js for the main swap-build path — its 1MB+ bundle
+// blows the edge function's CPU budget on cold start. The only Solana
+// primitive we need there is PDA derivation for the Jupiter referral fee
+// account, which we implement directly below using Web Crypto sha256 + a
+// tiny base58 codec.
+//
+// For the rare Token-2022 upfront-fee fallback we DO need web3.js +
+// spl-token to build a real Transaction. Importing them here is acceptable
+// since this branch only runs for Token-2022 outputs (uncommon).
 import { encodeBase58, decodeBase58 } from "https://deno.land/std@0.224.0/encoding/base58.ts";
+import {
+  Connection,
+  PublicKey,
+  SystemProgram,
+  Transaction,
+  ComputeBudgetProgram,
+} from "npm:@solana/web3.js@1.95.3";
+import {
+  createTransferCheckedInstruction,
+  getAssociatedTokenAddressSync,
+  createAssociatedTokenAccountIdempotentInstruction,
+  TOKEN_PROGRAM_ID,
+  TOKEN_2022_PROGRAM_ID,
+} from "npm:@solana/spl-token@0.4.8";
+
+const FEE_BPS = 100; // 1%
+const SOL_MINT = "So11111111111111111111111111111111111111112";
 
 const REFERRAL_PROGRAM_B58 = "REFER4ZgmyYx9c6He5XfaTMiGfdLwRnkV4RPp9t9iF3";
 
@@ -258,12 +280,36 @@ serve(async (req) => {
       swapData = await swapResp.json();
     }
 
+    // For Token-2022 outputs we skipped Jupiter's fee path, so build a
+    // separate upfront fee-transfer transaction (1% of input) that the
+    // client signs+submits BEFORE the swap. Same pattern as DCA orders.
+    let feeTransaction: string | null = null;
+    let feeAmountAtomic: string | null = null;
+    if (outputIsToken2022 && referralAccount) {
+      try {
+        const inputIsToken2022 = await detectToken2022Mint(inputMint);
+        const built = await buildUpfrontFeeTx({
+          userPublicKey,
+          inputMint,
+          totalAtomic: BigInt(Math.floor(amount)),
+          inputIsToken2022,
+        });
+        feeTransaction = built.transaction;
+        feeAmountAtomic = built.feeAmountAtomic;
+      } catch (e) {
+        console.error("Failed to build upfront fee tx (continuing without fee):", e);
+      }
+    }
+
     return json({
       swapTransaction: swapData.swapTransaction,
       lastValidBlockHeight: swapData.lastValidBlockHeight,
       prioritizationFeeLamports: swapData.prioritizationFeeLamports ?? null,
       dynamicSlippage: usedDynamicSlippage,
       dynamicSlippageReport: swapData.dynamicSlippageReport ?? null,
+      feeTransaction,
+      feeAmountAtomic,
+      feeCollectedUpfront: Boolean(feeTransaction),
     });
   } catch (e) {
     console.error("swap-build error:", e);
@@ -300,4 +346,57 @@ async function detectToken2022Mint(mint: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+async function buildUpfrontFeeTx(opts: {
+  userPublicKey: string;
+  inputMint: string;
+  totalAtomic: bigint;
+  inputIsToken2022: boolean;
+}): Promise<{ transaction: string; feeAmountAtomic: string }> {
+  const treasury = Deno.env.get("TREASURY_PUBLIC_KEY");
+  const heliusKey = Deno.env.get("HELIUS_API_KEY");
+  if (!treasury) throw new Error("TREASURY_PUBLIC_KEY not configured");
+  if (!heliusKey) throw new Error("HELIUS_API_KEY not configured");
+
+  // 1% of input, rounded up so we never under-collect.
+  const feeAtomic = (opts.totalAtomic * BigInt(FEE_BPS) + 9999n) / 10000n;
+
+  const user = new PublicKey(opts.userPublicKey);
+  const treasuryPk = new PublicKey(treasury);
+  const conn = new Connection(`https://mainnet.helius-rpc.com/?api-key=${heliusKey}`, "confirmed");
+
+  const tx = new Transaction();
+  tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }));
+
+  if (opts.inputMint === SOL_MINT) {
+    tx.add(SystemProgram.transfer({
+      fromPubkey: user,
+      toPubkey: treasuryPk,
+      lamports: Number(feeAtomic),
+    }));
+  } else {
+    const tokenProgram = opts.inputIsToken2022 ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID;
+    const mintPk = new PublicKey(opts.inputMint);
+    // Look up decimals on-chain so transferChecked validates correctly.
+    const mintInfo = await conn.getParsedAccountInfo(mintPk, "confirmed");
+    const decimals = Number((mintInfo.value?.data as any)?.parsed?.info?.decimals ?? 0);
+    const fromAta = getAssociatedTokenAddressSync(mintPk, user, true, tokenProgram);
+    const toAta = getAssociatedTokenAddressSync(mintPk, treasuryPk, true, tokenProgram);
+    tx.add(createAssociatedTokenAccountIdempotentInstruction(
+      user, toAta, treasuryPk, mintPk, tokenProgram,
+    ));
+    tx.add(createTransferCheckedInstruction(
+      fromAta, mintPk, toAta, user, feeAtomic, decimals, [], tokenProgram,
+    ));
+  }
+
+  const { blockhash } = await conn.getLatestBlockhash("confirmed");
+  tx.recentBlockhash = blockhash;
+  tx.feePayer = user;
+
+  const serialized = tx.serialize({ requireAllSignatures: false, verifySignatures: false });
+  const txB64 = btoa(String.fromCharCode(...serialized));
+
+  return { transaction: txB64, feeAmountAtomic: feeAtomic.toString() };
 }

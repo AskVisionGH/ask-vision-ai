@@ -138,7 +138,7 @@ export const SwapPreviewCard = ({ data: initial }: Props) => {
     const startedAt = Date.now();
 
     try {
-      // 1. Build
+      // 1. Build (may also return an upfront fee tx for Token-2022 outputs)
       setPhase({ name: "building" });
       const built = await supaPost("swap-build", {
         userPublicKey: publicKey.toBase58(),
@@ -150,7 +150,56 @@ export const SwapPreviewCard = ({ data: initial }: Props) => {
       });
       if (!built.swapTransaction) throw new Error("No transaction returned");
 
-      // 2. Deserialize + sign
+      // 1b. If an upfront fee tx is required (Token-2022 output), sign+submit
+      // it FIRST. We confirm it before kicking off the swap so the swap
+      // sees the reduced balance and doesn't fail on insufficient funds.
+      if (built.feeTransaction) {
+        setPhase({ name: "awaiting_signature" });
+        const feeBytes = Uint8Array.from(atob(built.feeTransaction), (c) => c.charCodeAt(0));
+        // Legacy Transaction (built server-side) — wallet adapters accept both.
+        const { Transaction } = await import("@solana/web3.js");
+        const feeTx = Transaction.from(feeBytes);
+        let signedFee: any;
+        try {
+          signedFee = await signTransaction(feeTx as any);
+        } catch {
+          if (mounted.current) {
+            setPhase({
+              name: "error",
+              message: "Cancelled — try again or adjust the amount.",
+              cancelled: true,
+            });
+          }
+          return;
+        }
+        setPhase({ name: "submitting" });
+        const feeSignedB64 = btoa(String.fromCharCode(...signedFee.serialize()));
+        const feeSubmitted = await supaPost("tx-submit", {
+          signedTransaction: feeSignedB64,
+          kind: "transfer",
+          valueUsd: data.platformFee?.valueUsd ?? null,
+          inputMint: data.input.address,
+          inputAmount: data.platformFee?.amountUi ?? null,
+          walletAddress: publicKey.toBase58(),
+        });
+        const feeSig = feeSubmitted?.signature as string | undefined;
+        if (!feeSig) throw new Error("Failed to submit platform fee transaction");
+        // Wait for fee confirmation before the swap
+        const feeDeadline = Date.now() + POLL_TIMEOUT_MS;
+        let feeConfirmed = false;
+        while (Date.now() < feeDeadline) {
+          if (!mounted.current) return;
+          await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+          try {
+            const status = await supaPost("tx-status", { signature: feeSig });
+            if (status.status === "confirmed") { feeConfirmed = true; break; }
+            if (status.status === "failed") throw new Error(status.err ?? "Fee transfer failed");
+          } catch { continue; }
+        }
+        if (!feeConfirmed) throw new Error("Platform fee confirmation timed out");
+      }
+
+      // 2. Deserialize + sign the swap
       setPhase({ name: "awaiting_signature" });
       const txBytes = Uint8Array.from(atob(built.swapTransaction), (c) => c.charCodeAt(0));
       const tx = VersionedTransaction.deserialize(txBytes);
