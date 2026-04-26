@@ -48,7 +48,7 @@ const Trade = () => {
   }, [sidebarCollapsed]);
 
   return (
-    <div className="relative flex h-screen bg-background text-foreground">
+    <div className="relative flex h-[100dvh] bg-background text-foreground">
       <div className="pointer-events-none absolute inset-0 bg-aurora" aria-hidden />
 
       {/* Desktop sidebar */}
@@ -73,7 +73,7 @@ const Trade = () => {
       {/* Main column */}
       <div className="relative z-10 flex h-full min-w-0 flex-1 flex-col">
         {/* Header */}
-        <header className="flex shrink-0 items-center justify-between border-b border-border/60 bg-background/60 px-4 py-3 backdrop-blur-md sm:px-6">
+        <header className="flex shrink-0 items-center justify-between border-b border-border/60 bg-background/60 px-3 py-2.5 backdrop-blur-md sm:px-6 sm:py-3">
           <div className="flex items-center gap-2">
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
               <SheetTrigger asChild>
@@ -119,17 +119,17 @@ const Trade = () => {
         </header>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-4 py-8 sm:px-6 sm:py-12">
+        <div className="flex-1 overflow-y-auto px-3 py-4 sm:px-6 sm:py-12">
           <div className="mx-auto flex w-full max-w-[520px] flex-col items-center">
-            <div className="mb-8 flex flex-col items-center text-center">
+            <div className="mb-4 flex flex-col items-center text-center sm:mb-8">
               <div className="relative">
                 <div
                   className="pointer-events-none absolute inset-0 -z-10 rounded-full bg-primary/40 blur-2xl animate-pulse-glow"
                   aria-hidden
                 />
-                <VisionLogo size={56} className="text-foreground drop-shadow-[0_0_18px_hsl(var(--primary)/0.7)]" />
+                <VisionLogo size={40} className="text-foreground drop-shadow-[0_0_18px_hsl(var(--primary)/0.7)]" />
               </div>
-              <p className="mt-4 text-xs text-muted-foreground">
+              <p className="mt-3 text-xs text-muted-foreground sm:mt-4">
                 {tab === "limit"
                   ? "Set a price. We'll fill automatically when the market hits it."
                   : tab === "pro"

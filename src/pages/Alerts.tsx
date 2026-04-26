@@ -75,7 +75,7 @@ const Alerts = () => {
   };
 
   return (
-    <div className="relative flex h-screen bg-background text-foreground">
+    <div className="relative flex h-[100dvh] bg-background text-foreground">
       <div className="pointer-events-none absolute inset-0 bg-aurora" aria-hidden />
 
       {/* Desktop sidebar */}

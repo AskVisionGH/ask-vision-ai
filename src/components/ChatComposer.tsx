@@ -354,7 +354,7 @@ export const ChatComposer = ({
 
       <div
         className={cn(
-          "flex items-end gap-2 rounded-2xl border border-border bg-popover px-4 py-3 shadow-soft ease-vision",
+          "flex items-end gap-2 rounded-2xl border border-border bg-popover px-3 py-2.5 shadow-soft ease-vision sm:px-4 sm:py-3",
           "focus-within:border-primary/40 focus-within:shadow-glow",
           recording && "border-destructive/50 shadow-glow",
         )}
