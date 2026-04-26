@@ -21,6 +21,13 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import {
+  isAndroid,
+  isInThirdPartyWebView,
+  isInWalletBrowser,
+  openInPhantom,
+  openInSolflare,
+} from "@/lib/mobile-wallet";
+import {
   detectWalletChain,
   readLastUsedWallets,
   shortAddress,
@@ -429,6 +436,41 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
     const busyKey = `wallet:${w.id}`;
 
     if (w.kind === "solana") {
+      // Android mobile browsers do NOT expose per-wallet injected adapters like
+      // desktop does. The only reliable client path is the generic Mobile Wallet
+      // Adapter (MWA). So when a user taps "Phantom" on Android Chrome, route
+      // that tap through MWA instead of checking for a Phantom adapter name.
+      if (isAndroid() && !isInWalletBrowser()) {
+        if (isInThirdPartyWebView()) {
+          onOpenChange(false);
+          if (w.id === "solflare") openInSolflare();
+          else openInPhantom();
+          return;
+        }
+
+        const mwaAdapter = solWallets.find((sw) =>
+          sw.adapter.name.toLowerCase().includes("mobile wallet adapter"),
+        );
+        if (mwaAdapter) {
+          await openSolanaAdapter(mwaAdapter, busyKey);
+          return;
+        }
+
+        onOpenChange(false);
+        if (w.id === "solflare") {
+          openInSolflare();
+          return;
+        }
+        if (w.id === "phantom") {
+          openInPhantom();
+          return;
+        }
+        toast.error("Wallet connection unavailable", {
+          description: "Try Phantom or Solflare, or open this page inside your wallet app.",
+        });
+        return;
+      }
+
       const adapter = solWallets.find((sw) =>
         w.match(sw.adapter.name.toLowerCase()),
       );
