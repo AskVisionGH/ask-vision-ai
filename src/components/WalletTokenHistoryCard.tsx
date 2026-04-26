@@ -114,12 +114,12 @@ export const WalletTokenHistoryCard = ({ data }: Props) => {
                 : ""}
             </p>
             <a
-              href={`https://solscan.io/tx/${firstAcquisition.signature}`}
+              href={txExplorerUrl(firstAcquisition.signature, data.chainId)}
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline"
             >
-              View on Solscan
+              View on {explorerLabel(data.chainId)}
               <ExternalLink className="h-2.5 w-2.5" />
             </a>
           </div>
