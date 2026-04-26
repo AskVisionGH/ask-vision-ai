@@ -149,23 +149,23 @@ const Settings = () => {
   };
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-background px-4 py-8 text-foreground sm:px-6">
+    <main className="relative min-h-[100dvh] overflow-hidden bg-background px-4 py-5 text-foreground sm:px-6 sm:py-8">
       <div className="pointer-events-none absolute inset-0 bg-aurora" aria-hidden />
 
       <div className="relative z-10 mx-auto max-w-2xl">
         <button
           onClick={() => navigate("/chat")}
-          className="mb-6 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground ease-vision"
+          className="mb-4 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground ease-vision sm:mb-6"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to chat
         </button>
 
-        <div className="mb-8">
-          <h1 className="text-2xl font-light tracking-tight sm:text-3xl">
+        <div className="mb-5 sm:mb-8">
+          <h1 className="text-xl font-light tracking-tight sm:text-3xl">
             <span className="font-serif-italic text-primary">Settings</span>
           </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
+          <p className="mt-1.5 text-sm text-muted-foreground sm:mt-2">
             Tweak how Vision talks with you. Changes save when you hit Save.
           </p>
         </div>
