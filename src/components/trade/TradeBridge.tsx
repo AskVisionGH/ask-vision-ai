@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useEvmBridge } from "@/hooks/useEvmBridge";
 import { findEvmChain } from "@/lib/evm-chains";
+import { BridgeProgressModal } from "@/components/trade/BridgeProgressModal";
 
 // LI.FI uses numeric ids for every chain. Solana's id is this constant.
 const SOLANA_CHAIN_ID = 1151111081099710 as const;
