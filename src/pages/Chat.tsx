@@ -54,6 +54,14 @@ const Chat = () => {
   } = useConversations();
 
   const activeId = searchParams.get("c");
+  // Refresh the starter prompts every login (user id changes) and every time
+  // the user lands on the empty-chat screen (no activeId). useMemo with these
+  // deps gives us a stable list within a single empty-state render but a
+  // fresh draw whenever they start a new chat.
+  const suggestions = useMemo(
+    () => pickSuggestions(4),
+    [user?.id, activeId],
+  );
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loadingThread, setLoadingThread] = useState(false);
   const [input, setInput] = useState("");
