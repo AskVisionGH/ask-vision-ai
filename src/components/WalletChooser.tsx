@@ -305,12 +305,9 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
               Loading your wallets…
             </div>
           ) : rows.length === 0 ? (
-            <div className="flex flex-col items-center gap-1 py-4 text-center">
-              <Wallet className="h-5 w-5 text-muted-foreground/60" />
-              <p className="text-xs text-muted-foreground">
-                No wallets yet. Connect one below to get started.
-              </p>
-            </div>
+            <p className="px-1 pb-1 text-center text-[11px] text-muted-foreground">
+              No registered wallets yet — pick a chain below to connect one.
+            </p>
           ) : (
             rows.map((row) => {
               const isBusy = busyAddress === row.address;
