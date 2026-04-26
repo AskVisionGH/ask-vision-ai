@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { useAccount, useConnect, useConnectors, useDisconnect as useEvmDisconnect } from "wagmi";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { Loader2, Plus, Wallet, History as HistoryIcon } from "lucide-react";
@@ -72,11 +71,14 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
   // Solana side
   const {
     wallets: solWallets,
+    wallet: selectedSolWallet,
     select: selectSolWallet,
     publicKey: solPublicKey,
     connected: solConnected,
+    connecting: solConnecting,
+    connect: connectSolWallet,
+    disconnect: disconnectSolWallet,
   } = useWallet();
-  const { setVisible: setSolModalVisible } = useWalletModal();
 
   // EVM side
   const evmConnectors = useConnectors();
@@ -98,6 +100,53 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
   const [recent, setRecent] = useState<LastUsedWallet[]>([]);
   const [loadingLinked, setLoadingLinked] = useState(false);
   const [busyAddress, setBusyAddress] = useState<string | null>(null);
+  const [showSolanaOptions, setShowSolanaOptions] = useState(false);
+  const [pendingSolanaWalletName, setPendingSolanaWalletName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setShowSolanaOptions(false);
+      setPendingSolanaWalletName(null);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!pendingSolanaWalletName) return;
+    if (selectedSolWallet?.adapter.name !== pendingSolanaWalletName) return;
+    if (solConnected || solConnecting) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        onOpenChange(false);
+        await connectSolWallet();
+      } catch (e) {
+        if (cancelled) return;
+        const msg = e instanceof Error ? e.message : String(e);
+        if (!/user rejected|user cancel|user closed/i.test(msg)) {
+          toast.error("Couldn't connect that wallet", {
+            description: msg,
+          });
+        }
+      } finally {
+        if (!cancelled) {
+          setPendingSolanaWalletName(null);
+          setBusyAddress(null);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    pendingSolanaWalletName,
+    selectedSolWallet?.adapter.name,
+    solConnected,
+    solConnecting,
+    connectSolWallet,
+    onOpenChange,
+  ]);
 
   // Refresh last-used + linked rows every time the chooser opens, so newly
   // connected wallets show up without remounting.
