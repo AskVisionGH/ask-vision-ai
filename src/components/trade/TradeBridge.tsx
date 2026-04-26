@@ -81,6 +81,27 @@ type Phase =
   | { name: "cancelled"; fromAmountUi: number; fromSymbol: string; toAmountUi: number; toSymbol: string }
   | { name: "error"; message: string };
 
+/**
+ * Live progress for the EVM bridge modal. Each step has its own status
+ * so the modal can render a checklist; `approveSkipped`/`switchSkipped`
+ * is a hint for the modal to grey those rows out.
+ */
+type EvmStepStatus = "pending" | "active" | "done" | "error" | "skipped";
+interface EvmProgressState {
+  switchStatus: EvmStepStatus;
+  approveStatus: EvmStepStatus;
+  signStatus: EvmStepStatus;
+  confirmStatus: EvmStepStatus;
+  bridgeStatus: EvmStepStatus;
+  approvalHash: string | null;
+  approvalExplorer: string | null;
+  sourceTxHash: string | null;
+  sourceExplorer: string | null;
+  destExplorer: string | null;
+  errorMessage: string | null;
+  succeeded: boolean;
+}
+
 const QUOTE_DEBOUNCE_MS = 400;
 const POLL_INTERVAL_MS = 4000;
 const POLL_TIMEOUT_MS = 15 * 60 * 1000; // 15 min — some bridges take this long
