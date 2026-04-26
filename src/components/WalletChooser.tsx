@@ -171,7 +171,19 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
   useEffect(() => {
     if (!pendingSolanaWalletName) return;
     if (selectedSolWallet?.adapter.name !== pendingSolanaWalletName) return;
-    if (solConnected || solConnecting) return;
+
+    // Some adapters/providers can complete the connection as soon as the
+    // selection propagates (for example after a wallet-side account switch).
+    // In that case we should close immediately instead of waiting forever with
+    // a stale spinner.
+    if (solConnected) {
+      onOpenChange(false);
+      setPendingSolanaWalletName(null);
+      setBusyId(null);
+      return;
+    }
+
+    if (solConnecting) return;
 
     let cancelled = false;
     void (async () => {
