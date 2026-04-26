@@ -15,6 +15,7 @@ export interface NotificationPreferences {
   quiet_end: string | null;
   quiet_timezone: string;
   post_order_prompt_seen: boolean;
+  chat_push_prompt_seen: boolean;
 }
 
 const DEFAULTS: NotificationPreferences = {
