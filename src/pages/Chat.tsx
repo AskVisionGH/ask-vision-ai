@@ -459,7 +459,7 @@ const Chat = () => {
   );
 
   return (
-    <div className="relative flex h-screen bg-background text-foreground">
+    <div className="relative flex h-[100dvh] bg-background text-foreground">
       <SEO title="Chat — Vision" description="Vision chat — your AI crypto assistant." noindex />
       {/* One-time wallet prompt for email signups with no linked wallet. */}
       <WalletOnboardingPrompt needsWallet={hasNoWallet === true} />
@@ -517,19 +517,19 @@ const Chat = () => {
         </header>
 
         {/* Messages */}
-        <div ref={scrollerRef} className="flex-1 overflow-y-auto px-4 py-6 sm:px-6">
+        <div ref={scrollerRef} className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
           <div className="mx-auto flex max-w-2xl flex-col gap-5">
             {loadingThread ? (
               <div className="flex justify-center pt-12 text-xs text-muted-foreground/60">
                 Loading conversation…
               </div>
             ) : isEmpty ? (
-              <div className="flex flex-col items-center pt-16 text-center sm:pt-24">
+              <div className="flex flex-col items-center pt-6 text-center sm:pt-24">
                 <VisionLogo
-                  size={40}
-                  className="mb-6 drop-shadow-[0_0_24px_hsl(var(--primary-glow)/0.6)]"
+                  size={36}
+                  className="mb-4 drop-shadow-[0_0_24px_hsl(var(--primary-glow)/0.6)] sm:mb-6"
                 />
-                <h2 className="text-2xl font-light tracking-tight sm:text-3xl">
+                <h2 className="text-xl font-light tracking-tight sm:text-3xl">
                   {profile?.display_name ? (
                     <>
                       Hey{" "}
@@ -545,7 +545,7 @@ const Chat = () => {
                     </>
                   )}
                 </h2>
-                <p className="mt-3 max-w-sm text-sm text-muted-foreground">
+                <p className="mt-2 max-w-sm text-xs text-muted-foreground sm:mt-3 sm:text-sm">
                   Ask anything about Solana — your wallet, tokens, protocols, or how something works.
                 </p>
                 {!connected && (
@@ -554,7 +554,7 @@ const Chat = () => {
                   </p>
                 )}
 
-                <div className="mt-10 grid w-full max-w-md grid-cols-1 gap-2 sm:grid-cols-2">
+                <div className="mt-5 grid w-full max-w-md grid-cols-1 gap-2 sm:mt-10 sm:grid-cols-2">
                   {suggestions.map((s) => (
                     <button
                       key={s}
@@ -588,7 +588,7 @@ const Chat = () => {
         </div>
 
         {/* Composer */}
-        <div className="shrink-0 border-t border-border/60 bg-background/80 px-4 py-4 backdrop-blur-md sm:px-6">
+        <div className="shrink-0 border-t border-border/60 bg-background/80 px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3 backdrop-blur-md sm:px-6 sm:py-4">
           <div className="mx-auto max-w-2xl">
             <ChatComposer
               value={input}
@@ -596,7 +596,7 @@ const Chat = () => {
               onSubmit={() => send(input)}
               disabled={isThinking}
             />
-            <p className="mt-2 text-center font-mono text-[10px] tracking-wider uppercase text-muted-foreground/50">
+            <p className="mt-1.5 hidden text-center font-mono text-[10px] tracking-wider uppercase text-muted-foreground/50 sm:mt-2 sm:block">
               Vision can make mistakes · not financial advice
             </p>
           </div>
