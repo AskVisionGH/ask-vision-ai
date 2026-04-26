@@ -239,7 +239,7 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
       }
     }, QUOTE_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
-  }, [inputToken.address, outputToken?.address, numericAmount, slippageBps]);
+  }, [inputToken.address, outputToken?.address, numericAmount, slippageBps, dynamicSlippage]);
 
   // Auto-refresh quote every 15s while idle and we have one.
   useEffect(() => {
