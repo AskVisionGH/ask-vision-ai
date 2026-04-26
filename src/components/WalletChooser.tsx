@@ -339,13 +339,12 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
     setBusyId(busyKey);
     try {
       const walletName = targetWallet.adapter.name;
-      const isSameAdapter = selectedSolWallet?.adapter === targetWallet.adapter;
       const isSameWalletName = selectedSolWallet?.adapter.name === walletName;
 
       // Only short-circuit if we're ACTUALLY connected to this adapter — not
       // just if the adapter is sticky-selected from a previous session.
       // Otherwise users who disconnected can never reconnect to the same wallet.
-      if (isSameAdapter && solConnected) {
+      if (isSameWalletName && solConnected) {
         // Hard browser security limit: dApps cannot open another wallet
         // extension's account picker, and Phantom auto-trusts the previous
         // account on `connect()`. The only way to switch accounts is for
@@ -359,6 +358,27 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
         return;
       }
 
+      // Root cause of the flaky "first click hangs" bug: after login, Phantom
+      // is often already the sticky-selected Solana adapter from localStorage.
+      // Clearing + re-selecting that same wallet triggers WalletProvider's
+      // internal disconnect path, which races the new connect attempt.
+      // When the wallet is already selected, connect it directly from this user
+      // click so the extension popup opens on the first attempt.
+      if (isSameWalletName) {
+        try {
+          await connectSolWallet();
+          onOpenChange(false);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          if (!/user rejected|user cancel|user closed/i.test(msg)) {
+            toast.error("Couldn't open that wallet", { description: msg });
+          }
+        } finally {
+          setBusyId(null);
+        }
+        return;
+      }
+
       if (solConnected) {
         try { await disconnectSolWallet(); } catch { /* ignore */ }
       }
@@ -366,19 +386,7 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
       // The user can have both live so they can swap on SOL and bridge on EVM
       // in the same session.
 
-      // If the adapter is already sticky-selected from a prior session,
-      // selectSolWallet(walletName) is a no-op (state doesn't change), so the
-      // handoff effect never fires. Force a clean re-select by clearing first,
-      // then selecting on the next tick so the effect picks it up.
       setPendingSolanaSelection({ name: walletName, adapter: targetWallet.adapter });
-      if (isSameWalletName) {
-        // selectSolWallet accepts null to clear the active adapter, but the
-        // typings only expose WalletName. Cast through unknown so we can
-        // force-clear and re-trigger the handoff effect on the next tick.
-        (selectSolWallet as unknown as (name: WalletName | null) => void)(null);
-        // Defer to next tick so React batches the clear before the new pick.
-        await new Promise((r) => setTimeout(r, 0));
-      }
       selectSolWallet(walletName);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
