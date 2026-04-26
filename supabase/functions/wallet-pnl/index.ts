@@ -278,103 +278,155 @@ function parseTx(t: any, owner: string): ParsedTx | null {
     valueUsd: null,
   };
 
-  // 1) SWAP — Helius's `events.swap` is the cleanest signal
-  const swap = t.events?.swap;
-  if (swap && (swap.tokenInputs?.length || swap.nativeInput || swap.tokenOutputs?.length || swap.nativeOutput)) {
+  // Compute the owner's net balance change for every mint touched in this tx.
+  // This is the single source of truth for what the wallet *actually* received
+  // and spent — we use it for swap classification AND for SOL/SPL transfers.
+  // For Pump/Raydium/Meteora swaps Helius leaves `events.swap` empty, and the
+  // raw `tokenTransfers` array contains many internal hops where neither side
+  // is the owner. Owner-net sidesteps both pitfalls.
+  const ownerDeltas = computeOwnerDeltas(t, owner);
+
+  // Treat a tx as a swap if Helius classified it that way OR if the owner has
+  // both a positive and a negative net balance change. Either way, we always
+  // pick the legs from the owner-net deltas — never from the first array slot.
+  const heliusSaysSwap =
+    t.type === "SWAP" || (t.events?.swap && (t.events.swap.tokenInputs?.length || t.events.swap.nativeInput || t.events.swap.tokenOutputs?.length || t.events.swap.nativeOutput));
+  const positives = ownerDeltas.filter((d) => d.amount > 0);
+  const negatives = ownerDeltas.filter((d) => d.amount < 0);
+
+  if (heliusSaysSwap || (positives.length && negatives.length)) {
     base.type = "swap";
-
-    // Output side (what wallet received)
-    const outSide = pickSwapSide(swap.tokenOutputs, swap.nativeOutput, owner, "out");
-    // Input side (what wallet spent)
-    const inSide = pickSwapSide(swap.tokenInputs, swap.nativeInput, owner, "in");
-
-    if (outSide) base.outToken = outSide; // received
-    if (inSide) base.inToken = inSide;    // spent
-
-    // Compute value in USD if either leg is a stable
-    base.valueUsd = computeSwapUsd(inSide, outSide);
+    // Pick the largest-magnitude leg in each direction (covers multi-token
+    // exits like "swap into SOL+USDC" — the dominant leg is what matters).
+    const inLeg = negatives.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))[0];
+    const outLeg = positives.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))[0];
+    if (inLeg) base.inToken = { mint: inLeg.mint, symbol: shortMint(inLeg.mint), amount: Math.abs(inLeg.amount) };
+    if (outLeg) base.outToken = { mint: outLeg.mint, symbol: shortMint(outLeg.mint), amount: outLeg.amount };
+    base.valueUsd = computeSwapUsd(base.inToken, base.outToken);
     return base;
   }
 
-  // 2) Native SOL transfer
-  if (Array.isArray(t.nativeTransfers) && t.nativeTransfers.length) {
-    let net = 0;
-    let counter: string | null = null;
-    for (const nt of t.nativeTransfers) {
-      const amt = (nt.amount ?? 0) / 1e9;
-      if (nt.toUserAccount === owner) {
-        net += amt;
-        counter = counter ?? nt.fromUserAccount ?? null;
-      } else if (nt.fromUserAccount === owner) {
-        net -= amt;
-        counter = counter ?? nt.toUserAccount ?? null;
-      }
+  // Plain transfer: exactly one side moved (positive = received, negative = sent).
+  // Use the owner-net delta with the largest magnitude for the headline label.
+  const dominant = ownerDeltas.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))[0];
+  if (dominant && Math.abs(dominant.amount) > 1e-9) {
+    if (dominant.amount > 0) {
+      base.type = "transfer_in";
+      base.inToken = { mint: dominant.mint, symbol: shortMint(dominant.mint), amount: dominant.amount };
+      base.counterparty = findCounterparty(t, dominant.mint, owner, "in");
+    } else {
+      base.type = "transfer_out";
+      base.outToken = { mint: dominant.mint, symbol: shortMint(dominant.mint), amount: Math.abs(dominant.amount) };
+      base.counterparty = findCounterparty(t, dominant.mint, owner, "out");
     }
-    if (Math.abs(net) > 0.000001) {
-      base.type = net > 0 ? "transfer_in" : "transfer_out";
-      base.solChange = net;
-      base.counterparty = counter;
-      base.outToken = net < 0 ? { mint: SOL_MINT, symbol: "SOL", amount: Math.abs(net) } : undefined;
-      base.inToken = net > 0 ? { mint: SOL_MINT, symbol: "SOL", amount: net } : undefined;
-      return base;
-    }
-  }
-
-  // 3) SPL token transfer
-  if (Array.isArray(t.tokenTransfers) && t.tokenTransfers.length) {
-    for (const tt of t.tokenTransfers) {
-      const amt = Number(tt.tokenAmount ?? 0);
-      if (!amt) continue;
-      if (tt.toUserAccount === owner) {
-        base.type = "transfer_in";
-        base.inToken = { mint: tt.mint, symbol: shortMint(tt.mint), amount: amt };
-        base.counterparty = tt.fromUserAccount ?? null;
-        return base;
-      }
-      if (tt.fromUserAccount === owner) {
-        base.type = "transfer_out";
-        base.outToken = { mint: tt.mint, symbol: shortMint(tt.mint), amount: amt };
-        base.counterparty = tt.toUserAccount ?? null;
-        return base;
-      }
-    }
+    if (dominant.mint === SOL_MINT) base.solChange = dominant.amount;
+    return base;
   }
 
   return base; // other
 }
 
-function pickSwapSide(
-  tokenSide: any[] | undefined,
-  nativeSide: any,
+/**
+ * Sum every balance movement for `owner` across native + SPL legs of the tx.
+ * Returns one entry per mint touched, with positive `amount` for received
+ * and negative for spent. Internal routing hops (where neither side is the
+ * owner) are correctly ignored.
+ */
+function computeOwnerDeltas(
+  t: any,
   owner: string,
-  direction: "in" | "out",
-): { mint: string; symbol: string; amount: number } | undefined {
-  // Prefer the token leg that involves the owner
-  if (Array.isArray(tokenSide)) {
-    for (const t of tokenSide) {
-      const involvesOwner =
-        t.userAccount === owner ||
-        t.fromUserAccount === owner ||
-        t.toUserAccount === owner ||
-        // For inputs, the wallet sourced these; for outputs, the wallet received.
-        true;
-      if (!involvesOwner) continue;
-      const raw = Number(t.rawTokenAmount?.tokenAmount ?? 0);
-      const decimals = Number(t.rawTokenAmount?.decimals ?? 0);
-      if (!raw) continue;
-      return {
-        mint: t.mint,
-        symbol: shortMint(t.mint),
-        amount: raw / Math.pow(10, decimals),
-      };
+): Array<{ mint: string; amount: number }> {
+  const deltas = new Map<string, number>();
+
+  // Native SOL — sum nativeTransfers in/out of the owner.
+  if (Array.isArray(t.nativeTransfers)) {
+    let solNet = 0;
+    for (const nt of t.nativeTransfers) {
+      const amt = (nt.amount ?? 0) / 1e9;
+      if (nt.toUserAccount === owner) solNet += amt;
+      else if (nt.fromUserAccount === owner) solNet -= amt;
+    }
+    // Subtract the owner's tx fee so a "send 1 SOL" tx doesn't look like
+    // -1.000005 SOL. Fee is only paid by feePayer.
+    if (t.feePayer === owner && typeof t.fee === "number") {
+      solNet += t.fee / 1e9; // add back so net reflects intent, not gas
+    }
+    if (Math.abs(solNet) > 1e-9) deltas.set(SOL_MINT, solNet);
+  }
+
+  // SPL tokens — prefer `accountData.tokenBalanceChanges` (signed, per owner)
+  // because Helius emits a clean per-owner delta. Fall back to summing
+  // `tokenTransfers` if accountData is absent.
+  let usedAccountData = false;
+  if (Array.isArray(t.accountData)) {
+    for (const ad of t.accountData) {
+      const tbc = ad?.tokenBalanceChanges;
+      if (!Array.isArray(tbc) || tbc.length === 0) continue;
+      for (const ch of tbc) {
+        if (ch.userAccount !== owner) continue;
+        const raw = Number(ch.rawTokenAmount?.tokenAmount ?? 0);
+        const dec = Number(ch.rawTokenAmount?.decimals ?? 0);
+        if (!raw) continue;
+        const amt = raw / Math.pow(10, dec);
+        // Skip wSOL — already counted in nativeTransfers above. Helius
+        // double-records WSOL wraps as both native and token movements.
+        if (ch.mint === SOL_MINT) continue;
+        const prev = deltas.get(ch.mint) ?? 0;
+        deltas.set(ch.mint, prev + amt);
+        usedAccountData = true;
+      }
     }
   }
-  // Native SOL leg
-  if (nativeSide && (nativeSide.amount ?? nativeSide) > 0) {
-    const raw = Number(nativeSide.amount ?? nativeSide);
-    return { mint: SOL_MINT, symbol: "SOL", amount: raw / 1e9 };
+
+  if (!usedAccountData && Array.isArray(t.tokenTransfers)) {
+    for (const tt of t.tokenTransfers) {
+      const amt = Number(tt.tokenAmount ?? 0);
+      if (!amt) continue;
+      if (tt.mint === SOL_MINT) continue; // wSOL — handled via nativeTransfers
+      if (tt.toUserAccount === owner) {
+        deltas.set(tt.mint, (deltas.get(tt.mint) ?? 0) + amt);
+      } else if (tt.fromUserAccount === owner) {
+        deltas.set(tt.mint, (deltas.get(tt.mint) ?? 0) - amt);
+      }
+    }
   }
-  return undefined;
+
+  // Drop dust deltas that are effectively zero (rounding noise).
+  const out: Array<{ mint: string; amount: number }> = [];
+  for (const [mint, amount] of deltas.entries()) {
+    if (Math.abs(amount) > 1e-9) out.push({ mint, amount });
+  }
+  return out;
+}
+
+function findCounterparty(
+  t: any,
+  mint: string,
+  owner: string,
+  direction: "in" | "out",
+): string | null {
+  if (mint === SOL_MINT && Array.isArray(t.nativeTransfers)) {
+    for (const nt of t.nativeTransfers) {
+      if (direction === "in" && nt.toUserAccount === owner && nt.fromUserAccount && nt.fromUserAccount !== owner) {
+        return nt.fromUserAccount;
+      }
+      if (direction === "out" && nt.fromUserAccount === owner && nt.toUserAccount && nt.toUserAccount !== owner) {
+        return nt.toUserAccount;
+      }
+    }
+  }
+  if (Array.isArray(t.tokenTransfers)) {
+    for (const tt of t.tokenTransfers) {
+      if (tt.mint !== mint) continue;
+      if (direction === "in" && tt.toUserAccount === owner && tt.fromUserAccount && tt.fromUserAccount !== owner) {
+        return tt.fromUserAccount;
+      }
+      if (direction === "out" && tt.fromUserAccount === owner && tt.toUserAccount && tt.toUserAccount !== owner) {
+        return tt.toUserAccount;
+      }
+    }
+  }
+  return null;
 }
 
 function computeSwapUsd(
