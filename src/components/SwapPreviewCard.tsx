@@ -116,6 +116,7 @@ export const SwapPreviewCard = ({ data: initial }: Props) => {
           outputToken: data.output.address,
           amount: data.input.amountUi,
           slippageBps: data.slippageBps,
+          dynamicSlippage: data.dynamicSlippage !== false,
         });
         if (mounted.current && !fresh.error) setData(fresh);
       } catch {
@@ -145,6 +146,7 @@ export const SwapPreviewCard = ({ data: initial }: Props) => {
         outputMint: data.output.address,
         amount: data.input.amountAtomic,
         slippageBps: data.slippageBps,
+        dynamicSlippage: data.dynamicSlippage !== false,
       });
       if (!built.swapTransaction) throw new Error("No transaction returned");
 
@@ -262,6 +264,7 @@ export const SwapPreviewCard = ({ data: initial }: Props) => {
         outputToken: data.output.address,
         amount: data.input.amountUi,
         slippageBps: data.slippageBps,
+        dynamicSlippage: data.dynamicSlippage !== false,
       });
       if (mounted.current && !fresh.error) setData(fresh);
     } catch {
@@ -396,8 +399,19 @@ export const SwapPreviewCard = ({ data: initial }: Props) => {
             label="Slippage"
             value={
               <span className="font-mono text-[13px] text-foreground">
-                {(data.slippageBps / 100).toFixed(2)}%{" "}
-                <span className="text-muted-foreground">(auto)</span>
+                {data.dynamicSlippage !== false ? (
+                  <>
+                    Dynamic{" "}
+                    <span className="text-muted-foreground">
+                      (auto, max {(data.slippageBps / 100).toFixed(2)}%)
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    {(data.slippageBps / 100).toFixed(2)}%{" "}
+                    <span className="text-muted-foreground">(fixed)</span>
+                  </>
+                )}
               </span>
             }
           />

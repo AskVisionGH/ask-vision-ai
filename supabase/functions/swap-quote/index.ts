@@ -165,9 +165,17 @@ serve(async (req) => {
     const inputToken: string = body.inputToken ?? body.inputMint ?? "";
     const outputToken: string = body.outputToken ?? body.outputMint ?? "";
     const amount = Number(body.amount);
-    const slippageBps = Number.isFinite(Number(body.slippageBps))
+    // When dynamic slippage is on (default), we let Jupiter pick the
+    // optimal per-route tolerance at swap-build time. We still pass a
+    // generous ceiling here so the quote itself doesn't get rejected on
+    // volatile routes.
+    const dynamicSlippage = body.dynamicSlippage !== false;
+    const userSlippageBps = Number.isFinite(Number(body.slippageBps))
       ? Math.max(1, Math.min(5000, Number(body.slippageBps)))
       : 50;
+    const slippageBps = dynamicSlippage
+      ? Math.max(userSlippageBps, 500)
+      : userSlippageBps;
 
     if (!inputToken || !outputToken) {
       return json({ error: "inputToken and outputToken required" }, 400);
@@ -249,6 +257,7 @@ serve(async (req) => {
       rate: outUi / inUi,
       priceImpactPct,
       slippageBps,
+      dynamicSlippage,
       route,
       // Typical Solana network fee for a swap (rough estimate, in SOL)
       estNetworkFeeSol: 0.000075,

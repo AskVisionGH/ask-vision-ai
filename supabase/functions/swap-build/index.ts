@@ -118,9 +118,20 @@ serve(async (req) => {
     const inputMint: string = body.inputMint ?? "";
     const outputMint: string = body.outputMint ?? "";
     const amount = Number(body.amount); // atomic units
-    const slippageBps = Number.isFinite(Number(body.slippageBps))
+    // Dynamic slippage (Jupiter RTSE) lets the router pick a per-route
+    // tolerance at build time so volatile tokens still land. When enabled
+    // we still pass a generous slippageBps to the QUOTE call as an upper
+    // ceiling, but the SWAP call uses `dynamicSlippage: true` and Jupiter
+    // bakes the optimal value into the transaction.
+    const dynamicSlippage = body.dynamicSlippage !== false; // default ON
+    const userSlippageBps = Number.isFinite(Number(body.slippageBps))
       ? Math.max(1, Math.min(5000, Number(body.slippageBps)))
       : 50;
+    // When dynamic, allow the quote to consider routes up to the user's
+    // declared maximum (or 5% if they didn't specify) — Jupiter will trim.
+    const slippageBps = dynamicSlippage
+      ? Math.max(userSlippageBps, 500)
+      : userSlippageBps;
 
     if (!userPublicKey) return json({ error: "userPublicKey required" }, 400);
     if (!inputMint || !outputMint) {
@@ -184,6 +195,7 @@ serve(async (req) => {
         userPublicKey,
         wrapAndUnwrapSol: true,
         dynamicComputeUnitLimit: true,
+        ...(dynamicSlippage ? { dynamicSlippage: true } : {}),
         ...(feeAccount ? { feeAccount } : {}),
         prioritizationFeeLamports: {
           priorityLevelWithMaxLamports: {
@@ -206,6 +218,8 @@ serve(async (req) => {
       swapTransaction: swapData.swapTransaction,
       lastValidBlockHeight: swapData.lastValidBlockHeight,
       prioritizationFeeLamports: swapData.prioritizationFeeLamports ?? null,
+      dynamicSlippage: dynamicSlippage,
+      dynamicSlippageReport: swapData.dynamicSlippageReport ?? null,
     });
   } catch (e) {
     console.error("swap-build error:", e);
