@@ -101,10 +101,21 @@ export const ConnectWalletButton = ({ className, size = "lg" }: Props) => {
             <Button
               size={size}
               className={cn(
-                "rounded-full font-mono text-xs tracking-wide bg-secondary text-foreground hover:bg-muted border border-border ease-vision",
+                "rounded-full font-mono text-xs tracking-wide bg-secondary text-foreground hover:bg-muted border border-border ease-vision gap-2",
                 className,
               )}
             >
+              {chainBadge && (
+                <span className="flex items-center gap-1.5 pr-1.5 mr-0.5 border-r border-border/60">
+                  <span
+                    className={cn("h-1.5 w-1.5 rounded-full", chainBadge.dotClass)}
+                    aria-hidden
+                  />
+                  <span className="text-[10px] font-semibold tracking-wider text-muted-foreground">
+                    {chainBadge.label}
+                  </span>
+                </span>
+              )}
               {short}
             </Button>
           </DropdownMenuTrigger>
