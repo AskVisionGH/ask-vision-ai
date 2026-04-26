@@ -488,6 +488,43 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
           </div>
         )}
 
+        {showEvmOptions && (
+          <div className="mt-2 space-y-1.5 rounded-xl border border-border/70 bg-secondary/35 p-2">
+            {evmTargetAddress && (
+              <p className="px-1 pb-1 text-[10px] uppercase tracking-widest text-muted-foreground/70">
+                Choose an EVM wallet for {shortAddress(evmTargetAddress)}
+              </p>
+            )}
+            {evmConnectors.length === 0 ? (
+              <p className="px-1 py-2 text-center text-[11px] text-muted-foreground">
+                No EVM wallet extensions detected.
+              </p>
+            ) : (
+              evmConnectors.map((connector) => {
+                const isPending = pendingEvmConnectorId === connector.id;
+                return (
+                  <button
+                    key={connector.id}
+                    type="button"
+                    disabled={!!pendingEvmConnectorId}
+                    onClick={() => handleSelectEvmConnector(connector.id)}
+                    className={cn(
+                      "flex w-full items-center justify-between rounded-lg border border-border/60 bg-background/40 px-3 py-2 text-left text-xs transition-all ease-vision hover:border-accent/40 hover:bg-background/70 disabled:opacity-60",
+                    )}
+                  >
+                    <span className="truncate font-medium text-foreground">
+                      {connector.name}
+                    </span>
+                    {isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                    ) : null}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        )}
+
         <p className="mt-3 text-center text-[10px] uppercase tracking-widest text-muted-foreground/60">
           We never auto-reconnect — you stay in control.
         </p>
