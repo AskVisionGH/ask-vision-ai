@@ -127,10 +127,12 @@ serve(async (req) => {
     const userSlippageBps = Number.isFinite(Number(body.slippageBps))
       ? Math.max(1, Math.min(5000, Number(body.slippageBps)))
       : 50;
-    // When dynamic, allow the quote to consider routes up to the user's
-    // declared maximum (or 5% if they didn't specify) — Jupiter will trim.
+    const dynamicSlippageCeilingBps = 1500;
+    // When dynamic, allow the quote to consider routes up to a higher
+    // ceiling for fast-moving pairs — Jupiter will still trim to the
+    // minimum it needs for the chosen route.
     const slippageBps = dynamicSlippage
-      ? Math.max(userSlippageBps, 500)
+      ? Math.max(userSlippageBps, dynamicSlippageCeilingBps)
       : userSlippageBps;
 
     if (!userPublicKey) return json({ error: "userPublicKey required" }, 400);
