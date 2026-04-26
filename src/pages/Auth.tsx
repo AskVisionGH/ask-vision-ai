@@ -430,17 +430,43 @@ const Auth = () => {
               </form>
             </TabsContent>
 
-            {/* Wallet tab — single pill that opens the wallet picker and
-                auto-signs the moment a wallet connects. */}
+            {/* Wallet tab — pick a chain (Solana / Ethereum) then sign with
+                that wallet. Uses SIWS for SOL and SIWE for EVM. */}
             <TabsContent value="wallet" className="mt-5">
               <div className="rounded-2xl border border-border bg-card/40 p-5 backdrop-blur-md">
+                {/* Chain selector */}
+                <div className="mb-4 flex gap-1 rounded-full bg-secondary p-1 text-xs">
+                  {(["solana", "evm"] as const).map((c) => {
+                    const badge = c === "solana" ? solanaBadge() : evmChainBadge(1);
+                    const isActive = walletChain === c;
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setWalletChain(c)}
+                        className={cn(
+                          "flex flex-1 items-center justify-center gap-1.5 rounded-full py-1.5 ease-vision",
+                          isActive
+                            ? "bg-background text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        <span className={cn("h-1.5 w-1.5 rounded-full", badge.dotClass)} aria-hidden />
+                        {c === "solana" ? "Solana" : "Ethereum"}
+                      </button>
+                    );
+                  })}
+                </div>
+
                 <div className="flex items-start gap-3">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
                     <Wallet className="h-4 w-4" />
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-foreground">
-                      Sign in with your Solana wallet
+                      {walletChain === "solana"
+                        ? "Sign in with your Solana wallet"
+                        : "Sign in with your Ethereum wallet"}
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
                       You'll sign a one-time message — no transaction, no gas.
@@ -459,12 +485,14 @@ const Auth = () => {
                     ? "Waiting for signature…"
                     : pendingSign
                       ? "Choose a wallet…"
-                      : connected && publicKey
+                      : walletChain === "solana" && connected && publicKey
                         ? `Sign in as ${publicKey.toBase58().slice(0, 4)}…${publicKey.toBase58().slice(-4)}`
-                        : "Sign in with wallet"}
+                        : walletChain === "evm" && evmConnected && evmAddress
+                          ? `Sign in as ${evmAddress.slice(0, 6)}…${evmAddress.slice(-4)}`
+                          : "Sign in with wallet"}
                 </Button>
 
-                {connected && publicKey && (
+                {walletChain === "solana" && connected && publicKey && (
                   <button
                     onClick={() => disconnect()}
                     className="mt-2 w-full text-center text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground ease-vision"
@@ -472,9 +500,19 @@ const Auth = () => {
                     Use a different wallet
                   </button>
                 )}
+                {walletChain === "evm" && evmConnected && evmAddress && (
+                  <button
+                    onClick={() => evmDisconnect()}
+                    className="mt-2 w-full text-center text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground ease-vision"
+                  >
+                    Use a different wallet
+                  </button>
+                )}
 
                 <p className="mt-3 text-center text-[10px] text-muted-foreground/70">
-                  Phantom, Solflare, Backpack, Coinbase, Trust & more
+                  {walletChain === "solana"
+                    ? "Phantom, Solflare, Backpack, Coinbase, Trust & more"
+                    : "MetaMask, Rabby, Rainbow, WalletConnect & more"}
                 </p>
               </div>
             </TabsContent>
