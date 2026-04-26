@@ -117,7 +117,19 @@ function strOrNull(v: unknown): string | null {
 }
 
 function mapRpcError(msg: string): string {
-  if (msg.includes("0x1771")) return "Price moved beyond your slippage tolerance.";
+  // Slippage-exceeded errors across the major Solana AMMs. Each program
+  // emits its own custom error code, but they all mean the same thing:
+  // the price moved between quote and execution past the user's tolerance.
+  // - 0x1771: Jupiter / Raydium / Orca (most common)
+  // - 0x1788, 0x1789: Pump.fun AMM (low-liquidity memecoins move fast)
+  // - "slippage tolerance exceeded": generic fallback string
+  const slippageCodes = ["0x1771", "0x1788", "0x1789"];
+  if (
+    slippageCodes.some((c) => msg.includes(c)) ||
+    /slippage/i.test(msg)
+  ) {
+    return "Price moved beyond your slippage tolerance. Try again or increase slippage for volatile tokens.";
+  }
   if (msg.includes("BlockhashNotFound") || msg.includes("blockhash")) {
     return "Quote expired before submission. Try again.";
   }
