@@ -84,10 +84,8 @@ export const BridgeProgressModal = ({
         onOpenChange(next);
       }}
     >
-      <DialogContent
-        className="max-w-sm gap-0 overflow-hidden p-0"
-        showCloseButton={!busy}
-      >
+      <DialogContent className="max-w-sm gap-0 overflow-hidden p-0">
+
         <div className="border-b border-border/60 px-5 pb-3 pt-5">
           <DialogTitle className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
             {computedTitle}
