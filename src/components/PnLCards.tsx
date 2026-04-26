@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ArrowDownLeft, ArrowUpRight, ChevronDown, ChevronUp, ExternalLink, Repeat, TrendingDown, TrendingUp } from "lucide-react";
 import { TokenLogo } from "@/components/TokenLogo";
 import { cn } from "@/lib/utils";
+import { txExplorerUrl, explorerLabel } from "@/lib/explorer";
 import type {
   ParsedTx,
   RecentTxsData,
