@@ -1091,6 +1091,58 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
           setPicker(null);
         }}
       />
+
+      {/* EVM bridge progress modal — only opens during the EVM source path. */}
+      <BridgeProgressModal
+        open={evmProgress !== null}
+        onOpenChange={(o) => { if (!o) setEvmProgress(null); }}
+        busy={!!evmProgress && !evmProgress.succeeded && !evmProgress.errorMessage}
+        succeeded={evmProgress?.succeeded ?? false}
+        errorMessage={evmProgress?.errorMessage ?? null}
+        onPrimaryAction={() => {
+          const wasSuccess = evmProgress?.succeeded;
+          setEvmProgress(null);
+          if (wasSuccess) reset();
+        }}
+        primaryLabel={evmProgress?.succeeded ? "New bridge" : "Close"}
+        steps={evmProgress ? [
+          {
+            id: "switch",
+            label: `Switch to ${fromChain?.name ?? "source chain"}`,
+            status: evmProgress.switchStatus,
+          },
+          {
+            id: "approve",
+            label: `Approve ${fromToken?.symbol ?? "token"}`,
+            status: evmProgress.approveStatus,
+            hint:
+              evmProgress.approveStatus === "skipped"
+                ? "Native asset — no approval needed"
+                : evmProgress.approveStatus === "active"
+                  ? "Confirm in your wallet…"
+                  : undefined,
+            explorerUrl: evmProgress.approvalExplorer ?? undefined,
+          },
+          {
+            id: "sign",
+            label: "Sign bridge transaction",
+            status: evmProgress.signStatus,
+            hint: evmProgress.signStatus === "active" ? "Confirm in your wallet…" : undefined,
+          },
+          {
+            id: "confirm",
+            label: "Wait for source confirmation",
+            status: evmProgress.confirmStatus,
+            explorerUrl: evmProgress.sourceExplorer ?? undefined,
+          },
+          {
+            id: "bridge",
+            label: "Bridge across chains",
+            status: evmProgress.bridgeStatus,
+            explorerUrl: evmProgress.sourceExplorer ?? undefined,
+          },
+        ] : []}
+      />
     </TooltipProvider>
   );
 };
