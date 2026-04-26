@@ -562,29 +562,58 @@ function mergeEvents(a: HistoryEvent[], b: HistoryEvent[]): HistoryEvent[] {
 
 function computeAggregates(events: HistoryEvent[]): {
   firstBuy: HistoryEvent | null;
+  firstAcquisition: HistoryEvent | null;
   totalBuys: number;
   totalSells: number;
+  transfersIn: number;
+  transfersOut: number;
   netAmount: number;
   realizedUsd: number;
 } {
   let totalBuys = 0;
   let totalSells = 0;
+  let transfersIn = 0;
+  let transfersOut = 0;
   let netAmount = 0;
   let realizedUsd = 0;
   let firstBuy: HistoryEvent | null = null;
+  let firstAcquisition: HistoryEvent | null = null;
   for (const e of events) {
+    // Treat undefined `kind` as "swap" so cached events from before the
+    // schema change keep their old behaviour.
+    const kind = e.kind ?? "swap";
     if (e.side === "buy") {
-      totalBuys += 1;
       netAmount += e.tokenAmount;
-      if (e.valueUsd) realizedUsd -= e.valueUsd;
-      if (!firstBuy || e.timestamp < firstBuy.timestamp) firstBuy = e;
+      if (kind === "swap") {
+        totalBuys += 1;
+        if (e.valueUsd) realizedUsd -= e.valueUsd;
+        if (!firstBuy || e.timestamp < firstBuy.timestamp) firstBuy = e;
+      } else {
+        transfersIn += 1;
+      }
+      if (!firstAcquisition || e.timestamp < firstAcquisition.timestamp) {
+        firstAcquisition = e;
+      }
     } else {
-      totalSells += 1;
       netAmount -= e.tokenAmount;
-      if (e.valueUsd) realizedUsd += e.valueUsd;
+      if (kind === "swap") {
+        totalSells += 1;
+        if (e.valueUsd) realizedUsd += e.valueUsd;
+      } else {
+        transfersOut += 1;
+      }
     }
   }
-  return { firstBuy, totalBuys, totalSells, netAmount, realizedUsd };
+  return {
+    firstBuy,
+    firstAcquisition,
+    totalBuys,
+    totalSells,
+    transfersIn,
+    transfersOut,
+    netAmount,
+    realizedUsd,
+  };
 }
 
 // ------------------------------ Misc ------------------------------
