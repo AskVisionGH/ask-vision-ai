@@ -567,8 +567,37 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
               </button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-72">
-              <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                Slippage tolerance
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                    Dynamic slippage
+                  </p>
+                  <p className="mt-1 font-mono text-[10px] leading-relaxed text-muted-foreground">
+                    Jupiter picks the best per-route tolerance so volatile swaps land.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={dynamicSlippage}
+                  onClick={() => setDynamicSlippage((v) => !v)}
+                  className={cn(
+                    "ease-vision relative h-5 w-9 shrink-0 rounded-full border transition-colors",
+                    dynamicSlippage
+                      ? "border-primary/60 bg-primary/40"
+                      : "border-border/60 bg-secondary/60",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "ease-vision absolute top-0.5 h-3.5 w-3.5 rounded-full bg-foreground transition-transform",
+                      dynamicSlippage ? "translate-x-4" : "translate-x-0.5",
+                    )}
+                  />
+                </button>
+              </div>
+              <p className="mt-4 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                {dynamicSlippage ? "Max slippage cap" : "Slippage tolerance"}
               </p>
               <div className="mt-3 flex items-center gap-1.5">
                 {SLIPPAGE_PRESETS.map((p) => (
@@ -609,7 +638,9 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
                 <span className="font-mono text-[11px] text-muted-foreground">%</span>
               </div>
               <p className="mt-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
-                Higher slippage routes more reliably but may give a worse price.
+                {dynamicSlippage
+                  ? "Jupiter trims slippage per route up to this ceiling."
+                  : "Higher slippage routes more reliably but may give a worse price."}
               </p>
             </PopoverContent>
           </Popover>
