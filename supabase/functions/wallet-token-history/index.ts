@@ -273,15 +273,20 @@ serve(async (req) => {
       (cached?.fully_scanned ?? false) ||
       (mode === "older" && reachedEnd);
 
+    // The `first_buy_*` columns are populated from `firstAcquisition`
+    // (any inbound, swap or transfer) because they need to remain stable
+    // across re-scans and the DB column was used historically as
+    // "first time we saw the token enter this wallet". The richer
+    // swap-only `firstBuy` is returned in the API response only.
     const upsertRow = {
       wallet_address: wallet,
       token_mint: mint,
-      first_buy_at: aggregates.firstBuy?.timestamp
-        ? new Date(aggregates.firstBuy.timestamp * 1000).toISOString()
+      first_buy_at: aggregates.firstAcquisition?.timestamp
+        ? new Date(aggregates.firstAcquisition.timestamp * 1000).toISOString()
         : null,
-      first_buy_signature: aggregates.firstBuy?.signature ?? null,
-      first_buy_amount: aggregates.firstBuy?.tokenAmount ?? null,
-      first_buy_usd: aggregates.firstBuy?.valueUsd ?? null,
+      first_buy_signature: aggregates.firstAcquisition?.signature ?? null,
+      first_buy_amount: aggregates.firstAcquisition?.tokenAmount ?? null,
+      first_buy_usd: aggregates.firstAcquisition?.valueUsd ?? null,
       total_buys: aggregates.totalBuys,
       total_sells: aggregates.totalSells,
       net_amount: aggregates.netAmount,
