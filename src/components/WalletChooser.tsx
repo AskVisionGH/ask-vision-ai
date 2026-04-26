@@ -538,16 +538,20 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
                       <span className="truncate font-mono text-xs text-foreground">
                         {shortAddress(row.address)}
                       </span>
-                      <span
-                        className={cn(
-                          "rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-widest",
-                          row.chain === "solana"
-                            ? "border-primary/40 bg-primary/10 text-primary"
-                            : "border-accent/40 bg-accent/10 text-accent-foreground",
-                        )}
-                      >
-                        {row.chain === "solana" ? "Solana" : "EVM"}
-                      </span>
+                      {(() => {
+                        const badge = row.chain === "solana" ? solanaBadge() : evmChainBadge();
+                        return (
+                          <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/40 px-2 py-0.5">
+                            <span
+                              className={cn("h-1.5 w-1.5 rounded-full", badge.dotClass)}
+                              aria-hidden
+                            />
+                            <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
+                              {badge.label}
+                            </span>
+                          </span>
+                        );
+                      })()}
                       {row.isActive && (
                         <span className="rounded-full border border-primary/50 bg-primary/15 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-primary">
                           Connected
