@@ -161,17 +161,36 @@ serve(async (req) => {
     }
 
     // Default: wallet_pnl dashboard
+    const dashboardTokens = tokenPnL
+      .filter((t) => Math.abs(t.realizedUsd) + Math.abs(t.unrealizedUsd) + (t.currentValueUsd ?? 0) > 0.5)
+      .sort(
+        (a, b) =>
+          Math.abs(b.realizedUsd + b.unrealizedUsd) - Math.abs(a.realizedUsd + a.unrealizedUsd),
+      )
+      .slice(0, 12);
+
+    // Enrich any tokens that came back with placeholder symbols (recently
+    // bought, not in holdings snapshot yet, etc.) — bounded parallel DAS calls.
+    const needMeta = dashboardTokens.filter((t) => t.symbol === "?" || t.symbol.includes("…"));
+    if (needMeta.length > 0) {
+      await Promise.all(
+        needMeta.map(async (t) => {
+          const meta = await fetchAssetMetadata(t.mint, HELIUS_API_KEY);
+          if (meta) {
+            t.symbol = meta.symbol;
+            t.name = meta.name;
+            t.logo = meta.logo;
+            if (t.currentPriceUsd == null) t.currentPriceUsd = meta.priceUsd;
+          }
+        }),
+      );
+    }
+
     return json({
       address,
       windowDays: WINDOW_DAYS,
       totals,
-      tokens: tokenPnL
-        .filter((t) => Math.abs(t.realizedUsd) + Math.abs(t.unrealizedUsd) + (t.currentValueUsd ?? 0) > 0.5)
-        .sort(
-          (a, b) =>
-            Math.abs(b.realizedUsd + b.unrealizedUsd) - Math.abs(a.realizedUsd + a.unrealizedUsd),
-        )
-        .slice(0, 12),
+      tokens: dashboardTokens,
       recentTxs: parsed.slice(0, 10),
     });
   } catch (e) {
