@@ -374,6 +374,17 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
           const status = await supaPost("tx-status", { signature });
           if (status.status === "confirmed") {
             if (!mounted.current) return;
+            // Record the per-user platform fee. Best-effort — never block UX.
+            void supaPost("record-swap-fee", {
+              signature,
+              valueUsd: quote.input.valueUsd ?? quote.output.valueUsd ?? null,
+              feeUsd: quote.platformFee?.valueUsd ?? null,
+              feeAmountUi: quote.platformFee?.amountUi ?? null,
+              feeSymbol: quote.platformFee?.symbol ?? null,
+              feeMint: quote.output.address,
+              inputMint: quote.input.address,
+              outputMint: quote.output.address,
+            }).catch((e) => console.warn("record-swap-fee failed:", e));
             setPhase({
               name: "success",
               signature,
