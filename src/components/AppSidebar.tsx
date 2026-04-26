@@ -49,9 +49,8 @@ export const AppSidebar = ({
   profile,
   onSignOut,
 }: Props) => {
-  const isTradePath = activePath === "/trade";
-  const isBridgeActive = isTradePath && activeTradeTab === "bridge";
-  const isTradeActive = isTradePath && !isBridgeActive;
+  const navItems = getAppNavItems(isAdmin);
+  const activeId = getActiveNavId(activePath, activeTradeTab);
 
   if (collapsed) {
     return (
@@ -66,54 +65,17 @@ export const AppSidebar = ({
           <PanelLeftOpen className="h-4 w-4" />
         </Button>
         <div className="mt-3 flex flex-col items-center gap-1.5">
-          <IconLink
-            to="/chat"
-            icon={<MessageSquare className="h-4 w-4" />}
-            label="Chat"
-            active={activePath === "/chat"}
-          />
-          <IconLink
-            to="/trade?tab=trade"
-            icon={<Repeat className="h-4 w-4" />}
-            label="Trade"
-            active={isTradeActive}
-          />
-          <IconLink
-            to="/trade?tab=bridge"
-            icon={<ArrowLeftRight className="h-4 w-4" />}
-            label="Bridge"
-            active={isBridgeActive}
-          />
-          <IconLink
-            to="/tracked-wallets"
-            icon={<Radar className="h-4 w-4" />}
-            label="Tracking (soon)"
-            active={false}
-            disabled
-          />
-          <IconLink
-            to="/alerts"
-            icon={<Bell className="h-4 w-4" />}
-            label="Alerts"
-            active={activePath === "/alerts"}
-          />
-          <IconLink
-            to="/contacts"
-            icon={<Users className="h-4 w-4" />}
-            label="Contacts"
-            active={activePath === "/contacts"}
-          />
-        </div>
-        {isAdmin && (
-          <div className="mt-1.5 flex flex-col items-center">
+          {navItems.map(({ id, to, label, icon: Icon, disabled }) => (
             <IconLink
-              to="/admin"
-              icon={<Shield className="h-4 w-4" />}
-              label="Admin"
-              active={activePath === "/admin"}
+              key={id}
+              to={to}
+              icon={<Icon className="h-4 w-4" />}
+              label={disabled ? `${label} (soon)` : label}
+              active={activeId === id}
+              disabled={disabled}
             />
-          </div>
-        )}
+          ))}
+        </div>
         <div className="mt-auto flex flex-col items-center gap-1.5">
           <IconLink
             to="/settings"
