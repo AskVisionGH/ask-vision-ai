@@ -97,9 +97,32 @@ serve(async (req) => {
     const est = quote.estimate ?? {};
     const action = quote.action ?? {};
     const includedFees: any[] = est.feeCosts ?? [];
-    const platformFeeUsd = includedFees
-      .filter((f) => f.included && (f.name?.toLowerCase().includes("integrator") || f.name?.toLowerCase().includes("partner")))
-      .reduce((sum, f) => sum + Number(f.amountUSD ?? 0), 0);
+    // LI.FI surfaces our 1% cut two ways depending on the route:
+    //  • A dedicated fee with name containing "integrator"/"partner" (older format)
+    //  • A combined "LIFI Fixed Fee" entry where feeSplit.integratorFee holds
+    //    our portion in token atomic units (current format for most routes)
+    // We sum both so the UI always shows the real platform fee, never $0.
+    const tokenPriceUsd = Number(action.fromToken?.priceUSD ?? 0);
+    const tokenDecimals = Number(action.fromToken?.decimals ?? 0);
+    const atomicToUsd = (atomic: string | number | null | undefined) => {
+      if (!atomic || !tokenPriceUsd || !Number.isFinite(tokenDecimals)) return 0;
+      const n = Number(atomic);
+      if (!Number.isFinite(n)) return 0;
+      return (n / Math.pow(10, tokenDecimals)) * tokenPriceUsd;
+    };
+    const platformFeeUsd = includedFees.reduce((sum, f) => {
+      if (!f.included) return sum;
+      const name = String(f.name ?? "").toLowerCase();
+      if (name.includes("integrator") || name.includes("partner")) {
+        return sum + Number(f.amountUSD ?? 0);
+      }
+      // Combined fee with a split — pull just the integrator portion.
+      const integratorAtomic = f.feeSplit?.integratorFee;
+      if (integratorAtomic) {
+        return sum + atomicToUsd(integratorAtomic);
+      }
+      return sum;
+    }, 0);
     const gasFeeUsd = (est.gasCosts ?? []).reduce((sum: number, g: any) => sum + Number(g.amountUSD ?? 0), 0);
 
     return json({
