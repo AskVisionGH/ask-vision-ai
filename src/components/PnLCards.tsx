@@ -55,8 +55,8 @@ const relativeTime = (ts: number) => {
 const pnlTone = (n: number) =>
   n > 0 ? "text-emerald-400" : n < 0 ? "text-rose-400" : "text-muted-foreground";
 
-const solscan = (sig: string) => `https://solscan.io/tx/${sig}`;
-
+// Per-tx explorer URL is built via @/lib/explorer (Solscan for Solana,
+// Etherscan-family for EVM) so EVM transactions don't link to Solscan.
 // ---------------- Expandable list wrapper ----------------
 
 function ExpandableList<T>({
