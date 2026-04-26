@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils";
 
 // "email" is conditionally injected right after "welcome" for wallet-only
 // accounts that signed in via SIWS and don't yet have a real inbox attached.
-type Step = "welcome" | "email" | "experience" | "interests" | "risk";
+type Step = "welcome" | "email" | "experience" | "interests" | "risk" | "language";
 
 const STEP_LABELS: Record<Step, string> = {
   welcome: "About you",
@@ -33,6 +33,7 @@ const STEP_LABELS: Record<Step, string> = {
   experience: "Experience",
   interests: "Interests",
   risk: "Risk",
+  language: "Language",
 };
 
 const Onboarding = () => {
