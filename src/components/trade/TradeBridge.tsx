@@ -520,6 +520,25 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
     if (v === "" || /^\d*\.?\d*$/.test(v)) setAmount(v);
   };
 
+  // Flip source ↔ destination so users can quickly reverse a route
+  // (e.g. SOL→ETH becomes ETH→SOL) without manually re-picking chains.
+  // We swap chains and tokens together to keep them family-consistent,
+  // and clear amount/quote since the new source balance/route are different.
+  const handleFlipChains = useCallback(() => {
+    if (!fromChain || !toChain) return;
+    const prevFromChain = fromChain;
+    const prevToChain = toChain;
+    const prevFromToken = fromToken;
+    const prevToToken = toToken;
+    setFromChain(prevToChain);
+    setToChain(prevFromChain);
+    setFromToken(prevToToken);
+    setToToken(prevFromToken);
+    setAmount("");
+    setQuote(null);
+    setQuoteError(null);
+  }, [fromChain, toChain, fromToken, toToken]);
+
   const handleBridge = useCallback(async () => {
     if (!quote || !fromToken || !toToken || !fromChain || !fromAddress) return;
     const startedAt = Date.now();
