@@ -164,9 +164,26 @@ export const WalletTokenHistoryCard = ({ data }: Props) => {
   );
 };
 
-const Stat = ({ label, value }: { label: string; value: number | string }) => (
+const Stat = ({
+  label,
+  value,
+  valueClassName,
+}: {
+  label: string;
+  value: number | string;
+  valueClassName?: string;
+}) => (
   <div className="bg-card/40 px-3 py-2">
     <div className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{label}</div>
-    <div className="font-mono text-xs text-foreground">{value}</div>
+    <div className={`font-mono text-xs ${valueClassName ?? "text-foreground"}`}>{value}</div>
   </div>
 );
+
+function formatUsd(n: number): string {
+  const sign = n < 0 ? "-" : n > 0 ? "+" : "";
+  const abs = Math.abs(n);
+  if (abs >= 1000) {
+    return `${sign}$${abs.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  }
+  return `${sign}$${abs.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+}
