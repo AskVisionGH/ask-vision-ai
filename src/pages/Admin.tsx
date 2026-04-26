@@ -1316,8 +1316,7 @@ const TreasuryTab = () => {
                 <TableHead>Chain</TableHead>
                 <TableHead>Source</TableHead>
                 <TableHead>Asset</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead className="text-right">USD</TableHead>
+                <TableHead className="text-right">Fee</TableHead>
                 <TableHead>Tx</TableHead>
               </TableRow>
             </TableHeader>
