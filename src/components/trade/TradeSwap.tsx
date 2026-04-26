@@ -146,6 +146,7 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
   const [amount, setAmount] = useState("");
   const [slippageBps, setSlippageBps] = useState(50);
   const [customSlippage, setCustomSlippage] = useState("");
+  const [dynamicSlippage, setDynamicSlippage] = useState(true);
 
   const [quote, setQuote] = useState<QuoteData | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
