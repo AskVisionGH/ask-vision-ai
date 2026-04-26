@@ -77,6 +77,7 @@ const Onboarding = () => {
     setExperience(profile.experience);
     setInterests(profile.interests ?? []);
     setRisk(profile.risk_tolerance);
+    setLanguage((profile.language as LanguageCode) ?? DEFAULT_LANGUAGE);
   }, [profile]);
 
   // If they already finished onboarding, send them straight to chat.
