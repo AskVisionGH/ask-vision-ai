@@ -472,6 +472,8 @@ const Chat = () => {
       <SEO title="Chat — Vision" description="Vision chat — your AI crypto assistant." noindex />
       {/* One-time wallet prompt for email signups with no linked wallet. */}
       <WalletOnboardingPrompt needsWallet={hasNoWallet === true} />
+      {/* One-time browser-notifications pre-prompt. */}
+      <ChatPushPrompt />
       <ShareConversationDialog
         conversation={shareTarget}
         open={!!shareTarget}
