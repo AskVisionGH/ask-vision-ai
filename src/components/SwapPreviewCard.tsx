@@ -146,6 +146,7 @@ export const SwapPreviewCard = ({ data: initial }: Props) => {
         outputMint: data.output.address,
         amount: data.input.amountAtomic,
         slippageBps: data.slippageBps,
+        dynamicSlippage: data.dynamicSlippage !== false,
       });
       if (!built.swapTransaction) throw new Error("No transaction returned");
 
