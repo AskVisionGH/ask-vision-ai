@@ -1,9 +1,31 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-// We avoid @solana/web3.js here — its 1MB+ bundle blows the edge function's
-// CPU budget on cold start (WORKER_RESOURCE_LIMIT). The only Solana primitive
-// we need is PDA derivation for the Jupiter referral fee account, which we
-// implement directly below using the Web Crypto sha256 + a tiny base58 codec.
+// We avoid @solana/web3.js for the main swap-build path — its 1MB+ bundle
+// blows the edge function's CPU budget on cold start. The only Solana
+// primitive we need there is PDA derivation for the Jupiter referral fee
+// account, which we implement directly below using Web Crypto sha256 + a
+// tiny base58 codec.
+//
+// For the rare Token-2022 upfront-fee fallback we DO need web3.js +
+// spl-token to build a real Transaction. Importing them here is acceptable
+// since this branch only runs for Token-2022 outputs (uncommon).
 import { encodeBase58, decodeBase58 } from "https://deno.land/std@0.224.0/encoding/base58.ts";
+import {
+  Connection,
+  PublicKey,
+  SystemProgram,
+  Transaction,
+  ComputeBudgetProgram,
+} from "npm:@solana/web3.js@1.95.3";
+import {
+  createTransferCheckedInstruction,
+  getAssociatedTokenAddressSync,
+  createAssociatedTokenAccountIdempotentInstruction,
+  TOKEN_PROGRAM_ID,
+  TOKEN_2022_PROGRAM_ID,
+} from "npm:@solana/spl-token@0.4.8";
+
+const FEE_BPS = 100; // 1%
+const SOL_MINT = "So11111111111111111111111111111111111111112";
 
 const REFERRAL_PROGRAM_B58 = "REFER4ZgmyYx9c6He5XfaTMiGfdLwRnkV4RPp9t9iF3";
 
