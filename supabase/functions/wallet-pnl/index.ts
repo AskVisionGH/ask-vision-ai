@@ -464,6 +464,47 @@ function shortMint(m: string): string {
   return m.length > 8 ? `${m.slice(0, 4)}…${m.slice(-4)}` : m;
 }
 
+// Fill in valueUsd for swaps where the quote leg is SOL (and therefore not
+// already 1:1 with USD). We try the snapshot's current SOL price first
+// (cheap, already in memory) and fall back to CoinGecko's spot price. This
+// is intentionally an approximation — close enough for "did I make/lose
+// money on this trade today" but not tax-grade. Without it, every SOL-paired
+// swap shows "No data" in the PnL card.
+async function backfillSolValueUsd(parsed: ParsedTx[], balance: BalanceSnapshot) {
+  // Quick exit if nothing needs backfilling
+  const needsSolPrice = parsed.some(
+    (tx) =>
+      tx.type === "swap" &&
+      tx.valueUsd == null &&
+      ((tx.inToken?.mint === SOL_MINT && tx.outToken && !QUOTES.has(tx.outToken.mint)) ||
+        (tx.outToken?.mint === SOL_MINT && tx.inToken && !QUOTES.has(tx.inToken.mint))),
+  );
+  if (!needsSolPrice) return;
+
+  let solPrice = balance.byMint.get(SOL_MINT)?.priceUsd ?? null;
+  if (solPrice == null || solPrice <= 0) {
+    try {
+      const r = await fetch(
+        "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd",
+      );
+      if (r.ok) {
+        const d = await r.json();
+        const p = Number(d?.solana?.usd);
+        if (Number.isFinite(p) && p > 0) solPrice = p;
+      }
+    } catch (e) {
+      console.error("SOL price fetch failed:", e);
+    }
+  }
+  if (solPrice == null || solPrice <= 0) return; // give up silently
+
+  for (const tx of parsed) {
+    if (tx.type !== "swap" || tx.valueUsd != null) continue;
+    if (tx.inToken?.mint === SOL_MINT) tx.valueUsd = tx.inToken.amount * solPrice;
+    else if (tx.outToken?.mint === SOL_MINT) tx.valueUsd = tx.outToken.amount * solPrice;
+  }
+}
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
