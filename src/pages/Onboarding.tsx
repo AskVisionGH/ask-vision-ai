@@ -160,6 +160,8 @@ const Onboarding = () => {
       await updateProfile({ experience });
     } else if (step === "interests") {
       await updateProfile({ interests });
+    } else if (step === "risk") {
+      await updateProfile({ risk_tolerance: risk });
     }
     if (isLast) {
       advance("finish");
