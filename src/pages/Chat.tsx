@@ -261,6 +261,14 @@ const Chat = () => {
         });
       },
       onToolEvent: (ev) => {
+        // A tool event (token card, swap preview, etc.) is a stronger signal
+        // than the first text delta — clear the typing indicator now so we
+        // don't briefly render BOTH the loader AND the card, which causes a
+        // visible flicker as the loader collapses out of layout.
+        if (firstDelta) {
+          setIsThinking(false);
+          firstDelta = false;
+        }
         collectedEvents.push(ev);
         setMessages((prev) => {
           const copy = prev.slice();
