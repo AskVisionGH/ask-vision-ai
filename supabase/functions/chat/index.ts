@@ -946,6 +946,26 @@ serve(async (req) => {
                 );
               }
               eventType = "token_pnl";
+            } else if (name === "get_wallet_token_history") {
+              const args = safeJson(tc.function?.arguments);
+              const target = (args.wallet ?? "").trim() || walletAddress;
+              if (!target) {
+                result = { error: "No wallet provided." };
+              } else if (!args.mint) {
+                result = { error: "Token mint address required." };
+              } else {
+                result = await invokeFn(
+                  "wallet-token-history",
+                  {
+                    wallet: target,
+                    mint: args.mint,
+                    maxSignatures: args.maxSignatures ?? 3000,
+                    direction: "auto",
+                  },
+                  req,
+                );
+              }
+              eventType = "wallet_token_history";
             } else if (name === "prepare_limit_order") {
               const args = safeJson(tc.function?.arguments);
               result = await invokeFn(
