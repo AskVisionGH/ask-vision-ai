@@ -344,7 +344,7 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
       // Only short-circuit if we're ACTUALLY connected to this adapter — not
       // just if the adapter is sticky-selected from a previous session.
       // Otherwise users who disconnected can never reconnect to the same wallet.
-      if (isSameAdapter && solConnected) {
+      if (isSameWalletName && solConnected) {
         // Hard browser security limit: dApps cannot open another wallet
         // extension's account picker, and Phantom auto-trusts the previous
         // account on `connect()`. The only way to switch accounts is for
