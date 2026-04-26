@@ -69,7 +69,7 @@ export const EvmWalletProvider = ({ children, queryClient }: Props) => {
   );
 
   return (
-    <WagmiProvider config={wagmiConfig}>
+    <WagmiProvider config={wagmiConfig} reconnectOnMount={false}>
       {/*
         reconnectOnMount=false matches the Solana side: users want the chooser
         to surface every visit instead of silently re-binding to whichever EVM
