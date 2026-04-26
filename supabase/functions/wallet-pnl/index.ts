@@ -22,6 +22,10 @@ const STABLES = new Set([
   "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
   "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", // USDT
 ]);
+// "Quote" assets we can derive USD value from. Stables are 1:1; SOL gets a
+// historical price lookup. Anything in here counts as the "money side" of a
+// buy/sell — without this, SOL-funded buys are silently dropped from PnL.
+const QUOTES = new Set<string>([...STABLES, SOL_MINT]);
 
 const WINDOW_DAYS = 30;
 const MAX_PAGES = 5;            // Helius caps at 100 per page
