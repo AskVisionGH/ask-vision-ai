@@ -1532,7 +1532,7 @@ const BridgeTokenPickerDialog = ({
             )
           ) : (
             <>
-              {isSolanaChain && walletAddress && (
+              {((isSolanaChain && walletAddress) || (isEvmChain && evmAddressForChain)) && (
                 <div className="px-1 py-1">
                   <BridgeSectionLabel>Your wallet</BridgeSectionLabel>
                   {holdingsLoading && visibleHoldings.length === 0 ? (
