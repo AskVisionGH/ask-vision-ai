@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useEvmBridge } from "@/hooks/useEvmBridge";
 import { findEvmChain } from "@/lib/evm-chains";
+import { BridgeProgressModal } from "@/components/trade/BridgeProgressModal";
 
 // LI.FI uses numeric ids for every chain. Solana's id is this constant.
 const SOLANA_CHAIN_ID = 1151111081099710 as const;
@@ -80,6 +81,27 @@ type Phase =
   | { name: "success"; sourceTxHash: string; sourceExplorer: string; durationMs: number; toAmountUi: number; toSymbol: string; destExplorer: string | null }
   | { name: "cancelled"; fromAmountUi: number; fromSymbol: string; toAmountUi: number; toSymbol: string }
   | { name: "error"; message: string };
+
+/**
+ * Live progress for the EVM bridge modal. Each step has its own status
+ * so the modal can render a checklist; `approveSkipped`/`switchSkipped`
+ * is a hint for the modal to grey those rows out.
+ */
+type EvmStepStatus = "pending" | "active" | "done" | "error" | "skipped";
+interface EvmProgressState {
+  switchStatus: EvmStepStatus;
+  approveStatus: EvmStepStatus;
+  signStatus: EvmStepStatus;
+  confirmStatus: EvmStepStatus;
+  bridgeStatus: EvmStepStatus;
+  approvalHash: string | null;
+  approvalExplorer: string | null;
+  sourceTxHash: string | null;
+  sourceExplorer: string | null;
+  destExplorer: string | null;
+  errorMessage: string | null;
+  succeeded: boolean;
+}
 
 const QUOTE_DEBOUNCE_MS = 400;
 const POLL_INTERVAL_MS = 4000;
@@ -264,6 +286,9 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
   const [picker, setPicker] = useState<null | { side: "from" | "to" }>(null);
   const [chainPicker, setChainPicker] = useState<null | "from" | "to">(null);
   const [phase, setPhase] = useState<Phase>({ name: "idle" });
+  // Modal-driven progress for EVM bridges. The Solana flow already feels
+  // tight (single signature) so it keeps the inline CTA label.
+  const [evmProgress, setEvmProgress] = useState<EvmProgressState | null>(null);
 
   // EVM hooks (active whenever source is an EVM chain).
   const { address: evmAddress, isConnected: evmConnected } = useAccount();
@@ -669,7 +694,19 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
       });
     } catch (e) {
       if (!mounted.current) return;
-      setPhase({ name: "error", message: e instanceof Error ? e.message : "Something went wrong." });
+      const msg = e instanceof Error ? e.message : "Something went wrong.";
+      setPhase({ name: "error", message: msg });
+      // Surface failure inside the EVM progress modal too so users see the
+      // error in context rather than a small CTA label.
+      setEvmProgress((p) =>
+        p
+          ? {
+              ...p,
+              errorMessage: msg,
+              bridgeStatus: p.bridgeStatus === "active" ? "error" : p.bridgeStatus,
+            }
+          : p,
+      );
     }
   }, [quote, fromToken, toToken, fromChain, fromAddress, fromIsEvm, sendBridgeTx, signTransaction, publicKey, numericAmount]);
 
@@ -677,6 +714,7 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
     setAmount("");
     setQuote(null);
     setPhase({ name: "idle" });
+    setEvmProgress(null);
   };
 
   // ---------- Success ----------
@@ -1054,6 +1092,58 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
           setPicker(null);
         }}
       />
+
+      {/* EVM bridge progress modal — only opens during the EVM source path. */}
+      <BridgeProgressModal
+        open={evmProgress !== null}
+        onOpenChange={(o) => { if (!o) setEvmProgress(null); }}
+        busy={!!evmProgress && !evmProgress.succeeded && !evmProgress.errorMessage}
+        succeeded={evmProgress?.succeeded ?? false}
+        errorMessage={evmProgress?.errorMessage ?? null}
+        onPrimaryAction={() => {
+          const wasSuccess = evmProgress?.succeeded;
+          setEvmProgress(null);
+          if (wasSuccess) reset();
+        }}
+        primaryLabel={evmProgress?.succeeded ? "New bridge" : "Close"}
+        steps={evmProgress ? [
+          {
+            id: "switch",
+            label: `Switch to ${fromChain?.name ?? "source chain"}`,
+            status: evmProgress.switchStatus,
+          },
+          {
+            id: "approve",
+            label: `Approve ${fromToken?.symbol ?? "token"}`,
+            status: evmProgress.approveStatus,
+            hint:
+              evmProgress.approveStatus === "skipped"
+                ? "Native asset — no approval needed"
+                : evmProgress.approveStatus === "active"
+                  ? "Confirm in your wallet…"
+                  : undefined,
+            explorerUrl: evmProgress.approvalExplorer ?? undefined,
+          },
+          {
+            id: "sign",
+            label: "Sign bridge transaction",
+            status: evmProgress.signStatus,
+            hint: evmProgress.signStatus === "active" ? "Confirm in your wallet…" : undefined,
+          },
+          {
+            id: "confirm",
+            label: "Wait for source confirmation",
+            status: evmProgress.confirmStatus,
+            explorerUrl: evmProgress.sourceExplorer ?? undefined,
+          },
+          {
+            id: "bridge",
+            label: "Bridge across chains",
+            status: evmProgress.bridgeStatus,
+            explorerUrl: evmProgress.sourceExplorer ?? undefined,
+          },
+        ] : []}
+      />
     </TooltipProvider>
   );
 };
@@ -1282,8 +1372,12 @@ const BridgeTokenPickerDialog = ({
   onPick: (t: BridgeToken) => void;
 }) => {
   const { publicKey, connected } = useWallet();
+  const { address: evmWalletAddress, isConnected: evmIsConnected } = useAccount();
   const walletAddress = connected && publicKey ? publicKey.toBase58() : null;
   const isSolanaChain = chain?.chainType === "SVM" || chain?.id === SOLANA_CHAIN_ID;
+  const isEvmChain = !isSolanaChain && chain != null;
+  const evmAddressForChain =
+    isEvmChain && evmIsConnected && evmWalletAddress ? evmWalletAddress : null;
 
   const [tokens, setTokens] = useState<BridgeToken[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1319,41 +1413,76 @@ const BridgeTokenPickerDialog = ({
     return () => { cancelled = true; };
   }, [open, chain?.id]);
 
-  // Fetch wallet holdings (Solana-only — no EVM balance source today).
+  // Fetch wallet holdings — Solana via wallet-balance, EVM via the new
+  // evm-wallet-balance edge function (multicalls balanceOf for the chain's
+  // top tokens).
   useEffect(() => {
-    if (!open || !isSolanaChain || !walletAddress) {
-      setHoldings([]);
-      return;
-    }
-    let cancelled = false;
-    setHoldingsLoading(true);
-    (async () => {
-      try {
-        const { data, error } = await supabase.functions.invoke("wallet-balance", {
-          body: { address: walletAddress },
-        });
-        if (cancelled) return;
-        if (error || !data || data.error) {
-          setHoldings([]);
-          return;
+    if (!open) return;
+    if (isSolanaChain && walletAddress) {
+      let cancelled = false;
+      setHoldingsLoading(true);
+      (async () => {
+        try {
+          const { data, error } = await supabase.functions.invoke("wallet-balance", {
+            body: { address: walletAddress },
+          });
+          if (cancelled) return;
+          if (error || !data || data.error) {
+            setHoldings([]);
+            return;
+          }
+          const list = Array.isArray(data.holdings) ? data.holdings : [];
+          const mapped: HoldingMeta[] = list
+            .filter((h: any) => (h.valueUsd ?? 0) >= BRIDGE_HOLDINGS_MIN_USD && h.mint)
+            .map((h: any) => ({
+              address: h.mint as string,
+              amount: typeof h.amount === "number" ? h.amount : 0,
+              valueUsd: typeof h.valueUsd === "number" ? h.valueUsd : null,
+            }));
+          setHoldings(mapped);
+        } catch {
+          if (!cancelled) setHoldings([]);
+        } finally {
+          if (!cancelled) setHoldingsLoading(false);
         }
-        const list = Array.isArray(data.holdings) ? data.holdings : [];
-        const mapped: HoldingMeta[] = list
-          .filter((h: any) => (h.valueUsd ?? 0) >= BRIDGE_HOLDINGS_MIN_USD && h.mint)
-          .map((h: any) => ({
-            address: h.mint as string,
-            amount: typeof h.amount === "number" ? h.amount : 0,
-            valueUsd: typeof h.valueUsd === "number" ? h.valueUsd : null,
-          }));
-        setHoldings(mapped);
-      } catch {
-        if (!cancelled) setHoldings([]);
-      } finally {
-        if (!cancelled) setHoldingsLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [open, isSolanaChain, walletAddress]);
+      })();
+      return () => { cancelled = true; };
+    }
+
+    if (isEvmChain && evmAddressForChain && chain) {
+      let cancelled = false;
+      setHoldingsLoading(true);
+      (async () => {
+        try {
+          const { data, error } = await supabase.functions.invoke("evm-wallet-balance", {
+            body: { address: evmAddressForChain, chainId: Number(chain.id) },
+          });
+          if (cancelled) return;
+          if (error || !data || data.error) {
+            setHoldings([]);
+            return;
+          }
+          const list = Array.isArray(data.holdings) ? data.holdings : [];
+          const mapped: HoldingMeta[] = list
+            .filter((h: any) => h.address)
+            .map((h: any) => ({
+              address: String(h.address),
+              amount: typeof h.amount === "number" ? h.amount : 0,
+              valueUsd: typeof h.valueUsd === "number" ? h.valueUsd : null,
+            }));
+          setHoldings(mapped);
+        } catch {
+          if (!cancelled) setHoldings([]);
+        } finally {
+          if (!cancelled) setHoldingsLoading(false);
+        }
+      })();
+      return () => { cancelled = true; };
+    }
+
+    setHoldings([]);
+    return undefined;
+  }, [open, isSolanaChain, isEvmChain, walletAddress, evmAddressForChain, chain?.id]);
 
   const recents = useMemo(
     () => (open && chain ? getBridgeRecents(chain.id) : []),
@@ -1374,7 +1503,9 @@ const BridgeTokenPickerDialog = ({
   }, [tokens, isSolanaChain]);
 
   const visibleHoldings = useMemo(() => {
-    if (!isSolanaChain) return [] as Array<BridgeToken & { amount: number; valueUsd: number | null }>;
+    if (!isSolanaChain && !isEvmChain) {
+      return [] as Array<BridgeToken & { amount: number; valueUsd: number | null }>;
+    }
     return holdings
       .map((h) => {
         const t = tokensByAddress.get(h.address.toLowerCase());
@@ -1383,7 +1514,7 @@ const BridgeTokenPickerDialog = ({
       })
       .filter((x): x is BridgeToken & { amount: number; valueUsd: number | null } => !!x)
       .sort((a, b) => (b.valueUsd ?? 0) - (a.valueUsd ?? 0));
-  }, [holdings, tokensByAddress, isSolanaChain]);
+  }, [holdings, tokensByAddress, isSolanaChain, isEvmChain]);
 
   const holdingMints = useMemo(
     () => new Set(visibleHoldings.map((t) => t.address.toLowerCase())),
@@ -1491,7 +1622,7 @@ const BridgeTokenPickerDialog = ({
             )
           ) : (
             <>
-              {isSolanaChain && walletAddress && (
+              {((isSolanaChain && walletAddress) || (isEvmChain && evmAddressForChain)) && (
                 <div className="px-1 py-1">
                   <BridgeSectionLabel>Your wallet</BridgeSectionLabel>
                   {holdingsLoading && visibleHoldings.length === 0 ? (

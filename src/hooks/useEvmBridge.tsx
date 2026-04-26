@@ -31,7 +31,21 @@ export interface EvmBridgeParams {
     gasPrice?: string;
     chainId?: number;
   };
-  onStatus?: (s: "switching" | "approving" | "approved" | "signing" | "submitting" | "confirming") => void;
+  /**
+   * Lifecycle callback. The optional second arg surfaces the approval tx
+   * hash (only fired on `approving`) so the UI can deep-link to a block
+   * explorer while the user waits.
+   */
+  onStatus?: (
+    s:
+      | "switching"
+      | "approving"
+      | "approved"
+      | "signing"
+      | "submitting"
+      | "confirming",
+    info?: { approvalHash?: Hex },
+  ) => void;
 }
 
 const NATIVE_ADDRESS = "0x0000000000000000000000000000000000000000".toLowerCase();
@@ -66,15 +80,17 @@ export const useEvmBridge = () => {
         })) as bigint;
 
         if (currentAllowance < required) {
-          params.onStatus?.("approving");
           const approveHash = (await (walletClient as any).writeContract({
             address: params.fromTokenAddress as Hex,
             abi: erc20Abi,
             functionName: "approve",
             args: [params.approvalAddress as Hex, required],
           })) as Hex;
+          // Fire `approving` AFTER user signs so the modal can show the
+          // pending tx link rather than a vague "approving…" with no hash.
+          params.onStatus?.("approving", { approvalHash: approveHash });
           await (publicClient as any).waitForTransactionReceipt({ hash: approveHash });
-          params.onStatus?.("approved");
+          params.onStatus?.("approved", { approvalHash: approveHash });
         }
       }
 
