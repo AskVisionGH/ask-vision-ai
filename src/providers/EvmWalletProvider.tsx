@@ -1,4 +1,5 @@
 import { ReactNode, useMemo } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider, createConfig, http } from "wagmi";
 import {
   RainbowKitProvider,
@@ -21,6 +22,7 @@ import "@rainbow-me/rainbowkit/styles.css";
 
 interface Props {
   children: ReactNode;
+  queryClient: QueryClient;
 }
 
 // Build the connector list once. RainbowKit groups them into the modal.
@@ -53,7 +55,7 @@ export const wagmiConfig = createConfig({
   ssr: false,
 });
 
-export const EvmWalletProvider = ({ children }: Props) => {
+export const EvmWalletProvider = ({ children, queryClient }: Props) => {
   // Match Vision's dark glassy aesthetic on the RainbowKit modal.
   const theme = useMemo(
     () =>
@@ -68,9 +70,11 @@ export const EvmWalletProvider = ({ children }: Props) => {
 
   return (
     <WagmiProvider config={wagmiConfig}>
-      <RainbowKitProvider theme={theme} modalSize="compact">
-        {children}
-      </RainbowKitProvider>
+      <QueryClientProvider client={queryClient}>
+        <RainbowKitProvider theme={theme} modalSize="compact">
+          {children}
+        </RainbowKitProvider>
+      </QueryClientProvider>
     </WagmiProvider>
   );
 };
