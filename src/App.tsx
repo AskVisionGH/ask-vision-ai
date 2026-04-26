@@ -5,6 +5,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { WalletContextProvider } from "@/providers/WalletContextProvider";
+import { EvmWalletProvider } from "@/providers/EvmWalletProvider";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { ProfileProvider, useProfile } from "@/hooks/useProfile";
 import { useWalletAutoLink } from "@/hooks/useWalletAutoLink";
@@ -142,6 +143,7 @@ const App = () => (
       <AuthProvider>
         <ProfileProvider>
           <WalletContextProvider>
+            <EvmWalletProvider>
             <TooltipProvider>
               <Toaster />
               <Sonner />
@@ -149,6 +151,7 @@ const App = () => (
                 <AppRoutes />
               </BrowserRouter>
             </TooltipProvider>
+            </EvmWalletProvider>
           </WalletContextProvider>
         </ProfileProvider>
       </AuthProvider>

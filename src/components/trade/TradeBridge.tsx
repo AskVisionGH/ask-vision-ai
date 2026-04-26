@@ -12,6 +12,9 @@ import {
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { LAMPORTS_PER_SOL, PublicKey, VersionedTransaction } from "@solana/web3.js";
+import { useAccount, useBalance, useDisconnect } from "wagmi";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { erc20Abi, formatUnits, type Hex } from "viem";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -20,14 +23,17 @@ import { TradeTabs, type TradeTab } from "@/components/trade/TradeTabs";
 import { TokenLogo } from "@/components/TokenLogo";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { useEvmBridge } from "@/hooks/useEvmBridge";
+import { findEvmChain } from "@/lib/evm-chains";
 
 // LI.FI uses numeric ids for every chain. Solana's id is this constant.
-// (We previously assumed "SOL" but LI.FI's API expects the numeric form.)
 const SOLANA_CHAIN_ID = 1151111081099710 as const;
 // Native SOL address per LI.FI's token list (the all-zeroes Solana system program).
 const SOL_NATIVE_ADDRESS = "11111111111111111111111111111111";
 // Fallback to wrapped SOL mint when LI.FI's list returns it instead.
 const WSOL_MINT = "So11111111111111111111111111111111111111112";
+// Standard EVM "native" placeholder (zero address).
+const EVM_NATIVE_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 interface Chain {
   id: number | string;
@@ -66,10 +72,12 @@ interface QuoteData {
 type Phase =
   | { name: "idle" }
   | { name: "building" }
+  | { name: "switching_chain" }
+  | { name: "approving" }
   | { name: "awaiting_signature" }
   | { name: "submitting" }
-  | { name: "bridging"; signature: string; startedAt: number; estimatedSec: number | null }
-  | { name: "success"; signature: string; durationMs: number; toAmountUi: number; toSymbol: string; destExplorer: string | null }
+  | { name: "bridging"; sourceTxHash: string; sourceExplorer: string; startedAt: number; estimatedSec: number | null }
+  | { name: "success"; sourceTxHash: string; sourceExplorer: string; durationMs: number; toAmountUi: number; toSymbol: string; destExplorer: string | null }
   | { name: "cancelled"; fromAmountUi: number; fromSymbol: string; toAmountUi: number; toSymbol: string }
   | { name: "error"; message: string };
 
@@ -91,6 +99,72 @@ const fmtAmount = (n: number) => {
 };
 const truncSig = (s: string) => `${s.slice(0, 4)}…${s.slice(-4)}`;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Per-chain block explorer for source tx links. Falls back to Etherscan.
+const EVM_EXPLORERS: Record<number, string> = {
+  1: "https://etherscan.io/tx/",
+  10: "https://optimistic.etherscan.io/tx/",
+  56: "https://bscscan.com/tx/",
+  137: "https://polygonscan.com/tx/",
+  324: "https://explorer.zksync.io/tx/",
+  8453: "https://basescan.org/tx/",
+  42161: "https://arbiscan.io/tx/",
+  43114: "https://snowtrace.io/tx/",
+  59144: "https://lineascan.build/tx/",
+  534352: "https://scrollscan.com/tx/",
+};
+const buildExplorerUrl = (chainId: number, hash: string) =>
+  `${EVM_EXPLORERS[chainId] ?? "https://etherscan.io/tx/"}${hash}`;
+
+// Poll LI.FI's bridge-status until the receiving leg lands or we time out.
+// Shared between the EVM and Solana source paths.
+async function pollBridgeStatus(args: {
+  txHash: string;
+  quote: QuoteData;
+  toToken: BridgeToken;
+  startedAt: number;
+  sourceExplorer: string;
+  setPhase: (p: Phase) => void;
+  mounted: React.MutableRefObject<boolean>;
+}) {
+  const { txHash, quote, toToken, startedAt, sourceExplorer, setPhase, mounted } = args;
+  const deadline = Date.now() + POLL_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    if (!mounted.current) return;
+    await sleep(POLL_INTERVAL_MS);
+    try {
+      const status = await supaGet("bridge-status", {
+        txHash,
+        fromChain: String(quote.raw?.action?.fromChainId ?? ""),
+        toChain: String(quote.raw?.action?.toChainId ?? ""),
+        bridge: quote.tool ?? "",
+      });
+      if (status.status === "DONE") {
+        const recv = status.receiving;
+        const destAmountUi = recv?.amount && toToken.decimals != null
+          ? Number(recv.amount) / Math.pow(10, toToken.decimals)
+          : Number(quote.toAmountAtomic) / Math.pow(10, toToken.decimals);
+        if (!mounted.current) return;
+        setPhase({
+          name: "success",
+          sourceTxHash: txHash,
+          sourceExplorer,
+          durationMs: Date.now() - startedAt,
+          toAmountUi: destAmountUi,
+          toSymbol: toToken.symbol,
+          destExplorer: recv?.txLink ?? null,
+        });
+        return;
+      }
+      if (status.status === "FAILED" || status.status === "INVALID") {
+        throw new Error(status.substatus ?? "Bridge failed on-chain");
+      }
+    } catch {
+      continue;
+    }
+  }
+  throw new Error("Bridge is taking longer than expected. You can keep tracking it from the source transaction.");
+}
 
 const supaPost = async (fn: string, body: unknown, attempt = 0): Promise<any> => {
   const { data, error } = await supabase.functions.invoke(fn, { body });
@@ -170,20 +244,17 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
   const [chains, setChains] = useState<Chain[]>([]);
   const [chainsLoading, setChainsLoading] = useState(true);
 
-  // Phase 1: source is locked to Solana (we already have the wallet adapter
-  // for it). Phase 2 will add EVM via wagmi.
-  const fromChain: Chain | undefined = useMemo(
-    () => chains.find((c) => c.id === SOLANA_CHAIN_ID),
-    [chains],
-  );
+  // Source chain is now selectable across SVM (Solana) and EVM chains.
+  // Default = Solana, since most existing users are SOL-first.
+  const [fromChain, setFromChain] = useState<Chain | null>(null);
   const [toChain, setToChain] = useState<Chain | null>(null);
 
   const [fromToken, setFromToken] = useState<BridgeToken | null>(null);
   const [toToken, setToToken] = useState<BridgeToken | null>(null);
   const [amount, setAmount] = useState("");
   const [slippageBps] = useState(50);
-  // Required when destination is on a different chain family (e.g. SOL→EVM).
-  // For same-family bridges (rare in v1) we default to the source address.
+  // Required when destination is on a different chain family. Same-family
+  // bridges (EVM↔EVM, SVM↔SVM) reuse the source address.
   const [destAddress, setDestAddress] = useState("");
 
   const [quote, setQuote] = useState<QuoteData | null>(null);
@@ -191,11 +262,22 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
   const [quoteError, setQuoteError] = useState<string | null>(null);
 
   const [picker, setPicker] = useState<null | { side: "from" | "to" }>(null);
-  const [chainPicker, setChainPicker] = useState<null | "to">(null);
+  const [chainPicker, setChainPicker] = useState<null | "from" | "to">(null);
   const [phase, setPhase] = useState<Phase>({ name: "idle" });
 
+  // EVM hooks (active whenever source is an EVM chain).
+  const { address: evmAddress, isConnected: evmConnected } = useAccount();
+  const { sendBridgeTx } = useEvmBridge();
+
+  const fromIsEvm = fromChain?.chainType === "EVM";
+  const fromIsSvm = fromChain?.chainType === "SVM" || fromChain?.id === SOLANA_CHAIN_ID;
+  const fromAddress = useMemo(() => {
+    if (fromIsEvm) return evmConnected && evmAddress ? evmAddress : null;
+    if (fromIsSvm) return connected && publicKey ? publicKey.toBase58() : null;
+    return null;
+  }, [fromIsEvm, fromIsSvm, evmConnected, evmAddress, connected, publicKey]);
+
   // 1s ticker while bridging so the countdown label re-renders every second.
-  // We keep the tick value in state (not a ref) because label rendering reads it.
   const [nowTick, setNowTick] = useState(() => Date.now());
   useEffect(() => {
     if (phase.name !== "bridging") return;
@@ -214,7 +296,9 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
         if (cancelled) return;
         const list: Chain[] = data.chains ?? [];
         setChains(list);
-        // Default destination → Ethereum mainnet (id 1) if available, else first EVM.
+        // Default source → Solana, default destination → Ethereum.
+        const sol = list.find((c) => c.id === SOLANA_CHAIN_ID);
+        if (sol) setFromChain(sol);
         const eth = list.find((c) => c.id === 1) ?? list.find((c) => c.chainType === "EVM");
         if (eth) setToChain(eth);
       } catch {
@@ -226,67 +310,137 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
     return () => { cancelled = true; };
   }, []);
 
-  // ---------- Default source token (SOL) once chains arrive ----------
+  // ---------- Default source token whenever source chain changes ----------
   useEffect(() => {
-    if (!fromChain || fromToken) return;
-    setFromToken({
-      address: SOL_NATIVE_ADDRESS,
-      symbol: "SOL",
-      name: "Solana",
-      decimals: 9,
-      logo: "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png",
-      priceUsd: null,
-      chainId: SOLANA_CHAIN_ID,
-    });
-  }, [fromChain, fromToken]);
-
-  // Source-token balance (Solana only for v1 — source chain is locked to SOL).
-  const [fromBalance, setFromBalance] = useState<number | null>(null);
-  useEffect(() => {
-    if (!connected || !publicKey || !fromToken || fromToken.chainId !== SOLANA_CHAIN_ID) {
-      setFromBalance(null);
-      return;
+    if (!fromChain) return;
+    // Reset token if it no longer matches the chain.
+    if (fromToken && fromToken.chainId === fromChain.id) return;
+    if (fromIsSvm) {
+      setFromToken({
+        address: SOL_NATIVE_ADDRESS,
+        symbol: "SOL",
+        name: "Solana",
+        decimals: 9,
+        logo: "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png",
+        priceUsd: null,
+        chainId: SOLANA_CHAIN_ID,
+      });
+    } else if (fromIsEvm) {
+      setFromToken({
+        address: EVM_NATIVE_ADDRESS,
+        symbol: fromChain.nativeSymbol || "ETH",
+        name: fromChain.nativeSymbol || "Native",
+        decimals: 18,
+        logo: fromChain.logo,
+        priceUsd: null,
+        chainId: fromChain.id,
+      });
+    } else {
+      setFromToken(null);
     }
-    let cancelled = false;
-    setFromBalance(null);
-    const owner = new PublicKey(publicKey.toBase58());
-    (async () => {
-      try {
-        const isNative =
-          fromToken.address === SOL_NATIVE_ADDRESS || fromToken.address === WSOL_MINT;
-        if (isNative) {
-          const lamports = await connection.getBalance(owner);
-          if (!cancelled) setFromBalance(lamports / LAMPORTS_PER_SOL);
-        } else {
-          const mint = new PublicKey(fromToken.address);
-          const resp = await connection.getParsedTokenAccountsByOwner(owner, { mint });
-          let total = 0;
-          for (const acc of resp.value) {
-            const ui = acc.account.data.parsed?.info?.tokenAmount?.uiAmount;
-            if (typeof ui === "number") total += ui;
+    // Clear amount/quote so we don't carry stale state across chain swaps.
+    setAmount("");
+    setQuote(null);
+  }, [fromChain?.id, fromIsSvm, fromIsEvm]);
+
+  // Source-token balance — branches by chain family.
+  const [fromBalance, setFromBalance] = useState<number | null>(null);
+  // Native EVM balance via wagmi.
+  const { data: evmNativeBalance } = useBalance({
+    address: fromIsEvm && evmConnected ? (evmAddress as Hex) : undefined,
+    chainId: fromIsEvm ? Number(fromChain?.id ?? 0) : undefined,
+  });
+
+  useEffect(() => {
+    // Solana balance branch (RPC parsed token accounts).
+    if (fromIsSvm && connected && publicKey && fromToken && fromToken.chainId === SOLANA_CHAIN_ID) {
+      let cancelled = false;
+      setFromBalance(null);
+      const owner = new PublicKey(publicKey.toBase58());
+      (async () => {
+        try {
+          const isNative =
+            fromToken.address === SOL_NATIVE_ADDRESS || fromToken.address === WSOL_MINT;
+          if (isNative) {
+            const lamports = await connection.getBalance(owner);
+            if (!cancelled) setFromBalance(lamports / LAMPORTS_PER_SOL);
+          } else {
+            const mint = new PublicKey(fromToken.address);
+            const resp = await connection.getParsedTokenAccountsByOwner(owner, { mint });
+            let total = 0;
+            for (const acc of resp.value) {
+              const ui = acc.account.data.parsed?.info?.tokenAmount?.uiAmount;
+              if (typeof ui === "number") total += ui;
+            }
+            if (!cancelled) setFromBalance(total);
           }
-          if (!cancelled) setFromBalance(total);
+        } catch {
+          if (!cancelled) setFromBalance(null);
         }
-      } catch {
-        if (!cancelled) setFromBalance(null);
+      })();
+      return () => { cancelled = true; };
+    }
+
+    // EVM balance branch.
+    if (fromIsEvm && evmConnected && evmAddress && fromToken && fromToken.chainId === fromChain?.id) {
+      const isNative = fromToken.address.toLowerCase() === EVM_NATIVE_ADDRESS;
+      if (isNative) {
+        setFromBalance(evmNativeBalance ? Number(formatUnits(evmNativeBalance.value, evmNativeBalance.decimals)) : null);
+        return;
       }
-    })();
-    return () => { cancelled = true; };
-  }, [connected, publicKey, fromToken, connection]);
+      // ERC-20 balance fetched via direct readContract through wagmi's public client.
+      let cancelled = false;
+      setFromBalance(null);
+      (async () => {
+        try {
+          const { getPublicClient } = await import("wagmi/actions");
+          const { wagmiConfig } = await import("@/providers/EvmWalletProvider");
+          const pc = getPublicClient(wagmiConfig as any, { chainId: Number(fromChain.id) });
+          if (!pc) return;
+          const raw = (await (pc as any).readContract({
+            address: fromToken.address as Hex,
+            abi: erc20Abi,
+            functionName: "balanceOf",
+            args: [evmAddress as Hex],
+          })) as bigint;
+          if (!cancelled) setFromBalance(Number(formatUnits(raw, fromToken.decimals)));
+        } catch {
+          if (!cancelled) setFromBalance(null);
+        }
+      })();
+      return () => { cancelled = true; };
+    }
+
+    setFromBalance(null);
+  }, [
+    fromIsSvm, fromIsEvm, connected, publicKey, evmConnected, evmAddress,
+    fromToken, fromChain?.id, connection, evmNativeBalance,
+  ]);
 
   const handleMax = useCallback(() => {
     if (fromBalance == null || !fromToken) return;
-    const isNative =
-      fromToken.address === SOL_NATIVE_ADDRESS || fromToken.address === WSOL_MINT;
-    if (isNative) {
-      // Reserve a bit for rent + tx fees on native SOL.
-      const reserve = 0.01;
-      const max = Math.max(0, fromBalance - reserve);
-      setAmount(max > 0 ? max.toFixed(6) : "");
-    } else {
-      setAmount(fromBalance > 0 ? String(fromBalance) : "");
+    if (fromIsSvm) {
+      const isNative =
+        fromToken.address === SOL_NATIVE_ADDRESS || fromToken.address === WSOL_MINT;
+      if (isNative) {
+        const reserve = 0.01;
+        const max = Math.max(0, fromBalance - reserve);
+        setAmount(max > 0 ? max.toFixed(6) : "");
+      } else {
+        setAmount(fromBalance > 0 ? String(fromBalance) : "");
+      }
+    } else if (fromIsEvm) {
+      const isNative = fromToken.address.toLowerCase() === EVM_NATIVE_ADDRESS;
+      if (isNative) {
+        // Reserve enough for the bridge tx + approval gas.
+        const reserve = 0.005;
+        const max = Math.max(0, fromBalance - reserve);
+        setAmount(max > 0 ? max.toFixed(6) : "");
+      } else {
+        setAmount(fromBalance > 0 ? String(fromBalance) : "");
+      }
     }
-  }, [fromBalance, fromToken]);
+  }, [fromBalance, fromToken, fromIsSvm, fromIsEvm]);
 
   const numericAmount = useMemo(() => {
     const n = parseFloat(amount);
@@ -366,11 +520,80 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
   };
 
   const handleBridge = useCallback(async () => {
-    if (!connected || !publicKey || !signTransaction || !quote || !fromToken || !toToken) return;
+    if (!quote || !fromToken || !toToken || !fromChain || !fromAddress) return;
     const startedAt = Date.now();
+    const outAmountUi = Number(quote.toAmountAtomic) / Math.pow(10, toToken.decimals);
+
     try {
       setPhase({ name: "building" });
       const built = await supaPost("bridge-build", { quote: quote.raw });
+
+      // ============ EVM source path ============
+      if (fromIsEvm) {
+        const txReq = built.transactionRequest;
+        if (!txReq?.to || !txReq?.data) {
+          throw new Error("Bridge route returned no EVM transaction.");
+        }
+        const approvalAddress: string | null =
+          quote.raw?.estimate?.approvalAddress ?? built.step?.estimate?.approvalAddress ?? null;
+
+        let sourceTxHash: Hex;
+        try {
+          sourceTxHash = await sendBridgeTx({
+            fromChainId: Number(fromChain.id),
+            fromTokenAddress: fromToken.address,
+            fromAmount: quote.fromAmountAtomic,
+            approvalAddress,
+            txRequest: txReq,
+            onStatus: (s) => {
+              if (!mounted.current) return;
+              if (s === "switching") setPhase({ name: "switching_chain" });
+              else if (s === "approving") setPhase({ name: "approving" });
+              else if (s === "signing") setPhase({ name: "awaiting_signature" });
+              else if (s === "confirming") setPhase({ name: "submitting" });
+            },
+          });
+        } catch (e: any) {
+          // User rejected in wallet → friendly cancelled state.
+          const msg = String(e?.message ?? "").toLowerCase();
+          if (msg.includes("user rejected") || msg.includes("denied") || msg.includes("rejected")) {
+            if (mounted.current) setPhase({
+              name: "cancelled",
+              fromAmountUi: numericAmount,
+              fromSymbol: fromToken.symbol,
+              toAmountUi: outAmountUi,
+              toSymbol: toToken.symbol,
+            });
+            return;
+          }
+          throw e;
+        }
+
+        const explorer = `https://etherscan.io/tx/${sourceTxHash}`; // overridden per-chain below if available
+        const sourceExplorer = buildExplorerUrl(Number(fromChain.id), sourceTxHash);
+
+        setPhase({
+          name: "bridging",
+          sourceTxHash,
+          sourceExplorer,
+          startedAt,
+          estimatedSec: quote.executionDurationSec ?? null,
+        });
+
+        await pollBridgeStatus({
+          txHash: sourceTxHash,
+          quote,
+          toToken,
+          startedAt,
+          sourceExplorer,
+          setPhase,
+          mounted,
+        });
+        return;
+      }
+
+      // ============ Solana source path (existing) ============
+      if (!signTransaction || !publicKey) throw new Error("Connect your Solana wallet first.");
       const txB64 = built.solanaTransaction ?? built.transactionRequest?.data;
       if (!txB64) throw new Error("Bridge route returned no Solana transaction");
 
@@ -386,7 +609,7 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
           name: "cancelled",
           fromAmountUi: numericAmount,
           fromSymbol: fromToken.symbol,
-          toAmountUi: Number(quote.toAmountAtomic) / Math.pow(10, toToken.decimals),
+          toAmountUi: outAmountUi,
           toSymbol: toToken.symbol,
         });
         return;
@@ -401,57 +624,35 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
         inputMint: fromToken.address,
         outputMint: toToken.address,
         inputAmount: numericAmount,
-        outputAmount: Number(quote.toAmountAtomic) / Math.pow(10, toToken.decimals),
+        outputAmount: outAmountUi,
         walletAddress: publicKey.toBase58(),
       });
       const signature = submitted.signature as string;
       if (!signature) throw new Error("No signature returned from submit");
 
-      setPhase({ name: "bridging", signature, startedAt, estimatedSec: quote.executionDurationSec ?? null });
+      const sourceExplorer = `https://solscan.io/tx/${signature}`;
+      setPhase({
+        name: "bridging",
+        sourceTxHash: signature,
+        sourceExplorer,
+        startedAt,
+        estimatedSec: quote.executionDurationSec ?? null,
+      });
 
-      // Poll LI.FI status until DONE / FAILED / timeout. The Solana sig is the
-      // source-chain hash; LI.FI maps it to the destination-chain receive tx.
-      const deadline = Date.now() + POLL_TIMEOUT_MS;
-      while (Date.now() < deadline) {
-        if (!mounted.current) return;
-        await sleep(POLL_INTERVAL_MS);
-        try {
-          const status = await supaGet("bridge-status", {
-            txHash: signature,
-            fromChain: String(quote.raw?.action?.fromChainId ?? ""),
-            toChain: String(quote.raw?.action?.toChainId ?? ""),
-            bridge: quote.tool ?? "",
-          });
-          if (status.status === "DONE") {
-            const recv = status.receiving;
-            const destAmountUi = recv?.amount && toToken.decimals != null
-              ? Number(recv.amount) / Math.pow(10, toToken.decimals)
-              : Number(quote.toAmountAtomic) / Math.pow(10, toToken.decimals);
-            const destExplorer = recv?.txLink ?? null;
-            if (!mounted.current) return;
-            setPhase({
-              name: "success",
-              signature,
-              durationMs: Date.now() - startedAt,
-              toAmountUi: destAmountUi,
-              toSymbol: toToken.symbol,
-              destExplorer,
-            });
-            return;
-          }
-          if (status.status === "FAILED" || status.status === "INVALID") {
-            throw new Error(status.substatus ?? "Bridge failed on-chain");
-          }
-        } catch {
-          continue;
-        }
-      }
-      throw new Error("Bridge is taking longer than expected. You can keep tracking it from the source transaction.");
+      await pollBridgeStatus({
+        txHash: signature,
+        quote,
+        toToken,
+        startedAt,
+        sourceExplorer,
+        setPhase,
+        mounted,
+      });
     } catch (e) {
       if (!mounted.current) return;
       setPhase({ name: "error", message: e instanceof Error ? e.message : "Something went wrong." });
     }
-  }, [connected, publicKey, signTransaction, quote, fromToken, toToken, numericAmount]);
+  }, [quote, fromToken, toToken, fromChain, fromAddress, fromIsEvm, sendBridgeTx, signTransaction, publicKey, numericAmount]);
 
   const reset = () => {
     setAmount("");
@@ -480,12 +681,12 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
           </div>
           <div className="flex flex-col gap-2">
             <a
-              href={`https://solscan.io/tx/${phase.signature}`}
+              href={phase.sourceExplorer}
               target="_blank"
               rel="noopener noreferrer"
               className="ease-vision inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-secondary/40 px-3 py-1.5 font-mono text-[11px] text-primary transition-colors hover:bg-secondary"
             >
-              Source tx {truncSig(phase.signature)}
+              Source tx {truncSig(phase.sourceTxHash)}
               <ExternalLink className="h-3 w-3" />
             </a>
             {phase.destExplorer && (
@@ -544,6 +745,8 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
   // ---------- CTA ----------
   const isBusy =
     phase.name === "building" ||
+    phase.name === "switching_chain" ||
+    phase.name === "approving" ||
     phase.name === "awaiting_signature" ||
     phase.name === "submitting" ||
     phase.name === "bridging";
@@ -557,6 +760,8 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
 
   let busyLabel = "";
   if (phase.name === "building") busyLabel = "Building transaction…";
+  else if (phase.name === "switching_chain") busyLabel = "Switch network in wallet…";
+  else if (phase.name === "approving") busyLabel = "Approving token…";
   else if (phase.name === "awaiting_signature") busyLabel = "Approve in wallet…";
   else if (phase.name === "submitting") busyLabel = "Submitting…";
   else if (phase.name === "bridging") {
@@ -575,12 +780,18 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
     }
   }
 
+  // CTA needs to know whether the *source-chain* wallet is connected.
+  const sourceConnected = !!fromAddress;
+
   let ctaLabel = "Bridge";
   let ctaDisabled = false;
   let ctaAction: (() => void) | null = handleBridge;
-  if (!connected) {
-    ctaLabel = "Connect wallet";
-    ctaAction = () => setVisible(true);
+  if (!fromChain || !fromToken) {
+    ctaLabel = "Select source chain";
+    ctaDisabled = true; ctaAction = null;
+  } else if (!sourceConnected) {
+    ctaLabel = fromIsEvm ? "Connect EVM wallet" : "Connect Solana wallet";
+    ctaAction = null; // The Connect button is rendered separately below.
   } else if (!toChain || !toToken) {
     ctaLabel = "Select destination";
     ctaDisabled = true; ctaAction = null;
@@ -589,11 +800,14 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
     ctaDisabled = true; ctaAction = null;
   } else if (
     fromBalance != null &&
-    fromToken?.chainId === SOLANA_CHAIN_ID &&
     numericAmount >
-      ((fromToken.address === SOL_NATIVE_ADDRESS || fromToken.address === WSOL_MINT)
-        ? Math.max(0, fromBalance - 0.005)
-        : fromBalance)
+      (fromIsSvm
+        ? ((fromToken.address === SOL_NATIVE_ADDRESS || fromToken.address === WSOL_MINT)
+            ? Math.max(0, fromBalance - 0.005)
+            : fromBalance)
+        : (fromToken.address.toLowerCase() === EVM_NATIVE_ADDRESS
+            ? Math.max(0, fromBalance - 0.005)
+            : fromBalance))
   ) {
     ctaLabel = "Insufficient balance";
     ctaDisabled = true; ctaAction = null;
@@ -628,12 +842,12 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
         </div>
 
         <div className="space-y-3 p-4">
-          {/* From row (Solana, locked for v1) */}
+          {/* From row — chain + token picker both unlocked */}
           <PanelRow
             label="From"
-            chainName={fromChain?.name ?? "Solana"}
+            chainName={fromChain?.name ?? "Select chain"}
             chainLogo={fromChain?.logo ?? null}
-            chainLocked
+            onPickChain={() => setChainPicker("from")}
             token={fromToken}
             onPickToken={() => fromChain && setPicker({ side: "from" })}
             amount={amount}
@@ -744,14 +958,35 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
             </div>
           )}
 
-          <Button
-            onClick={() => ctaAction?.()}
-            disabled={ctaDisabled || isBusy || ctaAction == null}
-            className="ease-vision h-11 w-full rounded-full font-mono text-[11px] uppercase tracking-wider"
-          >
-            {isBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            {ctaLabel}
-          </Button>
+          {/* CTA — when source is EVM and not connected, render the RainbowKit
+              connect button instead of our regular Bridge button. */}
+          {fromIsEvm && !sourceConnected ? (
+            <div className="[&_button]:!h-11 [&_button]:!w-full [&_button]:!rounded-full [&_button]:!font-mono [&_button]:!text-[11px] [&_button]:!uppercase [&_button]:!tracking-wider">
+              <ConnectButton.Custom>
+                {({ openConnectModal }) => (
+                  <Button onClick={openConnectModal} className="ease-vision h-11 w-full rounded-full font-mono text-[11px] uppercase tracking-wider">
+                    Connect EVM wallet
+                  </Button>
+                )}
+              </ConnectButton.Custom>
+            </div>
+          ) : !sourceConnected && fromIsSvm ? (
+            <Button
+              onClick={() => setVisible(true)}
+              className="ease-vision h-11 w-full rounded-full font-mono text-[11px] uppercase tracking-wider"
+            >
+              Connect Solana wallet
+            </Button>
+          ) : (
+            <Button
+              onClick={() => ctaAction?.()}
+              disabled={ctaDisabled || isBusy || ctaAction == null}
+              className="ease-vision h-11 w-full rounded-full font-mono text-[11px] uppercase tracking-wider"
+            >
+              {isBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {ctaLabel}
+            </Button>
+          )}
 
           <p className="text-center font-mono text-[9px] uppercase tracking-wider text-muted-foreground/60">
             Vision routing · {chains.length} chains supported
@@ -759,15 +994,26 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
         </div>
       </div>
 
-      {/* Chain picker (destination only for v1) */}
+      {/* Chain picker — both source and destination */}
       <ChainPickerDialog
         open={chainPicker !== null}
         onClose={() => setChainPicker(null)}
-        chains={chains.filter((c) => c.id !== SOLANA_CHAIN_ID)}
+        // Don't let the user pick the same chain on both sides.
+        chains={chains.filter((c) => {
+          if (chainPicker === "from") return c.id !== toChain?.id;
+          if (chainPicker === "to") return c.id !== fromChain?.id;
+          return true;
+        })}
         loading={chainsLoading}
+        title={chainPicker === "from" ? "Select source chain" : "Select destination chain"}
         onPick={(c) => {
-          setToChain(c);
-          setToToken(null);
+          if (chainPicker === "from") {
+            setFromChain(c);
+            setFromToken(null);
+          } else {
+            setToChain(c);
+            setToToken(null);
+          }
           setChainPicker(null);
         }}
       />
@@ -888,13 +1134,14 @@ const PanelRow = ({
 // ---------- Chain picker dialog ----------
 
 const ChainPickerDialog = ({
-  open, onClose, chains, loading, onPick,
+  open, onClose, chains, loading, onPick, title,
 }: {
   open: boolean;
   onClose: () => void;
   chains: Chain[];
   loading: boolean;
   onPick: (c: Chain) => void;
+  title?: string;
 }) => {
   const [q, setQ] = useState("");
   useEffect(() => { if (!open) setQ(""); }, [open]);
@@ -911,7 +1158,7 @@ const ChainPickerDialog = ({
       <DialogContent className="max-w-md p-0">
         <DialogHeader className="border-b border-border/60 px-4 py-3">
           <DialogTitle className="font-mono text-xs uppercase tracking-wider">
-            Select destination chain
+            {title ?? "Select chain"}
           </DialogTitle>
         </DialogHeader>
         <div className="px-4 py-3">
