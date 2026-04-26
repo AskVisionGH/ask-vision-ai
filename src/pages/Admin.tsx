@@ -1293,7 +1293,7 @@ const TreasuryTab = () => {
           </Button>
         ))}
         <span className="mx-2 h-7 w-px bg-border" />
-        {(["all", "swap_fee", "limit_fee", "dca_fee", "bridge_fee", "sweep"] as const).map((k) => (
+        {(["all", "swap_fee", "limit_fee", "dca_fee", "bridge_fee"] as const).map((k) => (
           <Button
             key={k}
             size="sm"
