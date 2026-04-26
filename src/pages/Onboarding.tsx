@@ -563,6 +563,48 @@ const Onboarding = () => {
                 </div>
               </div>
             )}
+
+            {step === "language" && (
+              <div className="space-y-6">
+                <div>
+                  <div className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-[10px] uppercase tracking-widest text-primary">
+                    <Languages className="h-3 w-3" />
+                    Speak my language
+                  </div>
+                  <h2 className="text-xl font-light tracking-tight sm:text-2xl">
+                    What <span className="font-serif-italic text-primary">language</span> should I reply in?
+                  </h2>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Affects chat replies and voice transcription. Auto-detect mirrors whatever you write in.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {LANGUAGE_OPTIONS.map((opt) => {
+                    const active = language === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setLanguage(opt.value)}
+                        className={cn(
+                          "flex flex-col items-start gap-0.5 rounded-xl border px-3 py-2.5 text-left ease-vision",
+                          active
+                            ? "border-primary/60 bg-primary/10"
+                            : "border-border bg-card/30 hover:border-primary/30 hover:bg-card",
+                        )}
+                      >
+                        <span className="text-sm font-medium text-foreground">{opt.label}</span>
+                        <span className="text-[11px] text-muted-foreground">{opt.native}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[11px] text-muted-foreground/70">
+                  You can change this anytime in Settings.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Footer nav */}
