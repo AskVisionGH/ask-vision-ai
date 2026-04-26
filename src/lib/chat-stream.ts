@@ -356,6 +356,8 @@ export interface ParsedTx {
   solChange?: number;
   counterparty?: string | null;
   valueUsd: number | null;
+  /** Optional EVM chain id; when present the UI links to the right block explorer. */
+  chainId?: number;
 }
 
 export interface TokenPnL {
