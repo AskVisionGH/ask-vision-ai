@@ -264,8 +264,9 @@ serve(async (req) => {
       stoppedReason = "cap";
     }
 
-    // 2) Merge events, recompute aggregates.
-    const allEvents = mergeEvents(existingEvents, newEvents);
+    // 2) Merge events, enrich with USD where SOL was the pair, recompute aggregates.
+    const merged = mergeEvents(existingEvents, newEvents);
+    const allEvents = await enrichSolPriceUsd(merged);
     const aggregates = computeAggregates(allEvents);
 
     const totalScanned = (cached?.signatures_scanned ?? 0) + scannedThisRun;
