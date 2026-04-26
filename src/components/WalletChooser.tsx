@@ -307,28 +307,41 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
             (c) => c.name.toLowerCase() === row.walletName!.toLowerCase(),
           )
         : null;
+
+      // If a different EVM wallet is already connected, disconnect it first —
+      // wagmi's connect() refuses to swap connectors silently and RainbowKit
+      // hides its modal entirely while a wallet is connected.
+      if (evmConnected) {
+        try {
+          await disconnectEvm();
+        } catch {
+          /* ignore */
+        }
+      }
+
       if (target) {
         try {
+          // Closing the chooser before the wallet popup avoids the dialog
+          // overlay swallowing the wallet's account picker.
+          onOpenChange(false);
           await connectEvm({ connector: target });
           recordLastUsedWallet({
             address: row.address,
             chain: "evm",
             walletName: target.name,
           });
-          onOpenChange(false);
           return;
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
           if (!/user rejected|user cancel|user closed/i.test(msg)) {
-            // Connector not available (e.g. wallet uninstalled) — surface the
-            // RainbowKit modal so they can pick another.
-            openRainbowKit?.();
-            onOpenChange(false);
+            // Connector not available (e.g. wallet uninstalled) — fall back
+            // to the RainbowKit modal once the disconnect lands.
+            setPendingEvmModal(true);
           }
           return;
         }
       }
-      openRainbowKit?.();
+      setPendingEvmModal(true);
       onOpenChange(false);
     } catch (e) {
       toast.error("Couldn't reconnect wallet", {
