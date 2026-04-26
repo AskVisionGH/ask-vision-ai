@@ -127,7 +127,7 @@ const Trade = () => {
                   className="pointer-events-none absolute inset-0 -z-10 rounded-full bg-primary/40 blur-2xl animate-pulse-glow"
                   aria-hidden
                 />
-                <VisionLogo size={36} className="text-foreground drop-shadow-[0_0_18px_hsl(var(--primary)/0.7)] sm:h-14 sm:w-14" />
+                <VisionLogo size={40} className="text-foreground drop-shadow-[0_0_18px_hsl(var(--primary)/0.7)]" />
               </div>
               <p className="mt-3 text-xs text-muted-foreground sm:mt-4">
                 {tab === "limit"
