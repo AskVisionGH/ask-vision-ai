@@ -92,6 +92,10 @@ serve(async (req) => {
     // 3) Snapshot current holdings (for unrealized + symbol/logo enrichment)
     const balance = await fetchBalanceSnapshot(address, HELIUS_API_KEY);
 
+    // 3b) Backfill USD value for SOL-paired swaps using historical SOL price
+    //     (so e.g. "bought $HENRY with SOL" still produces cost basis).
+    await backfillSolValueUsd(parsed, balance);
+
     // 4) Compute per-token PnL
     const tokenPnL = computeTokenPnL(parsed, balance);
 
