@@ -337,11 +337,9 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
       if (solConnected) {
         try { await disconnectSolWallet(); } catch { /* ignore */ }
       }
-      // Single-wallet rule: connecting on Solana must drop any active EVM
-      // connection so the app never has two chains live at once.
-      if (evmConnected) {
-        try { await disconnectEvm(); } catch { /* ignore */ }
-      }
+      // Multi-chain: do NOT disconnect EVM when bringing up a Solana wallet.
+      // The user can have both live so they can swap on SOL and bridge on EVM
+      // in the same session.
       if (isSameAdapter) {
         // Hard browser security limit: dApps cannot open another wallet
         // extension's account picker, and Phantom auto-trusts the previous
@@ -380,11 +378,7 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
       if (evmConnected) {
         try { await disconnectEvm(); } catch { /* ignore */ }
       }
-      // Single-wallet rule: drop any active Solana session before bringing up
-      // the EVM one.
-      if (solConnected) {
-        try { await disconnectSolWallet(); } catch { /* ignore */ }
-      }
+      // Multi-chain: do NOT disconnect Solana when bringing up an EVM wallet.
       await connectEvm({ connector: target });
       onOpenChange(false);
     } catch (e) {
