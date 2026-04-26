@@ -237,7 +237,7 @@ const TOOLS = [
     function: {
       name: "analyze_contract",
       description:
-        "Run a safety/rug-risk audit on a Solana token: mint authority, freeze authority, LP lock %, top holder concentration, transfer tax, and known scam flags. Use for any safety/legitimacy question ('is X safe', 'rug check', 'honeypot', 'who holds this', 'is LP locked'), or proactively when the user pastes an unfamiliar mint.",
+        "Run a safety/rug-risk audit on a Solana token AND fetch its top 10 holders (addresses + % held + insider flag). Returns: mint authority, freeze authority, LP lock %, top-holder concentration, the top 10 holder wallets list, transfer tax, and known scam flags. Use for any safety/legitimacy question ('is X safe', 'rug check', 'honeypot', 'is LP locked'), AND for any 'who holds this', 'top holders', 'biggest holders', 'whale list' question. Also call it proactively when the user pastes an unfamiliar mint.",
       parameters: {
         type: "object",
         properties: {
