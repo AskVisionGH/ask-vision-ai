@@ -178,20 +178,17 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
   const [chains, setChains] = useState<Chain[]>([]);
   const [chainsLoading, setChainsLoading] = useState(true);
 
-  // Phase 1: source is locked to Solana (we already have the wallet adapter
-  // for it). Phase 2 will add EVM via wagmi.
-  const fromChain: Chain | undefined = useMemo(
-    () => chains.find((c) => c.id === SOLANA_CHAIN_ID),
-    [chains],
-  );
+  // Source chain is now selectable across SVM (Solana) and EVM chains.
+  // Default = Solana, since most existing users are SOL-first.
+  const [fromChain, setFromChain] = useState<Chain | null>(null);
   const [toChain, setToChain] = useState<Chain | null>(null);
 
   const [fromToken, setFromToken] = useState<BridgeToken | null>(null);
   const [toToken, setToToken] = useState<BridgeToken | null>(null);
   const [amount, setAmount] = useState("");
   const [slippageBps] = useState(50);
-  // Required when destination is on a different chain family (e.g. SOL→EVM).
-  // For same-family bridges (rare in v1) we default to the source address.
+  // Required when destination is on a different chain family. Same-family
+  // bridges (EVM↔EVM, SVM↔SVM) reuse the source address.
   const [destAddress, setDestAddress] = useState("");
 
   const [quote, setQuote] = useState<QuoteData | null>(null);
@@ -199,11 +196,22 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
   const [quoteError, setQuoteError] = useState<string | null>(null);
 
   const [picker, setPicker] = useState<null | { side: "from" | "to" }>(null);
-  const [chainPicker, setChainPicker] = useState<null | "to">(null);
+  const [chainPicker, setChainPicker] = useState<null | "from" | "to">(null);
   const [phase, setPhase] = useState<Phase>({ name: "idle" });
 
+  // EVM hooks (active whenever source is an EVM chain).
+  const { address: evmAddress, isConnected: evmConnected } = useAccount();
+  const { sendBridgeTx } = useEvmBridge();
+
+  const fromIsEvm = fromChain?.chainType === "EVM";
+  const fromIsSvm = fromChain?.chainType === "SVM" || fromChain?.id === SOLANA_CHAIN_ID;
+  const fromAddress = useMemo(() => {
+    if (fromIsEvm) return evmConnected && evmAddress ? evmAddress : null;
+    if (fromIsSvm) return connected && publicKey ? publicKey.toBase58() : null;
+    return null;
+  }, [fromIsEvm, fromIsSvm, evmConnected, evmAddress, connected, publicKey]);
+
   // 1s ticker while bridging so the countdown label re-renders every second.
-  // We keep the tick value in state (not a ref) because label rendering reads it.
   const [nowTick, setNowTick] = useState(() => Date.now());
   useEffect(() => {
     if (phase.name !== "bridging") return;
@@ -222,7 +230,9 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
         if (cancelled) return;
         const list: Chain[] = data.chains ?? [];
         setChains(list);
-        // Default destination → Ethereum mainnet (id 1) if available, else first EVM.
+        // Default source → Solana, default destination → Ethereum.
+        const sol = list.find((c) => c.id === SOLANA_CHAIN_ID);
+        if (sol) setFromChain(sol);
         const eth = list.find((c) => c.id === 1) ?? list.find((c) => c.chainType === "EVM");
         if (eth) setToChain(eth);
       } catch {
@@ -234,67 +244,137 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
     return () => { cancelled = true; };
   }, []);
 
-  // ---------- Default source token (SOL) once chains arrive ----------
+  // ---------- Default source token whenever source chain changes ----------
   useEffect(() => {
-    if (!fromChain || fromToken) return;
-    setFromToken({
-      address: SOL_NATIVE_ADDRESS,
-      symbol: "SOL",
-      name: "Solana",
-      decimals: 9,
-      logo: "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png",
-      priceUsd: null,
-      chainId: SOLANA_CHAIN_ID,
-    });
-  }, [fromChain, fromToken]);
-
-  // Source-token balance (Solana only for v1 — source chain is locked to SOL).
-  const [fromBalance, setFromBalance] = useState<number | null>(null);
-  useEffect(() => {
-    if (!connected || !publicKey || !fromToken || fromToken.chainId !== SOLANA_CHAIN_ID) {
-      setFromBalance(null);
-      return;
+    if (!fromChain) return;
+    // Reset token if it no longer matches the chain.
+    if (fromToken && fromToken.chainId === fromChain.id) return;
+    if (fromIsSvm) {
+      setFromToken({
+        address: SOL_NATIVE_ADDRESS,
+        symbol: "SOL",
+        name: "Solana",
+        decimals: 9,
+        logo: "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png",
+        priceUsd: null,
+        chainId: SOLANA_CHAIN_ID,
+      });
+    } else if (fromIsEvm) {
+      setFromToken({
+        address: EVM_NATIVE_ADDRESS,
+        symbol: fromChain.nativeSymbol || "ETH",
+        name: fromChain.nativeSymbol || "Native",
+        decimals: 18,
+        logo: fromChain.logo,
+        priceUsd: null,
+        chainId: fromChain.id,
+      });
+    } else {
+      setFromToken(null);
     }
-    let cancelled = false;
-    setFromBalance(null);
-    const owner = new PublicKey(publicKey.toBase58());
-    (async () => {
-      try {
-        const isNative =
-          fromToken.address === SOL_NATIVE_ADDRESS || fromToken.address === WSOL_MINT;
-        if (isNative) {
-          const lamports = await connection.getBalance(owner);
-          if (!cancelled) setFromBalance(lamports / LAMPORTS_PER_SOL);
-        } else {
-          const mint = new PublicKey(fromToken.address);
-          const resp = await connection.getParsedTokenAccountsByOwner(owner, { mint });
-          let total = 0;
-          for (const acc of resp.value) {
-            const ui = acc.account.data.parsed?.info?.tokenAmount?.uiAmount;
-            if (typeof ui === "number") total += ui;
+    // Clear amount/quote so we don't carry stale state across chain swaps.
+    setAmount("");
+    setQuote(null);
+  }, [fromChain?.id, fromIsSvm, fromIsEvm]);
+
+  // Source-token balance — branches by chain family.
+  const [fromBalance, setFromBalance] = useState<number | null>(null);
+  // Native EVM balance via wagmi.
+  const { data: evmNativeBalance } = useBalance({
+    address: fromIsEvm && evmConnected ? (evmAddress as Hex) : undefined,
+    chainId: fromIsEvm ? Number(fromChain?.id ?? 0) : undefined,
+  });
+
+  useEffect(() => {
+    // Solana balance branch (RPC parsed token accounts).
+    if (fromIsSvm && connected && publicKey && fromToken && fromToken.chainId === SOLANA_CHAIN_ID) {
+      let cancelled = false;
+      setFromBalance(null);
+      const owner = new PublicKey(publicKey.toBase58());
+      (async () => {
+        try {
+          const isNative =
+            fromToken.address === SOL_NATIVE_ADDRESS || fromToken.address === WSOL_MINT;
+          if (isNative) {
+            const lamports = await connection.getBalance(owner);
+            if (!cancelled) setFromBalance(lamports / LAMPORTS_PER_SOL);
+          } else {
+            const mint = new PublicKey(fromToken.address);
+            const resp = await connection.getParsedTokenAccountsByOwner(owner, { mint });
+            let total = 0;
+            for (const acc of resp.value) {
+              const ui = acc.account.data.parsed?.info?.tokenAmount?.uiAmount;
+              if (typeof ui === "number") total += ui;
+            }
+            if (!cancelled) setFromBalance(total);
           }
-          if (!cancelled) setFromBalance(total);
+        } catch {
+          if (!cancelled) setFromBalance(null);
         }
-      } catch {
-        if (!cancelled) setFromBalance(null);
+      })();
+      return () => { cancelled = true; };
+    }
+
+    // EVM balance branch.
+    if (fromIsEvm && evmConnected && evmAddress && fromToken && fromToken.chainId === fromChain?.id) {
+      const isNative = fromToken.address.toLowerCase() === EVM_NATIVE_ADDRESS;
+      if (isNative) {
+        setFromBalance(evmNativeBalance ? Number(formatUnits(evmNativeBalance.value, evmNativeBalance.decimals)) : null);
+        return;
       }
-    })();
-    return () => { cancelled = true; };
-  }, [connected, publicKey, fromToken, connection]);
+      // ERC-20 balance fetched via direct readContract through wagmi's public client.
+      let cancelled = false;
+      setFromBalance(null);
+      (async () => {
+        try {
+          const { getPublicClient } = await import("wagmi/actions");
+          const { config } = await import("@/providers/EvmWalletProvider");
+          const pc = getPublicClient(config as any, { chainId: Number(fromChain.id) });
+          if (!pc) return;
+          const raw = (await (pc as any).readContract({
+            address: fromToken.address as Hex,
+            abi: erc20Abi,
+            functionName: "balanceOf",
+            args: [evmAddress as Hex],
+          })) as bigint;
+          if (!cancelled) setFromBalance(Number(formatUnits(raw, fromToken.decimals)));
+        } catch {
+          if (!cancelled) setFromBalance(null);
+        }
+      })();
+      return () => { cancelled = true; };
+    }
+
+    setFromBalance(null);
+  }, [
+    fromIsSvm, fromIsEvm, connected, publicKey, evmConnected, evmAddress,
+    fromToken, fromChain?.id, connection, evmNativeBalance,
+  ]);
 
   const handleMax = useCallback(() => {
     if (fromBalance == null || !fromToken) return;
-    const isNative =
-      fromToken.address === SOL_NATIVE_ADDRESS || fromToken.address === WSOL_MINT;
-    if (isNative) {
-      // Reserve a bit for rent + tx fees on native SOL.
-      const reserve = 0.01;
-      const max = Math.max(0, fromBalance - reserve);
-      setAmount(max > 0 ? max.toFixed(6) : "");
-    } else {
-      setAmount(fromBalance > 0 ? String(fromBalance) : "");
+    if (fromIsSvm) {
+      const isNative =
+        fromToken.address === SOL_NATIVE_ADDRESS || fromToken.address === WSOL_MINT;
+      if (isNative) {
+        const reserve = 0.01;
+        const max = Math.max(0, fromBalance - reserve);
+        setAmount(max > 0 ? max.toFixed(6) : "");
+      } else {
+        setAmount(fromBalance > 0 ? String(fromBalance) : "");
+      }
+    } else if (fromIsEvm) {
+      const isNative = fromToken.address.toLowerCase() === EVM_NATIVE_ADDRESS;
+      if (isNative) {
+        // Reserve enough for the bridge tx + approval gas.
+        const reserve = 0.005;
+        const max = Math.max(0, fromBalance - reserve);
+        setAmount(max > 0 ? max.toFixed(6) : "");
+      } else {
+        setAmount(fromBalance > 0 ? String(fromBalance) : "");
+      }
     }
-  }, [fromBalance, fromToken]);
+  }, [fromBalance, fromToken, fromIsSvm, fromIsEvm]);
 
   const numericAmount = useMemo(() => {
     const n = parseFloat(amount);
