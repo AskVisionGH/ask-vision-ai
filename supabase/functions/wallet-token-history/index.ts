@@ -378,12 +378,14 @@ function parseTxForToken(
         signature: tx.signature,
         timestamp: tx.timestamp,
         side: "buy",
+        kind: "swap",
         tokenAmount: outSide.amount,
         pairMint: inSide?.mint ?? null,
         pairSymbol: inSide ? shortMint(inSide.mint) : null,
         pairAmount: inSide?.amount ?? null,
         valueUsd: stableUsd(inSide, outSide),
         source: tx.source ?? null,
+        counterparty: null,
       };
     }
     // Wallet SPENT the target mint => sell
@@ -392,17 +394,21 @@ function parseTxForToken(
         signature: tx.signature,
         timestamp: tx.timestamp,
         side: "sell",
+        kind: "swap",
         tokenAmount: inSide.amount,
         pairMint: outSide?.mint ?? null,
         pairSymbol: outSide ? shortMint(outSide.mint) : null,
         pairAmount: outSide?.amount ?? null,
         valueUsd: stableUsd(inSide, outSide),
         source: tx.source ?? null,
+        counterparty: null,
       };
     }
   }
 
-  // SPL token transfer touching the wallet
+  // SPL token transfer touching the wallet — NOT a buy/sell, just a movement.
+  // We tag with kind="transfer" so aggregates and the UI can distinguish
+  // "first acquisition via transfer from X" from "first DEX buy".
   if (Array.isArray(tx.tokenTransfers)) {
     for (const tt of tx.tokenTransfers) {
       if (tt?.mint !== mint) continue;
@@ -413,12 +419,14 @@ function parseTxForToken(
           signature: tx.signature,
           timestamp: tx.timestamp,
           side: "buy",
+          kind: "transfer",
           tokenAmount: amt,
           pairMint: null,
           pairSymbol: null,
           pairAmount: null,
           valueUsd: null,
           source: tx.source ?? null,
+          counterparty: tt.fromUserAccount ?? null,
         };
       }
       if (tt.fromUserAccount === wallet) {
@@ -426,12 +434,14 @@ function parseTxForToken(
           signature: tx.signature,
           timestamp: tx.timestamp,
           side: "sell",
+          kind: "transfer",
           tokenAmount: amt,
           pairMint: null,
           pairSymbol: null,
           pairAmount: null,
           valueUsd: null,
           source: tx.source ?? null,
+          counterparty: tt.toUserAccount ?? null,
         };
       }
     }
@@ -440,22 +450,30 @@ function parseTxForToken(
   // Native SOL flow only matters if the user asked about SOL
   if (mint === SOL_MINT && Array.isArray(tx.nativeTransfers)) {
     let net = 0;
+    let counterparty: string | null = null;
     for (const nt of tx.nativeTransfers) {
       const amt = Number(nt.amount ?? 0) / 1e9;
-      if (nt.toUserAccount === wallet) net += amt;
-      else if (nt.fromUserAccount === wallet) net -= amt;
+      if (nt.toUserAccount === wallet) {
+        net += amt;
+        if (!counterparty && nt.fromUserAccount) counterparty = nt.fromUserAccount;
+      } else if (nt.fromUserAccount === wallet) {
+        net -= amt;
+        if (!counterparty && nt.toUserAccount) counterparty = nt.toUserAccount;
+      }
     }
     if (Math.abs(net) > 0.000001) {
       return {
         signature: tx.signature,
         timestamp: tx.timestamp,
         side: net > 0 ? "buy" : "sell",
+        kind: "transfer",
         tokenAmount: Math.abs(net),
         pairMint: null,
         pairSymbol: null,
         pairAmount: null,
         valueUsd: null,
         source: tx.source ?? null,
+        counterparty,
       };
     }
   }
