@@ -143,7 +143,7 @@ const App = () => (
       <AuthProvider>
         <ProfileProvider>
           <WalletContextProvider>
-            <EvmWalletProvider>
+            <EvmWalletProvider queryClient={queryClient}>
             <TooltipProvider>
               <Toaster />
               <Sonner />
