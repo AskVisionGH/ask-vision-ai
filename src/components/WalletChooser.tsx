@@ -104,12 +104,18 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
   const [showSolanaOptions, setShowSolanaOptions] = useState(false);
   const [pendingSolanaWalletName, setPendingSolanaWalletName] = useState<WalletName | null>(null);
   const [solanaTargetAddress, setSolanaTargetAddress] = useState<string | null>(null);
+  const [showEvmOptions, setShowEvmOptions] = useState(false);
+  const [pendingEvmConnectorId, setPendingEvmConnectorId] = useState<string | null>(null);
+  const [evmTargetAddress, setEvmTargetAddress] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) {
       setShowSolanaOptions(false);
       setPendingSolanaWalletName(null);
       setSolanaTargetAddress(null);
+      setShowEvmOptions(false);
+      setPendingEvmConnectorId(null);
+      setEvmTargetAddress(null);
     }
   }, [open]);
 
@@ -257,51 +263,16 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
       if (row.chain === "solana") {
         setSolanaTargetAddress(row.address);
         setShowSolanaOptions(true);
+        setShowEvmOptions(false);
         return;
       }
 
-      // EVM branch
-      const target = row.walletName
-        ? evmConnectors.find(
-            (c) => c.name.toLowerCase() === row.walletName!.toLowerCase(),
-          )
-        : null;
-
-      // If a different EVM wallet is already connected, disconnect it first —
-      // wagmi's connect() refuses to swap connectors silently and RainbowKit
-      // hides its modal entirely while a wallet is connected.
-      if (evmConnected) {
-        try {
-          await disconnectEvm();
-        } catch {
-          /* ignore */
-        }
-      }
-
-      if (target) {
-        try {
-          // Closing the chooser before the wallet popup avoids the dialog
-          // overlay swallowing the wallet's account picker.
-          onOpenChange(false);
-          await connectEvm({ connector: target });
-          recordLastUsedWallet({
-            address: row.address,
-            chain: "evm",
-            walletName: target.name,
-          });
-          return;
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          if (!/user rejected|user cancel|user closed/i.test(msg)) {
-            // Connector not available (e.g. wallet uninstalled) — fall back
-            // to the RainbowKit modal once the disconnect lands.
-            setPendingEvmModal(true);
-          }
-          return;
-        }
-      }
-      setPendingEvmModal(true);
-      onOpenChange(false);
+      // EVM branch — show explicit provider chooser, never auto-launch a
+      // connector based on stored history.
+      setEvmTargetAddress(row.address);
+      setShowEvmOptions(true);
+      setShowSolanaOptions(false);
+      return;
     } catch (e) {
       toast.error("Couldn't reconnect wallet", {
         description: e instanceof Error ? e.message : "Try the new-wallet button below.",
@@ -314,6 +285,7 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
   const handleNewSolana = () => {
     setSolanaTargetAddress(null);
     setShowSolanaOptions((v) => !v);
+    setShowEvmOptions(false);
   };
 
   const handleSelectNewSolanaWallet = async (walletName: WalletName) => {
@@ -331,8 +303,18 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
     selectSolWallet(walletName);
   };
 
-  const handleNewEvm = async () => {
-    onOpenChange(false);
+  const handleNewEvm = () => {
+    setEvmTargetAddress(null);
+    setShowEvmOptions((v) => !v);
+    setShowSolanaOptions(false);
+  };
+
+  const handleSelectEvmConnector = async (connectorId: string) => {
+    const target = evmConnectors.find((c) => c.id === connectorId);
+    if (!target) return;
+    setPendingEvmConnectorId(connectorId);
+    setShowEvmOptions(false);
+
     if (evmConnected) {
       try {
         await disconnectEvm();
@@ -340,9 +322,19 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
         /* ignore */
       }
     }
-    // RainbowKit hides the connect modal while a wallet is connected, so we
-    // queue the open and let the effect fire it once disconnect lands.
-    setPendingEvmModal(true);
+
+    try {
+      onOpenChange(false);
+      await connectEvm({ connector: target });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/user rejected|user cancel|user closed/i.test(msg)) {
+        toast.error("Couldn't connect that wallet", { description: msg });
+      }
+    } finally {
+      setPendingEvmConnectorId(null);
+      setBusyAddress(null);
+    }
   };
 
   return (
