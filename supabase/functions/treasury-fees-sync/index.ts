@@ -80,12 +80,12 @@ Deno.serve(async (req) => {
       errors: [] as string[],
     };
 
-    // 1. Mirror Solana sweep runs ----------------------------------------
-    try {
-      summary.swap_sweeps = await syncSolanaSweeps(supabase);
-    } catch (e) {
-      summary.errors.push(`sweeps: ${e instanceof Error ? e.message : String(e)}`);
-    }
+    // 1. Solana sweeps are NO LONGER mirrored into treasury_fees.
+    // We now record per-user `swap_fee` rows at confirmation time via
+    // the `record-swap-fee` edge function, which gives us proper user
+    // attribution. The `sweep_runs` table still exists as raw on-chain
+    // audit, but mirroring would double-count revenue here.
+    summary.swap_sweeps = 0;
 
     // 2. Mirror DCA upfront fees ----------------------------------------
     try {
