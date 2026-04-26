@@ -1282,8 +1282,12 @@ const BridgeTokenPickerDialog = ({
   onPick: (t: BridgeToken) => void;
 }) => {
   const { publicKey, connected } = useWallet();
+  const { address: evmWalletAddress, isConnected: evmIsConnected } = useAccount();
   const walletAddress = connected && publicKey ? publicKey.toBase58() : null;
   const isSolanaChain = chain?.chainType === "SVM" || chain?.id === SOLANA_CHAIN_ID;
+  const isEvmChain = !isSolanaChain && chain != null;
+  const evmAddressForChain =
+    isEvmChain && evmIsConnected && evmWalletAddress ? evmWalletAddress : null;
 
   const [tokens, setTokens] = useState<BridgeToken[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1319,41 +1323,76 @@ const BridgeTokenPickerDialog = ({
     return () => { cancelled = true; };
   }, [open, chain?.id]);
 
-  // Fetch wallet holdings (Solana-only — no EVM balance source today).
+  // Fetch wallet holdings — Solana via wallet-balance, EVM via the new
+  // evm-wallet-balance edge function (multicalls balanceOf for the chain's
+  // top tokens).
   useEffect(() => {
-    if (!open || !isSolanaChain || !walletAddress) {
-      setHoldings([]);
-      return;
-    }
-    let cancelled = false;
-    setHoldingsLoading(true);
-    (async () => {
-      try {
-        const { data, error } = await supabase.functions.invoke("wallet-balance", {
-          body: { address: walletAddress },
-        });
-        if (cancelled) return;
-        if (error || !data || data.error) {
-          setHoldings([]);
-          return;
+    if (!open) return;
+    if (isSolanaChain && walletAddress) {
+      let cancelled = false;
+      setHoldingsLoading(true);
+      (async () => {
+        try {
+          const { data, error } = await supabase.functions.invoke("wallet-balance", {
+            body: { address: walletAddress },
+          });
+          if (cancelled) return;
+          if (error || !data || data.error) {
+            setHoldings([]);
+            return;
+          }
+          const list = Array.isArray(data.holdings) ? data.holdings : [];
+          const mapped: HoldingMeta[] = list
+            .filter((h: any) => (h.valueUsd ?? 0) >= BRIDGE_HOLDINGS_MIN_USD && h.mint)
+            .map((h: any) => ({
+              address: h.mint as string,
+              amount: typeof h.amount === "number" ? h.amount : 0,
+              valueUsd: typeof h.valueUsd === "number" ? h.valueUsd : null,
+            }));
+          setHoldings(mapped);
+        } catch {
+          if (!cancelled) setHoldings([]);
+        } finally {
+          if (!cancelled) setHoldingsLoading(false);
         }
-        const list = Array.isArray(data.holdings) ? data.holdings : [];
-        const mapped: HoldingMeta[] = list
-          .filter((h: any) => (h.valueUsd ?? 0) >= BRIDGE_HOLDINGS_MIN_USD && h.mint)
-          .map((h: any) => ({
-            address: h.mint as string,
-            amount: typeof h.amount === "number" ? h.amount : 0,
-            valueUsd: typeof h.valueUsd === "number" ? h.valueUsd : null,
-          }));
-        setHoldings(mapped);
-      } catch {
-        if (!cancelled) setHoldings([]);
-      } finally {
-        if (!cancelled) setHoldingsLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [open, isSolanaChain, walletAddress]);
+      })();
+      return () => { cancelled = true; };
+    }
+
+    if (isEvmChain && evmAddressForChain && chain) {
+      let cancelled = false;
+      setHoldingsLoading(true);
+      (async () => {
+        try {
+          const { data, error } = await supabase.functions.invoke("evm-wallet-balance", {
+            body: { address: evmAddressForChain, chainId: Number(chain.id) },
+          });
+          if (cancelled) return;
+          if (error || !data || data.error) {
+            setHoldings([]);
+            return;
+          }
+          const list = Array.isArray(data.holdings) ? data.holdings : [];
+          const mapped: HoldingMeta[] = list
+            .filter((h: any) => h.address)
+            .map((h: any) => ({
+              address: String(h.address),
+              amount: typeof h.amount === "number" ? h.amount : 0,
+              valueUsd: typeof h.valueUsd === "number" ? h.valueUsd : null,
+            }));
+          setHoldings(mapped);
+        } catch {
+          if (!cancelled) setHoldings([]);
+        } finally {
+          if (!cancelled) setHoldingsLoading(false);
+        }
+      })();
+      return () => { cancelled = true; };
+    }
+
+    setHoldings([]);
+    return undefined;
+  }, [open, isSolanaChain, isEvmChain, walletAddress, evmAddressForChain, chain?.id]);
 
   const recents = useMemo(
     () => (open && chain ? getBridgeRecents(chain.id) : []),
