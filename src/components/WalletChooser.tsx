@@ -58,7 +58,7 @@ const ChainBadge = ({ chain }: { chain: WalletChain }) => (
       "rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-widest",
       chain === "solana"
         ? "border-primary/40 bg-primary/10 text-primary"
-        : "border-blue-500/40 bg-blue-500/10 text-blue-400",
+        : "border-accent/40 bg-accent/10 text-accent-foreground",
     )}
   >
     {chain === "solana" ? "Solana" : "EVM"}
@@ -330,7 +330,7 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
                       "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
                       row.chain === "solana"
                         ? "bg-primary/15 text-primary"
-                        : "bg-blue-500/15 text-blue-400",
+                        : "bg-accent/20 text-accent-foreground",
                     )}
                   >
                     <Wallet className="h-3.5 w-3.5" />
@@ -342,7 +342,7 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
                       </span>
                       <ChainBadge chain={row.chain} />
                       {row.isActive && (
-                        <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-emerald-400">
+                        <span className="rounded-full border border-primary/50 bg-primary/15 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-primary">
                           Connected
                         </span>
                       )}
@@ -393,7 +393,7 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
             onClick={handleNewEvm}
             className={cn(
               "ease-vision rounded-xl border-border/70 text-xs",
-              preferredChain === "evm" && "border-blue-500/60 bg-blue-500/10",
+              preferredChain === "evm" && "border-accent/60 bg-accent/10",
             )}
           >
             <Plus className="mr-1.5 h-3 w-3" />
