@@ -75,7 +75,7 @@ type TreasuryFee = {
   id: string;
   chain: "solana" | "ethereum";
   treasury_address: string;
-  source_kind: "swap_fee" | "dca_fee" | "bridge_fee" | "sweep" | "limit_fee" | "transfer_fee" | "other";
+  source_kind: "swap_fee" | "swap_upfront_fee" | "dca_fee" | "bridge_fee" | "sweep" | "limit_fee" | "transfer_fee" | "other";
   asset_symbol: string | null;
   asset_address: string | null;
   amount: number;
@@ -1021,6 +1021,10 @@ const EmailsTab = () => {
 
 const SOURCE_LABELS: Record<TreasuryFee["source_kind"], string> = {
   swap_fee: "Swap fee",
+  // Token-2022 outputs can't use Jupiter's feeAccount path, so we collect the
+  // 1% upfront via a separate transfer tx. It's still a swap fee from the
+  // user's perspective — label it as such.
+  swap_upfront_fee: "Swap fee",
   limit_fee: "Limit fee",
   dca_fee: "DCA fee",
   bridge_fee: "Bridge fee",
