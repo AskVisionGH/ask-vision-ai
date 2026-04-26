@@ -103,7 +103,10 @@ function sanitize(raw: unknown): string {
 function fallback(message: string): string {
   const cleaned = message.replace(/\s+/g, " ").trim();
   if (!cleaned) return "New chat";
-  const sliced = cleaned.slice(0, 40).trim();
+  // Replace any base58 contract address with the word "Token" to keep the
+  // fallback title human-readable.
+  const noAddr = cleaned.replace(/\b[1-9A-HJ-NP-Za-km-z]{20,}\b/g, "Token");
+  const sliced = noAddr.replace(/\s+/g, " ").slice(0, 40).trim();
   return sliced.charAt(0).toUpperCase() + sliced.slice(1);
 }
 
