@@ -958,14 +958,35 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
             </div>
           )}
 
-          <Button
-            onClick={() => ctaAction?.()}
-            disabled={ctaDisabled || isBusy || ctaAction == null}
-            className="ease-vision h-11 w-full rounded-full font-mono text-[11px] uppercase tracking-wider"
-          >
-            {isBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            {ctaLabel}
-          </Button>
+          {/* CTA — when source is EVM and not connected, render the RainbowKit
+              connect button instead of our regular Bridge button. */}
+          {fromIsEvm && !sourceConnected ? (
+            <div className="[&_button]:!h-11 [&_button]:!w-full [&_button]:!rounded-full [&_button]:!font-mono [&_button]:!text-[11px] [&_button]:!uppercase [&_button]:!tracking-wider">
+              <ConnectButton.Custom>
+                {({ openConnectModal }) => (
+                  <Button onClick={openConnectModal} className="ease-vision h-11 w-full rounded-full font-mono text-[11px] uppercase tracking-wider">
+                    Connect EVM wallet
+                  </Button>
+                )}
+              </ConnectButton.Custom>
+            </div>
+          ) : !sourceConnected && fromIsSvm ? (
+            <Button
+              onClick={() => setVisible(true)}
+              className="ease-vision h-11 w-full rounded-full font-mono text-[11px] uppercase tracking-wider"
+            >
+              Connect Solana wallet
+            </Button>
+          ) : (
+            <Button
+              onClick={() => ctaAction?.()}
+              disabled={ctaDisabled || isBusy || ctaAction == null}
+              className="ease-vision h-11 w-full rounded-full font-mono text-[11px] uppercase tracking-wider"
+            >
+              {isBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {ctaLabel}
+            </Button>
+          )}
 
           <p className="text-center font-mono text-[9px] uppercase tracking-wider text-muted-foreground/60">
             Vision routing · {chains.length} chains supported
@@ -973,15 +994,26 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
         </div>
       </div>
 
-      {/* Chain picker (destination only for v1) */}
+      {/* Chain picker — both source and destination */}
       <ChainPickerDialog
         open={chainPicker !== null}
         onClose={() => setChainPicker(null)}
-        chains={chains.filter((c) => c.id !== SOLANA_CHAIN_ID)}
+        // Don't let the user pick the same chain on both sides.
+        chains={chains.filter((c) => {
+          if (chainPicker === "from") return c.id !== toChain?.id;
+          if (chainPicker === "to") return c.id !== fromChain?.id;
+          return true;
+        })}
         loading={chainsLoading}
+        title={chainPicker === "from" ? "Select source chain" : "Select destination chain"}
         onPick={(c) => {
-          setToChain(c);
-          setToToken(null);
+          if (chainPicker === "from") {
+            setFromChain(c);
+            setFromToken(null);
+          } else {
+            setToChain(c);
+            setToToken(null);
+          }
           setChainPicker(null);
         }}
       />
