@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, Loader2, X } from "lucide-react";
+import { useWallet } from "@solana/wallet-adapter-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { TokenLogo } from "@/components/TokenLogo";
+import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
 export interface TokenMeta {
@@ -12,6 +14,12 @@ export interface TokenMeta {
   decimals: number;
   logo: string | null;
   priceUsd: number | null;
+}
+
+/** Holding row decorated with optional wallet amount/value for the "Your wallet" section. */
+interface HoldingMeta extends TokenMeta {
+  amount?: number;
+  valueUsd?: number | null;
 }
 
 interface Props {
@@ -32,6 +40,8 @@ const POPULAR: TokenMeta[] = [
 ];
 
 const RECENT_KEY = "vision:recent-tokens";
+/** Hide tokens worth less than this in the "Your wallet" section to suppress airdrop spam / dust. */
+const HOLDINGS_MIN_USD = 1;
 
 const getRecent = (): TokenMeta[] => {
   if (typeof window === "undefined") return [];
@@ -58,13 +68,27 @@ const fmtPrice = (n: number | null) => {
   return `$${n.toLocaleString("en-US", { maximumFractionDigits: n < 1 ? 6 : 2 })}`;
 };
 
+const fmtUsd = (n: number) => `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+
+const fmtAmount = (n: number) => {
+  if (n >= 1000) return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  if (n >= 1) return n.toLocaleString("en-US", { maximumFractionDigits: 4 });
+  return n.toLocaleString("en-US", { maximumFractionDigits: 6 });
+};
+
 export const TokenPickerDialog = ({ open, onOpenChange, onSelect, excludeAddress }: Props) => {
+  const { publicKey, connected } = useWallet();
+  const walletAddress = connected && publicKey ? publicKey.toBase58() : null;
+
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<TokenMeta[]>([]);
   const [searching, setSearching] = useState(false);
+  const [holdings, setHoldings] = useState<HoldingMeta[]>([]);
+  const [holdingsLoading, setHoldingsLoading] = useState(false);
   const recent = useMemo(() => (open ? getRecent() : []), [open]);
   const debounceRef = useRef<number | null>(null);
 
+  // Reset query/results when dialog closes.
   useEffect(() => {
     if (!open) {
       setQuery("");
@@ -72,6 +96,53 @@ export const TokenPickerDialog = ({ open, onOpenChange, onSelect, excludeAddress
     }
   }, [open]);
 
+  // Fetch wallet holdings when the dialog opens. Cached per session by Supabase
+  // edge runtime, so re-opens are cheap.
+  useEffect(() => {
+    if (!open || !walletAddress) {
+      if (!walletAddress) setHoldings([]);
+      return;
+    }
+    let cancelled = false;
+    setHoldingsLoading(true);
+    (async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("wallet-balance", {
+          body: { walletAddress },
+        });
+        if (cancelled) return;
+        if (error || !data || data.error) {
+          setHoldings([]);
+          return;
+        }
+        const list = Array.isArray(data.holdings) ? data.holdings : [];
+        const mapped: HoldingMeta[] = list
+          .filter((h: any) => (h.valueUsd ?? 0) >= HOLDINGS_MIN_USD)
+          .map((h: any) => ({
+            symbol: h.symbol ?? "?",
+            name: h.name ?? h.symbol ?? "Unknown",
+            address: h.mint,
+            decimals: h.decimals ?? 9,
+            logo: h.logo ?? null,
+            priceUsd: typeof h.priceUsd === "number" ? h.priceUsd : null,
+            amount: typeof h.amount === "number" ? h.amount : 0,
+            valueUsd: typeof h.valueUsd === "number" ? h.valueUsd : null,
+          }))
+          .filter((t: HoldingMeta) => !!t.address)
+          .sort((a: HoldingMeta, b: HoldingMeta) => (b.valueUsd ?? 0) - (a.valueUsd ?? 0));
+        setHoldings(mapped);
+      } catch {
+        if (!cancelled) setHoldings([]);
+      } finally {
+        if (!cancelled) setHoldingsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, walletAddress]);
+
+  // Debounced Jupiter token search.
   useEffect(() => {
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
     const q = query.trim();
@@ -112,7 +183,7 @@ export const TokenPickerDialog = ({ open, onOpenChange, onSelect, excludeAddress
     };
   }, [query]);
 
-  const filtered = (list: TokenMeta[]) =>
+  const filterExcluded = <T extends TokenMeta>(list: T[]): T[] =>
     excludeAddress ? list.filter((t) => t.address !== excludeAddress) : list;
 
   const showResults = query.trim().length > 0;
@@ -122,6 +193,16 @@ export const TokenPickerDialog = ({ open, onOpenChange, onSelect, excludeAddress
     onSelect(t);
     onOpenChange(false);
   };
+
+  // Section dedupe: holdings → recent → popular. A token only appears in its
+  // first matching section so the picker doesn't repeat the same row.
+  const visibleHoldings = filterExcluded(holdings);
+  const holdingMints = new Set(visibleHoldings.map((h) => h.address));
+  const visibleRecent = filterExcluded(recent).filter((t) => !holdingMints.has(t.address));
+  const recentMints = new Set(visibleRecent.map((t) => t.address));
+  const visiblePopular = filterExcluded(POPULAR).filter(
+    (t) => !holdingMints.has(t.address) && !recentMints.has(t.address),
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -159,27 +240,45 @@ export const TokenPickerDialog = ({ open, onOpenChange, onSelect, excludeAddress
                 <div className="flex items-center justify-center py-8 text-muted-foreground/60">
                   <Loader2 className="h-4 w-4 animate-spin" />
                 </div>
-              ) : filtered(results).length === 0 ? (
+              ) : filterExcluded(results).length === 0 ? (
                 <div className="px-3 py-8 text-center text-xs text-muted-foreground/60">
                   No tokens found.
                 </div>
               ) : (
-                filtered(results).map((t) => <TokenRow key={t.address} token={t} onSelect={pick} />)
+                filterExcluded(results).map((t) => <TokenRow key={t.address} token={t} onSelect={pick} />)
               )}
             </div>
           ) : (
             <>
-              {recent.length > 0 && (
+              {walletAddress && (
+                <div className="px-2 py-2">
+                  <SectionLabel>Your wallet</SectionLabel>
+                  {holdingsLoading && visibleHoldings.length === 0 ? (
+                    <div className="flex items-center justify-center py-4 text-muted-foreground/60">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    </div>
+                  ) : visibleHoldings.length === 0 ? (
+                    <p className="px-3 py-2 text-[11px] text-muted-foreground/60">
+                      No tokens worth $1+ in this wallet.
+                    </p>
+                  ) : (
+                    visibleHoldings.map((t) => (
+                      <TokenRow key={`h-${t.address}`} token={t} onSelect={pick} />
+                    ))
+                  )}
+                </div>
+              )}
+              {visibleRecent.length > 0 && (
                 <div className="px-2 py-2">
                   <SectionLabel>Recent</SectionLabel>
-                  {filtered(recent).map((t) => (
+                  {visibleRecent.map((t) => (
                     <TokenRow key={`r-${t.address}`} token={t} onSelect={pick} />
                   ))}
                 </div>
               )}
               <div className="px-2 py-2">
                 <SectionLabel>Popular</SectionLabel>
-                {filtered(POPULAR).map((t) => (
+                {visiblePopular.map((t) => (
                   <TokenRow key={`p-${t.address}`} token={t} onSelect={pick} />
                 ))}
               </div>
@@ -197,22 +296,42 @@ const SectionLabel = ({ children }: { children: React.ReactNode }) => (
   </div>
 );
 
-const TokenRow = ({ token, onSelect }: { token: TokenMeta; onSelect: (t: TokenMeta) => void }) => (
-  <button
-    type="button"
-    onClick={() => onSelect(token)}
-    className={cn(
-      "ease-vision flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left",
-      "hover:bg-secondary/60",
-    )}
-  >
-    <TokenLogo logo={token.logo} symbol={token.symbol} size={32} />
-    <div className="min-w-0 flex-1">
-      <p className="truncate text-sm font-medium text-foreground">{token.symbol}</p>
-      <p className="truncate text-[11px] text-muted-foreground">{token.name}</p>
-    </div>
-    {token.priceUsd != null && (
-      <span className="font-mono text-[11px] text-muted-foreground">{fmtPrice(token.priceUsd)}</span>
-    )}
-  </button>
-);
+const TokenRow = ({ token, onSelect }: { token: HoldingMeta; onSelect: (t: TokenMeta) => void }) => {
+  const showHolding = typeof token.amount === "number" && token.amount > 0;
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(token)}
+      className={cn(
+        "ease-vision flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left",
+        "hover:bg-secondary/60",
+      )}
+    >
+      <TokenLogo logo={token.logo} symbol={token.symbol} size={32} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-foreground">{token.symbol}</p>
+        <p className="truncate text-[11px] text-muted-foreground">{token.name}</p>
+      </div>
+      <div className="flex flex-col items-end">
+        {showHolding ? (
+          <>
+            <span className="font-mono text-[11px] text-foreground">
+              {fmtAmount(token.amount!)}
+            </span>
+            {token.valueUsd != null && (
+              <span className="font-mono text-[10px] text-muted-foreground">
+                {fmtUsd(token.valueUsd)}
+              </span>
+            )}
+          </>
+        ) : (
+          token.priceUsd != null && (
+            <span className="font-mono text-[11px] text-muted-foreground">
+              {fmtPrice(token.priceUsd)}
+            </span>
+          )
+        )}
+      </div>
+    </button>
+  );
+};
