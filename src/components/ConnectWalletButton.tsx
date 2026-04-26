@@ -69,8 +69,8 @@ export const ConnectWalletButton = ({ className, size = "lg" }: Props) => {
   // Chain badge — small coloured dot + 3-letter ticker so users instantly
   // see which network the connected wallet is on. Solana takes precedence
   // because of the single-wallet invariant above.
-  const chainBadge: { label: string; dotClass: string } | null = connected
-    ? { label: "SOL", dotClass: "bg-[#14F195]" }
+  const chainBadge = connected
+    ? solanaBadge()
     : evmConnected
       ? evmChainBadge(evmChainId)
       : null;
