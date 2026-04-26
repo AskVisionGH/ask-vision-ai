@@ -58,7 +58,7 @@ export const useEvmBridge = () => {
       // 2. ERC-20 approval (only when source is a token, not native).
       if (params.approvalAddress && !isNative(params.fromTokenAddress)) {
         const required = BigInt(params.fromAmount);
-        const currentAllowance = (await publicClient.readContract({
+        const currentAllowance = (await (publicClient as any).readContract({
           address: params.fromTokenAddress as Hex,
           abi: erc20Abi,
           functionName: "allowance",
@@ -67,30 +67,29 @@ export const useEvmBridge = () => {
 
         if (currentAllowance < required) {
           params.onStatus?.("approving");
-          const approveHash = await walletClient.writeContract({
+          const approveHash = (await (walletClient as any).writeContract({
             address: params.fromTokenAddress as Hex,
             abi: erc20Abi,
             functionName: "approve",
             args: [params.approvalAddress as Hex, required],
-          });
-          await publicClient.waitForTransactionReceipt({ hash: approveHash });
+          })) as Hex;
+          await (publicClient as any).waitForTransactionReceipt({ hash: approveHash });
           params.onStatus?.("approved");
         }
       }
 
       // 3. Send the bridge tx (LI.FI returns hex strings).
       params.onStatus?.("signing");
-      const hash = await walletClient.sendTransaction({
+      const hash = (await (walletClient as any).sendTransaction({
         to: params.txRequest.to as Hex,
         data: params.txRequest.data as Hex,
         value: params.txRequest.value ? BigInt(params.txRequest.value) : 0n,
         gas: params.txRequest.gasLimit ? BigInt(params.txRequest.gasLimit) : undefined,
-        // Let viem pick gasPrice from the network unless LI.FI insists.
-      });
+      })) as Hex;
 
       // 4. Wait for source-chain inclusion before handing off to LI.FI status polling.
       params.onStatus?.("confirming");
-      await publicClient.waitForTransactionReceipt({ hash });
+      await (publicClient as any).waitForTransactionReceipt({ hash });
       return hash;
     },
     [address, walletClient, publicClient, connectedChainId, switchChainAsync],
