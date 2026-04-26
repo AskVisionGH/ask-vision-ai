@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
+  ArrowUpDown,
   ChevronDown,
   Loader2,
   CheckCircle2,
