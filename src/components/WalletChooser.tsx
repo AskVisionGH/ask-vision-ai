@@ -326,6 +326,11 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
       if (solConnected) {
         try { await disconnectSolWallet(); } catch { /* ignore */ }
       }
+      // Single-wallet rule: connecting on Solana must drop any active EVM
+      // connection so the app never has two chains live at once.
+      if (evmConnected) {
+        try { await disconnectEvm(); } catch { /* ignore */ }
+      }
       // wallet-adapter ignores `select(name)` if it matches the current
       // adapter; clear first so same-wallet reconnects (Phantom→Phantom) work.
       if (isSameAdapter) {
@@ -356,6 +361,11 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
     try {
       if (evmConnected) {
         try { await disconnectEvm(); } catch { /* ignore */ }
+      }
+      // Single-wallet rule: drop any active Solana session before bringing up
+      // the EVM one.
+      if (solConnected) {
+        try { await disconnectSolWallet(); } catch { /* ignore */ }
       }
       await connectEvm({ connector: target });
       onOpenChange(false);
