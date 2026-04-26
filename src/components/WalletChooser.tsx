@@ -372,30 +372,34 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
 
         {/* New wallet CTAs */}
         <div className="mt-4 grid grid-cols-2 gap-2">
-          <Button
-            variant="outline"
-            size="sm"
+          <button
+            type="button"
             onClick={handleNewSolana}
             className={cn(
-              "ease-vision rounded-xl border-border/70 text-xs",
+              "ease-vision flex flex-col items-center gap-1 rounded-xl border border-border/70 bg-secondary/50 px-3 py-3 text-xs hover:border-primary/50 hover:bg-secondary",
               preferredChain === "solana" && "border-primary/60 bg-primary/10",
             )}
           >
-            <Plus className="mr-1.5 h-3 w-3" />
-            New Solana wallet
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/15 text-primary">
+              <Plus className="h-3.5 w-3.5" />
+            </span>
+            <span className="font-medium text-foreground">Solana wallet</span>
+            <span className="text-[10px] text-muted-foreground">Phantom, Solflare…</span>
+          </button>
+          <button
+            type="button"
             onClick={handleNewEvm}
             className={cn(
-              "ease-vision rounded-xl border-border/70 text-xs",
+              "ease-vision flex flex-col items-center gap-1 rounded-xl border border-border/70 bg-secondary/50 px-3 py-3 text-xs hover:border-accent/50 hover:bg-secondary",
               preferredChain === "evm" && "border-accent/60 bg-accent/10",
             )}
           >
-            <Plus className="mr-1.5 h-3 w-3" />
-            New EVM wallet
-          </Button>
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/20 text-accent-foreground">
+              <Plus className="h-3.5 w-3.5" />
+            </span>
+            <span className="font-medium text-foreground">EVM wallet</span>
+            <span className="text-[10px] text-muted-foreground">MetaMask, Rabby…</span>
+          </button>
         </div>
 
         <p className="mt-3 text-center text-[10px] uppercase tracking-widest text-muted-foreground/60">
