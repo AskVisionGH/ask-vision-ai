@@ -196,6 +196,17 @@ export const SwapPreviewCard = ({ data: initial }: Props) => {
           const status = await supaPost("tx-status", { signature });
           if (status.status === "confirmed") {
             if (!mounted.current) return;
+            // Record the per-user platform fee. Best-effort — never block UX.
+            void supaPost("record-swap-fee", {
+              signature,
+              valueUsd: data.input.valueUsd ?? data.output.valueUsd ?? null,
+              feeUsd: data.platformFee?.valueUsd ?? null,
+              feeAmountUi: data.platformFee?.amountUi ?? null,
+              feeSymbol: data.platformFee?.symbol ?? null,
+              feeMint: data.output.address,
+              inputMint: data.input.address,
+              outputMint: data.output.address,
+            }).catch((e) => console.warn("record-swap-fee failed:", e));
             setPhase({
               name: "success",
               signature,
