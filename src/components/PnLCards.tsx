@@ -513,3 +513,33 @@ const ErrorCard = ({ message }: { message: string }) => (
     {message}
   </div>
 );
+
+// Inline share trigger — small, lives in card footers next to "DexScreener".
+const ShareButton = ({ onClick, busy }: { onClick: () => void; busy: boolean }) => (
+  <button
+    onClick={onClick}
+    disabled={busy}
+    className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-secondary/40 px-2.5 py-1 text-[11px] font-medium text-foreground transition hover:bg-secondary disabled:opacity-50"
+    title="Share P/L card"
+  >
+    {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Share2 className="h-3 w-3" />}
+    {busy ? "Rendering…" : "Share"}
+  </button>
+);
+
+// Off-screen container that keeps the share node mounted (so html-to-image
+// can render it instantly) but visually hidden and out of layout flow.
+const OffscreenShare = ({ children }: { children: React.ReactNode }) => (
+  <div
+    aria-hidden
+    style={{
+      position: "fixed",
+      left: -99999,
+      top: 0,
+      pointerEvents: "none",
+      opacity: 0,
+    }}
+  >
+    {children}
+  </div>
+);
