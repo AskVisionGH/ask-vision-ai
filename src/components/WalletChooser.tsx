@@ -7,7 +7,7 @@ import {
   useConnectors,
   useDisconnect as useEvmDisconnect,
 } from "wagmi";
-import { Loader2, Wallet, History as HistoryIcon } from "lucide-react";
+import { Loader2, Wallet, History as HistoryIcon, Search } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -161,6 +162,7 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [pendingSolanaWalletName, setPendingSolanaWalletName] =
     useState<WalletName | null>(null);
+  const [search, setSearch] = useState("");
 
   // ---------------------------------------------------------------------------
   // Solana two-step handoff. `select()` is async via state, so we wait until
@@ -207,6 +209,7 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
     if (!open) {
       setBusyId(null);
       setPendingSolanaWalletName(null);
+      setSearch("");
     }
   }, [open]);
 
