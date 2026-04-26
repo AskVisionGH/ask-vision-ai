@@ -17,6 +17,15 @@ export type InAppBrowser =
   | "snapchat"
   | "line"
   | "wechat"
+  | "phantom"
+  | "metamask"
+  | "trust"
+  | "coinbase"
+  | "rainbow"
+  | "okx"
+  | "bitget"
+  | "solflare"
+  | "backpack"
   | "generic";
 
 export interface InAppBrowserInfo {
@@ -35,6 +44,22 @@ export function detectInAppBrowser(): InAppBrowserInfo {
   // Ordered checks — most specific first. Telegram's WebView reports as
   // either "Telegram" (Android) or just plain Safari on iOS, so we also
   // sniff a Telegram-injected global.
+  const win = globalThis as Record<string, unknown> & {
+    solana?: { isPhantom?: boolean; isBackpack?: boolean; isSolflare?: boolean };
+    phantom?: { solana?: { isPhantom?: boolean } };
+    ethereum?: {
+      isMetaMask?: boolean;
+      isCoinbaseWallet?: boolean;
+      isTrust?: boolean;
+      isTrustWallet?: boolean;
+      isRainbow?: boolean;
+      isOkxWallet?: boolean;
+      isOKExWallet?: boolean;
+      isBitKeep?: boolean;
+      isPhantom?: boolean;
+    };
+  };
+
   const tests: Array<[InAppBrowser, string, RegExp | (() => boolean)]> = [
     ["telegram", "Telegram", /Telegram/i],
     [
@@ -51,6 +76,42 @@ export function detectInAppBrowser(): InAppBrowserInfo {
     ["snapchat", "Snapchat", /Snapchat/i],
     ["line", "LINE", /\bLine\//i],
     ["wechat", "WeChat", /MicroMessenger/i],
+    // Wallet in-app browsers — Google blocks OAuth in all of these with
+    // `disallowed_useragent`. UA sniff first, then provider-injected globals
+    // as a fallback (some wallets mask their UA).
+    ["phantom", "Phantom", /Phantom/i],
+    [
+      "phantom",
+      "Phantom",
+      () =>
+        Boolean(win.phantom?.solana?.isPhantom) ||
+        Boolean(win.solana?.isPhantom) ||
+        Boolean(win.ethereum?.isPhantom),
+    ],
+    ["metamask", "MetaMask", /MetaMaskMobile|MetaMask/i],
+    ["metamask", "MetaMask", () => Boolean(win.ethereum?.isMetaMask)],
+    ["trust", "Trust Wallet", /Trust\/|TrustWallet/i],
+    [
+      "trust",
+      "Trust Wallet",
+      () => Boolean(win.ethereum?.isTrust || win.ethereum?.isTrustWallet),
+    ],
+    ["coinbase", "Coinbase Wallet", /CoinbaseWallet|CoinbaseBrowser/i],
+    ["coinbase", "Coinbase Wallet", () => Boolean(win.ethereum?.isCoinbaseWallet)],
+    ["rainbow", "Rainbow", /Rainbow/i],
+    ["rainbow", "Rainbow", () => Boolean(win.ethereum?.isRainbow)],
+    ["okx", "OKX Wallet", /OKApp|OKEx/i],
+    [
+      "okx",
+      "OKX Wallet",
+      () => Boolean(win.ethereum?.isOkxWallet || win.ethereum?.isOKExWallet),
+    ],
+    ["bitget", "Bitget Wallet", /BitKeep|Bitget/i],
+    ["bitget", "Bitget Wallet", () => Boolean(win.ethereum?.isBitKeep)],
+    ["solflare", "Solflare", /Solflare/i],
+    ["solflare", "Solflare", () => Boolean(win.solana?.isSolflare)],
+    ["backpack", "Backpack", /Backpack/i],
+    ["backpack", "Backpack", () => Boolean(win.solana?.isBackpack)],
   ];
 
   for (const [app, label, test] of tests) {
