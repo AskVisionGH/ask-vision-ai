@@ -1,7 +1,8 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowRight, Camera, Check, ChevronLeft, Mail, Sparkles } from "lucide-react";
+import { ArrowRight, Camera, Check, ChevronLeft, Languages, Mail, Sparkles } from "lucide-react";
+import { DEFAULT_LANGUAGE, LANGUAGE_OPTIONS, type LanguageCode } from "@/lib/languages";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import {
