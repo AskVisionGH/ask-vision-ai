@@ -93,7 +93,11 @@ export const ChatPushPrompt = () => {
         onEnable={handleEnable}
         onDismiss={handleDismiss}
       />
-      <PushDeniedDialog open={deniedOpen} onClose={() => setDeniedOpen(false)} />
+      <PushDeniedDialog
+        open={deniedOpen}
+        onRetry={() => setDeniedOpen(false)}
+        onDismiss={() => setDeniedOpen(false)}
+      />
     </>
   );
 };
