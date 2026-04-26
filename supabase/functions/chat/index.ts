@@ -521,7 +521,7 @@ const TOOLS = [
           toChain: { type: "string", description: "Destination chain — accepts names like 'ethereum', 'eth', 'base', 'arbitrum', 'polygon', 'bsc', 'avalanche', 'optimism'." },
           amount: { type: "number", description: "Decimal amount of inputToken to bridge (e.g. 0.5 for 0.5 SOL)." },
           toAddress: { type: "string", description: "The user's wallet address on the DESTINATION chain. REQUIRED for cross-family bridges (Solana → EVM). EVM addresses are 0x… 42 chars." },
-          slippageBps: { type: "number", description: "Optional slippage in bps. Default 50 = 0.5%." },
+          slippageBps: { type: "number", description: "Optional slippage in BASIS POINTS (1 bp = 0.01%). Default 50 = 0.5%. Convert percentages by multiplying by 100: '1%' → 100, '5%' → 500, '10%' → 1000. NEVER pass the raw percent (5 ≠ 5%, 5 = 0.05%)." },
         },
         required: ["inputToken", "outputToken", "toChain", "amount"],
         additionalProperties: false,
