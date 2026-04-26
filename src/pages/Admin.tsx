@@ -75,7 +75,7 @@ type TreasuryFee = {
   id: string;
   chain: "solana" | "ethereum";
   treasury_address: string;
-  source_kind: "swap_fee" | "dca_fee" | "bridge_fee" | "sweep" | "limit_fee" | "transfer_fee" | "other";
+  source_kind: "swap_fee" | "swap_upfront_fee" | "dca_fee" | "bridge_fee" | "sweep" | "limit_fee" | "transfer_fee" | "other";
   asset_symbol: string | null;
   asset_address: string | null;
   amount: number;
