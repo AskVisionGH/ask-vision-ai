@@ -57,6 +57,16 @@ export const WalletTokenHistoryCard = ({ data }: Props) => {
   const transfersOut = Number(data.transfersOut ?? 0);
   const showTransferStats = transfersIn > 0 || transfersOut > 0;
 
+  // Realized USD = (proceeds from sells) − (cost of buys), summed across
+  // events that had a stable / SOL pair we could price. Negative means the
+  // wallet is still net long in dollar terms; positive means they've taken
+  // money off the table.
+  const realizedUsd = Number(data.realizedUsd ?? 0);
+  const showRealized = Math.abs(realizedUsd) > 0.01;
+  const realizedFormatted = formatUsd(realizedUsd);
+  const realizedTone =
+    realizedUsd > 0 ? "text-emerald-400" : realizedUsd < 0 ? "text-rose-400" : "text-foreground";
+
   return (
     <div className="overflow-hidden rounded-xl border border-border/60 bg-card/40">
       <div className="flex items-center gap-2 border-b border-border/60 px-4 py-2.5">
@@ -123,13 +133,24 @@ export const WalletTokenHistoryCard = ({ data }: Props) => {
 
       <div
         className={`grid gap-px border-t border-border/60 bg-border/40 text-center ${
-          showTransferStats ? "grid-cols-4" : "grid-cols-3"
+          [showTransferStats, showRealized].filter(Boolean).length === 2
+            ? "grid-cols-5"
+            : showTransferStats || showRealized
+              ? "grid-cols-4"
+              : "grid-cols-3"
         }`}
       >
         <Stat label="Buys" value={data.totalBuys ?? 0} />
         <Stat label="Sells" value={data.totalSells ?? 0} />
         {showTransferStats && (
           <Stat label="Transfers" value={`${transfersIn}↓ / ${transfersOut}↑`} />
+        )}
+        {showRealized && (
+          <Stat
+            label="Realized $"
+            value={realizedFormatted}
+            valueClassName={realizedTone}
+          />
         )}
         <Stat label={`Net (${symbol})`} value={netFormatted} />
       </div>
@@ -143,9 +164,26 @@ export const WalletTokenHistoryCard = ({ data }: Props) => {
   );
 };
 
-const Stat = ({ label, value }: { label: string; value: number | string }) => (
+const Stat = ({
+  label,
+  value,
+  valueClassName,
+}: {
+  label: string;
+  value: number | string;
+  valueClassName?: string;
+}) => (
   <div className="bg-card/40 px-3 py-2">
     <div className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{label}</div>
-    <div className="font-mono text-xs text-foreground">{value}</div>
+    <div className={`font-mono text-xs ${valueClassName ?? "text-foreground"}`}>{value}</div>
   </div>
 );
+
+function formatUsd(n: number): string {
+  const sign = n < 0 ? "-" : n > 0 ? "+" : "";
+  const abs = Math.abs(n);
+  if (abs >= 1000) {
+    return `${sign}$${abs.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  }
+  return `${sign}$${abs.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+}

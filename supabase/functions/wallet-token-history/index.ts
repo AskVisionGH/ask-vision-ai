@@ -264,8 +264,9 @@ serve(async (req) => {
       stoppedReason = "cap";
     }
 
-    // 2) Merge events, recompute aggregates.
-    const allEvents = mergeEvents(existingEvents, newEvents);
+    // 2) Merge events, enrich with USD where SOL was the pair, recompute aggregates.
+    const merged = mergeEvents(existingEvents, newEvents);
+    const allEvents = await enrichSolPriceUsd(merged);
     const aggregates = computeAggregates(allEvents);
 
     const totalScanned = (cached?.signatures_scanned ?? 0) + scannedThisRun;
@@ -370,6 +371,7 @@ function parseTxForToken(
   tx: Record<string, unknown> & {
     signature?: string;
     timestamp?: number;
+    type?: string | null;
     source?: string | null;
     events?: { swap?: SwapEvent };
     tokenTransfers?: TokenTransfer[];
@@ -380,6 +382,8 @@ function parseTxForToken(
 ): HistoryEvent | null {
   if (!tx?.signature || !tx?.timestamp) return null;
 
+  // Helius enriches some swaps with `events.swap`. When present, this is
+  // the cleanest signal because it already separates the in/out legs.
   const swap = tx.events?.swap;
   if (swap) {
     const inSide = pickSwapSide(swap.tokenInputs, swap.nativeInput, "in");
@@ -419,44 +423,76 @@ function parseTxForToken(
     }
   }
 
-  // SPL token transfer touching the wallet — NOT a buy/sell, just a movement.
-  // We tag with kind="transfer" so aggregates and the UI can distinguish
-  // "first acquisition via transfer from X" from "first DEX buy".
+  // Some DEXes (notably Pump AMM, and occasionally Raydium / Meteora) don't
+  // surface an `events.swap` payload — the activity only shows up as raw
+  // SPL `tokenTransfers`. Detect those cases via the tx-level `type` /
+  // `source` fields so we don't misclassify real DEX activity as a plain
+  // wallet-to-wallet transfer.
+  const isDexTx =
+    String(tx.type ?? "").toUpperCase() === "SWAP" ||
+    isKnownDexSource(tx.source);
+
+  // SPL token transfer touching the wallet.
   if (Array.isArray(tx.tokenTransfers)) {
+    // Find the leg that involves the target mint and the wallet.
+    let walletLeg: TokenTransfer | undefined;
+    let walletLegSide: "in" | "out" | undefined;
     for (const tt of tx.tokenTransfers) {
       if (tt?.mint !== mint) continue;
       const amt = Number(tt.tokenAmount ?? 0);
       if (!amt) continue;
       if (tt.toUserAccount === wallet) {
-        return {
-          signature: tx.signature,
-          timestamp: tx.timestamp,
-          side: "buy",
-          kind: "transfer",
-          tokenAmount: amt,
-          pairMint: null,
-          pairSymbol: null,
-          pairAmount: null,
-          valueUsd: null,
-          source: tx.source ?? null,
-          counterparty: tt.fromUserAccount ?? null,
-        };
+        walletLeg = tt;
+        walletLegSide = "in";
+        break;
       }
       if (tt.fromUserAccount === wallet) {
+        walletLeg = tt;
+        walletLegSide = "out";
+        break;
+      }
+    }
+
+    if (walletLeg && walletLegSide) {
+      const amt = Number(walletLeg.tokenAmount ?? 0);
+      const side = walletLegSide === "in" ? "buy" : "sell";
+
+      if (isDexTx) {
+        // Real DEX swap — find the counter-token (any other tokenTransfer
+        // touching the wallet with a different mint, or a SOL leg).
+        const pair = findCounterLeg(tx, wallet, mint, walletLegSide);
         return {
           signature: tx.signature,
           timestamp: tx.timestamp,
-          side: "sell",
-          kind: "transfer",
+          side,
+          kind: "swap",
           tokenAmount: amt,
-          pairMint: null,
-          pairSymbol: null,
-          pairAmount: null,
-          valueUsd: null,
+          pairMint: pair?.mint ?? null,
+          pairSymbol: pair ? shortMint(pair.mint) : null,
+          pairAmount: pair?.amount ?? null,
+          valueUsd: pair ? stableUsdForLeg(pair) : null,
           source: tx.source ?? null,
-          counterparty: tt.toUserAccount ?? null,
+          counterparty: null,
         };
       }
+
+      // Plain wallet-to-wallet transfer.
+      return {
+        signature: tx.signature,
+        timestamp: tx.timestamp,
+        side,
+        kind: "transfer",
+        tokenAmount: amt,
+        pairMint: null,
+        pairSymbol: null,
+        pairAmount: null,
+        valueUsd: null,
+        source: tx.source ?? null,
+        counterparty:
+          walletLegSide === "in"
+            ? walletLeg.fromUserAccount ?? null
+            : walletLeg.toUserAccount ?? null,
+      };
     }
   }
 
@@ -548,6 +584,100 @@ function stableUsd(
   return null;
 }
 
+function stableUsdForLeg(leg: { mint: string; amount: number }): number | null {
+  return STABLES.has(leg.mint) ? leg.amount : null;
+}
+
+/**
+ * Helius `source` values that mean "this tx ran through a DEX/AMM" — even
+ * when no `events.swap` payload is attached. Pump AMM is the most common
+ * offender; legitimate Pump.fun trades show up purely as raw token
+ * transfers between the pool and the trader.
+ */
+const KNOWN_DEX_SOURCES = new Set([
+  "JUPITER",
+  "RAYDIUM",
+  "ORCA",
+  "METEORA",
+  "PHOENIX",
+  "OPENBOOK",
+  "SERUM",
+  "PUMP_FUN",
+  "PUMP_AMM",
+  "MOONSHOT",
+  "ALDRIN",
+  "SABER",
+  "LIFINITY",
+  "FLUXBEAM",
+  "STEPN",
+  "INVARIANT",
+]);
+
+function isKnownDexSource(source: string | null | undefined): boolean {
+  if (!source) return false;
+  const s = source.toUpperCase();
+  if (KNOWN_DEX_SOURCES.has(s)) return true;
+  // Defensive substring check for variants like "PUMP_AMM_V2".
+  return (
+    s.startsWith("PUMP") ||
+    s.includes("RAYDIUM") ||
+    s.includes("JUPITER") ||
+    s.includes("METEORA") ||
+    s.includes("ORCA")
+  );
+}
+
+/**
+ * For DEX swaps that don't expose `events.swap`, find the counterparty
+ * token leg the wallet received (when selling) or paid with (when buying).
+ */
+function findCounterLeg(
+  tx: {
+    tokenTransfers?: TokenTransfer[];
+    nativeTransfers?: NativeTransfer[];
+  },
+  wallet: string,
+  mint: string,
+  walletLegSide: "in" | "out",
+): { mint: string; amount: number } | null {
+  // If wallet RECEIVED the target mint (buy), the counter-leg flows OUT
+  // of the wallet (we paid). If wallet SENT the target mint (sell), the
+  // counter-leg flows IN (we received the proceeds).
+  const counterDirection: "in" | "out" = walletLegSide === "in" ? "out" : "in";
+
+  if (Array.isArray(tx.tokenTransfers)) {
+    for (const tt of tx.tokenTransfers) {
+      if (!tt?.mint || tt.mint === mint) continue;
+      const amt = Number(tt.tokenAmount ?? 0);
+      if (!amt) continue;
+      if (counterDirection === "out" && tt.fromUserAccount === wallet) {
+        return { mint: tt.mint, amount: amt };
+      }
+      if (counterDirection === "in" && tt.toUserAccount === wallet) {
+        return { mint: tt.mint, amount: amt };
+      }
+    }
+  }
+
+  if (Array.isArray(tx.nativeTransfers)) {
+    let net = 0;
+    for (const nt of tx.nativeTransfers) {
+      const amt = Number(nt.amount ?? 0) / 1e9;
+      if (nt.toUserAccount === wallet) net += amt;
+      else if (nt.fromUserAccount === wallet) net -= amt;
+    }
+    // Ignore tiny net SOL movements (rent / fees).
+    if (counterDirection === "in" && net > 0.001) {
+      return { mint: SOL_MINT, amount: net };
+    }
+    if (counterDirection === "out" && net < -0.001) {
+      return { mint: SOL_MINT, amount: Math.abs(net) };
+    }
+  }
+
+  return null;
+}
+
 // ------------------------------ Aggregation ------------------------------
 
 function mergeEvents(a: HistoryEvent[], b: HistoryEvent[]): HistoryEvent[] {
@@ -563,6 +693,46 @@ function mergeEvents(a: HistoryEvent[], b: HistoryEvent[]): HistoryEvent[] {
   // Newest first
   out.sort((x, y) => y.timestamp - x.timestamp);
   return out;
+}
+
+/**
+ * Many DEXes price against SOL, not stables, so `valueUsd` is null when the
+ * pair is SOL. We do a single SOL price fetch and apply it to those events.
+ *
+ * This is intentionally a *spot* SOL price, not historical — it's good enough
+ * for the rough net P&L stat the card surfaces. Historical pricing per-tx
+ * would require an OHLC lookup per signature which is too expensive for the
+ * scan loop.
+ */
+async function enrichSolPriceUsd(events: HistoryEvent[]): Promise<HistoryEvent[]> {
+  const needsPricing = events.some(
+    (e) => !e.valueUsd && e.pairMint === SOL_MINT && (e.pairAmount ?? 0) > 0,
+  );
+  if (!needsPricing) return events;
+
+  let solPrice: number | null = null;
+  try {
+    const res = await fetch(
+      "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd",
+      { signal: AbortSignal.timeout(4000) },
+    );
+    if (res.ok) {
+      const data = await res.json();
+      const px = Number(data?.solana?.usd);
+      if (Number.isFinite(px) && px > 0) solPrice = px;
+    }
+  } catch {
+    // ignore — we just won't enrich
+  }
+  if (!solPrice) return events;
+
+  return events.map((e) => {
+    if (e.valueUsd) return e;
+    if (e.pairMint !== SOL_MINT) return e;
+    const amt = Number(e.pairAmount ?? 0);
+    if (!amt) return e;
+    return { ...e, valueUsd: amt * solPrice };
+  });
 }
 
 function computeAggregates(events: HistoryEvent[]): {
