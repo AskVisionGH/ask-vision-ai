@@ -292,10 +292,7 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
       }
 
       selectSolWallet(walletName);
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      await connectSolWallet();
       setShowSolanaOptions(false);
-      onOpenChange(false);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (!/user rejected|user cancel|user closed/i.test(msg)) {
@@ -303,7 +300,6 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
           description: msg,
         });
       }
-    } finally {
       setPendingSolanaWalletName(null);
       setBusyAddress(null);
     }
