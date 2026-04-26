@@ -583,6 +583,100 @@ function stableUsd(
   return null;
 }
 
+function stableUsdForLeg(leg: { mint: string; amount: number }): number | null {
+  return STABLES.has(leg.mint) ? leg.amount : null;
+}
+
+/**
+ * Helius `source` values that mean "this tx ran through a DEX/AMM" — even
+ * when no `events.swap` payload is attached. Pump AMM is the most common
+ * offender; legitimate Pump.fun trades show up purely as raw token
+ * transfers between the pool and the trader.
+ */
+const KNOWN_DEX_SOURCES = new Set([
+  "JUPITER",
+  "RAYDIUM",
+  "ORCA",
+  "METEORA",
+  "PHOENIX",
+  "OPENBOOK",
+  "SERUM",
+  "PUMP_FUN",
+  "PUMP_AMM",
+  "MOONSHOT",
+  "ALDRIN",
+  "SABER",
+  "LIFINITY",
+  "FLUXBEAM",
+  "STEPN",
+  "INVARIANT",
+]);
+
+function isKnownDexSource(source: string | null | undefined): boolean {
+  if (!source) return false;
+  const s = source.toUpperCase();
+  if (KNOWN_DEX_SOURCES.has(s)) return true;
+  // Defensive substring check for variants like "PUMP_AMM_V2".
+  return (
+    s.startsWith("PUMP") ||
+    s.includes("RAYDIUM") ||
+    s.includes("JUPITER") ||
+    s.includes("METEORA") ||
+    s.includes("ORCA")
+  );
+}
+
+/**
+ * For DEX swaps that don't expose `events.swap`, find the counterparty
+ * token leg the wallet received (when selling) or paid with (when buying).
+ */
+function findCounterLeg(
+  tx: {
+    tokenTransfers?: TokenTransfer[];
+    nativeTransfers?: NativeTransfer[];
+  },
+  wallet: string,
+  mint: string,
+  walletLegSide: "in" | "out",
+): { mint: string; amount: number } | null {
+  // If wallet RECEIVED the target mint (buy), the counter-leg flows OUT
+  // of the wallet (we paid). If wallet SENT the target mint (sell), the
+  // counter-leg flows IN (we received the proceeds).
+  const counterDirection: "in" | "out" = walletLegSide === "in" ? "out" : "in";
+
+  if (Array.isArray(tx.tokenTransfers)) {
+    for (const tt of tx.tokenTransfers) {
+      if (!tt?.mint || tt.mint === mint) continue;
+      const amt = Number(tt.tokenAmount ?? 0);
+      if (!amt) continue;
+      if (counterDirection === "out" && tt.fromUserAccount === wallet) {
+        return { mint: tt.mint, amount: amt };
+      }
+      if (counterDirection === "in" && tt.toUserAccount === wallet) {
+        return { mint: tt.mint, amount: amt };
+      }
+    }
+  }
+
+  if (Array.isArray(tx.nativeTransfers)) {
+    let net = 0;
+    for (const nt of tx.nativeTransfers) {
+      const amt = Number(nt.amount ?? 0) / 1e9;
+      if (nt.toUserAccount === wallet) net += amt;
+      else if (nt.fromUserAccount === wallet) net -= amt;
+    }
+    // Ignore tiny net SOL movements (rent / fees).
+    if (counterDirection === "in" && net > 0.001) {
+      return { mint: SOL_MINT, amount: net };
+    }
+    if (counterDirection === "out" && net < -0.001) {
+      return { mint: SOL_MINT, amount: Math.abs(net) };
+    }
+  }
+
+  return null;
+}
+
 // ------------------------------ Aggregation ------------------------------
 
 function mergeEvents(a: HistoryEvent[], b: HistoryEvent[]): HistoryEvent[] {
