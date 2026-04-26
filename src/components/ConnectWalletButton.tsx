@@ -12,7 +12,7 @@ import {
 import { cn } from "@/lib/utils";
 import { WalletChooser } from "@/components/WalletChooser";
 import { recordLastUsedWallet } from "@/lib/wallet-history";
-import { LogOut, Repeat } from "lucide-react";
+import { Check, Copy, LogOut, Repeat } from "lucide-react";
 import { evmChainBadge, solanaBadge } from "@/lib/chain-badge";
 
 interface Props {
@@ -23,6 +23,7 @@ interface Props {
 /** Pill-shaped connect button matching Vision aesthetic. */
 export const ConnectWalletButton = ({ className, size = "lg" }: Props) => {
   const [chooserOpen, setChooserOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
   const { connected, publicKey, disconnect, connecting, wallet } = useWallet();
   const { address: evmAddress, isConnected: evmConnected, connector: evmConnector, chainId: evmChainId } = useAccount();
   const { disconnect: evmDisconnect } = useEvmDisconnect();
@@ -96,6 +97,25 @@ export const ConnectWalletButton = ({ className, size = "lg" }: Props) => {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem
+              onSelect={(e) => {
+                // Keep the menu open briefly so the user sees the "Copied" check.
+                e.preventDefault();
+                if (!activeAddress) return;
+                navigator.clipboard.writeText(activeAddress).then(() => {
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1200);
+                }).catch(() => { /* ignore clipboard failures */ });
+              }}
+            >
+              {copied ? (
+                <Check className="mr-2 h-3.5 w-3.5 text-up" />
+              ) : (
+                <Copy className="mr-2 h-3.5 w-3.5" />
+              )}
+              {copied ? "Copied" : "Copy address"}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={async () => {
                 // Open the chooser without dropping the current connection —
