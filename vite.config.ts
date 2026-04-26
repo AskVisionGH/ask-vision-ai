@@ -38,6 +38,18 @@ export default defineConfig(({ mode }) => ({
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
-    dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime", "@tanstack/react-query", "@tanstack/query-core"],
+    dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime", "@tanstack/react-query", "@tanstack/query-core", "wagmi", "viem"],
+  },
+  // Force Vite to pre-bundle wagmi + rainbowkit alongside @tanstack/react-query
+  // so they share the *same* react-query module instance as the app, otherwise
+  // RainbowKitProvider's `useQueryClient` reads from a different React context
+  // than the one our top-level QueryClientProvider mounts → "No QueryClient set".
+  optimizeDeps: {
+    include: [
+      "@tanstack/react-query",
+      "wagmi",
+      "@rainbow-me/rainbowkit",
+      "viem",
+    ],
   },
 }));
