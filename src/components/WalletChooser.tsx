@@ -365,8 +365,10 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
       // then selecting on the next tick so the effect picks it up.
       setPendingSolanaWalletName(walletName);
       if (isSameAdapter) {
-        // @ts-expect-error — adapter API allows null to clear selection
-        selectSolWallet(null);
+        // selectSolWallet accepts null to clear the active adapter, but the
+        // typings only expose WalletName. Cast through unknown so we can
+        // force-clear and re-trigger the handoff effect on the next tick.
+        (selectSolWallet as unknown as (name: WalletName | null) => void)(null);
         // Defer to next tick so React batches the clear before the new pick.
         await new Promise((r) => setTimeout(r, 0));
       }
