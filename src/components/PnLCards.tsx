@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, ChevronDown, ChevronUp, ExternalLink, Repeat, TrendingDown, TrendingUp } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, ChevronDown, ChevronUp, ExternalLink, Loader2, Repeat, Share2, TrendingDown, TrendingUp } from "lucide-react";
 import { TokenLogo } from "@/components/TokenLogo";
+import { PnLShareCard } from "@/components/PnLShareCard";
+import { usePnLShare } from "@/hooks/usePnLShare";
 import { cn } from "@/lib/utils";
 import { txExplorerUrl, explorerLabel } from "@/lib/explorer";
 import type {
@@ -231,8 +233,12 @@ const TxRow = ({ tx }: { tx: ParsedTx }) => {
 // ---------------- Token PnL Card ----------------
 
 export const TokenPnLCard = ({ data }: { data: TokenPnLData }) => {
-  if (data.error) return <ErrorCard message={data.error} />;
   const t = data.token;
+  const { nodeRef, share, busy } = usePnLShare(
+    `vision-pnl-${t?.symbol ?? "token"}-${data.windowDays}d`,
+  );
+
+  if (data.error) return <ErrorCard message={data.error} />;
   if (!t) {
     return (
       <CardShell>
@@ -252,149 +258,166 @@ export const TokenPnLCard = ({ data }: { data: TokenPnLData }) => {
   const avgEntry = t.unitsBought > 0 ? t.costUsd / t.unitsBought : null;
 
   return (
-    <CardShell>
-      <div className="border-b border-border/60 bg-gradient-to-br from-primary/[0.04] to-transparent px-5 py-4">
-        <div className="flex items-center gap-3">
-          <TokenLogo logo={t.logo} symbol={t.symbol} />
-          <div className="min-w-0 flex-1">
-            <div className="flex items-baseline gap-2">
-              <span className="font-mono text-sm font-medium text-foreground">${t.symbol}</span>
-              <span className="truncate text-xs text-muted-foreground/80">{t.name}</span>
+    <>
+      <CardShell>
+        <div className="border-b border-border/60 bg-gradient-to-br from-primary/[0.04] to-transparent px-5 py-4">
+          <div className="flex items-center gap-3">
+            <TokenLogo logo={t.logo} symbol={t.symbol} />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline gap-2">
+                <span className="font-mono text-sm font-medium text-foreground">${t.symbol}</span>
+                <span className="truncate text-xs text-muted-foreground/80">{t.name}</span>
+              </div>
+              <p className="mt-0.5 font-mono text-[10px] tracking-wider uppercase text-muted-foreground/70">
+                30-day P/L
+              </p>
             </div>
-            <p className="mt-0.5 font-mono text-[10px] tracking-wider uppercase text-muted-foreground/70">
-              30-day P/L
-            </p>
-          </div>
-          <div className="text-right">
-            <p className={cn("font-mono text-2xl font-light tracking-tight", pnlTone(totalPnl))}>
-              {fmtUsd(totalPnl, { signed: true })}
-            </p>
-            <p className="font-mono text-[10px] tracking-wider uppercase text-muted-foreground/70">
-              total
-            </p>
+            <div className="text-right">
+              <p className={cn("font-mono text-2xl font-light tracking-tight", pnlTone(totalPnl))}>
+                {fmtUsd(totalPnl, { signed: true })}
+              </p>
+              <p className="font-mono text-[10px] tracking-wider uppercase text-muted-foreground/70">
+                total
+              </p>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="grid grid-cols-2 gap-px bg-border/40">
-        <Stat label="Realized" value={fmtUsd(t.realizedUsd, { signed: true })} tone={pnlTone(t.realizedUsd)} />
-        <Stat label="Unrealized" value={fmtUsd(t.unrealizedUsd, { signed: true })} tone={pnlTone(t.unrealizedUsd)} />
-        <Stat label="Bought" value={`${fmtAmount(t.unitsBought)} (${t.buys})`} sub={fmtUsd(t.costUsd)} />
-        <Stat label="Sold" value={`${fmtAmount(t.unitsSold)} (${t.sells})`} sub={fmtUsd(t.proceedsUsd)} />
-        <Stat
-          label="Avg entry"
-          value={avgEntry != null ? fmtUsd(avgEntry) : "—"}
-          sub={t.currentPriceUsd != null ? `now ${fmtUsd(t.currentPriceUsd)}` : null}
-        />
-        <Stat
-          label="Holding"
-          value={fmtAmount(t.currentUnits)}
-          sub={t.currentValueUsd != null ? fmtUsd(t.currentValueUsd) : null}
-        />
-      </div>
-
-      <div className="flex items-center justify-between border-t border-border/40 px-5 py-3 text-[11px]">
-        <span className="font-mono text-muted-foreground">{truncate(t.mint, 6, 6)}</span>
-        {t.pairUrl && (
-          <a
-            href={t.pairUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 text-primary hover:underline"
-          >
-            DexScreener <ExternalLink className="h-3 w-3" />
-          </a>
-        )}
-      </div>
-
-      {data.recentTxs && data.recentTxs.length > 0 && (
-        <div className="border-t border-border/40">
-          <p className="px-5 pt-3 font-mono text-[10px] tracking-wider uppercase text-muted-foreground/70">
-            Recent ${t.symbol} trades
-          </p>
-          <ExpandableList
-            items={data.recentTxs}
-            renderItem={(tx) => <TxRow tx={tx} />}
+        <div className="grid grid-cols-2 gap-px bg-border/40">
+          <Stat label="Realized" value={fmtUsd(t.realizedUsd, { signed: true })} tone={pnlTone(t.realizedUsd)} />
+          <Stat label="Unrealized" value={fmtUsd(t.unrealizedUsd, { signed: true })} tone={pnlTone(t.unrealizedUsd)} />
+          <Stat label="Bought" value={`${fmtAmount(t.unitsBought)} (${t.buys})`} sub={fmtUsd(t.costUsd)} />
+          <Stat label="Sold" value={`${fmtAmount(t.unitsSold)} (${t.sells})`} sub={fmtUsd(t.proceedsUsd)} />
+          <Stat
+            label="Avg entry"
+            value={avgEntry != null ? fmtUsd(avgEntry) : "—"}
+            sub={t.currentPriceUsd != null ? `now ${fmtUsd(t.currentPriceUsd)}` : null}
+          />
+          <Stat
+            label="Holding"
+            value={fmtAmount(t.currentUnits)}
+            sub={t.currentValueUsd != null ? fmtUsd(t.currentValueUsd) : null}
           />
         </div>
-      )}
-    </CardShell>
+
+        <div className="flex items-center justify-between border-t border-border/40 px-5 py-3 text-[11px]">
+          <span className="font-mono text-muted-foreground">{truncate(t.mint, 6, 6)}</span>
+          <div className="flex items-center gap-3">
+            <ShareButton onClick={share} busy={busy} />
+            {t.pairUrl && (
+              <a
+                href={t.pairUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-primary hover:underline"
+              >
+                DexScreener <ExternalLink className="h-3 w-3" />
+              </a>
+            )}
+          </div>
+        </div>
+
+        {data.recentTxs && data.recentTxs.length > 0 && (
+          <div className="border-t border-border/40">
+            <p className="px-5 pt-3 font-mono text-[10px] tracking-wider uppercase text-muted-foreground/70">
+              Recent ${t.symbol} trades
+            </p>
+            <ExpandableList
+              items={data.recentTxs}
+              renderItem={(tx) => <TxRow tx={tx} />}
+            />
+          </div>
+        )}
+      </CardShell>
+      <OffscreenShare>
+        <PnLShareCard ref={nodeRef} kind="token" data={data} />
+      </OffscreenShare>
+    </>
   );
 };
 
 // ---------------- Wallet PnL Dashboard Card ----------------
 
 export const WalletPnLCard = ({ data }: { data: WalletPnLData }) => {
+  const { nodeRef, share, busy } = usePnLShare(`vision-wallet-pnl-${data.windowDays}d`);
   if (data.error) return <ErrorCard message={data.error} />;
   const { totals, tokens, recentTxs } = data;
   const totalPnl = totals.totalRealizedUsd + totals.totalUnrealizedUsd;
 
   return (
-    <CardShell>
-      <div className="border-b border-border/60 bg-gradient-to-br from-primary/[0.04] to-transparent px-5 py-4">
-        <div className="flex items-baseline justify-between gap-3">
-          <div>
-            <p className="font-mono text-[10px] tracking-widest uppercase text-muted-foreground/70">
-              Wallet P/L · {data.windowDays}d
-            </p>
-            <p className={cn("mt-1 font-mono text-3xl font-light tracking-tight", pnlTone(totalPnl))}>
-              {fmtUsd(totalPnl, { signed: true })}
-            </p>
-            <div className="mt-1 flex items-center gap-1 text-[11px]">
-              {totalPnl >= 0 ? (
-                <TrendingUp className="h-3 w-3 text-emerald-400" />
-              ) : (
-                <TrendingDown className="h-3 w-3 text-rose-400" />
-              )}
-              <span className="text-muted-foreground">
-                {fmtUsd(totals.totalRealizedUsd, { signed: true })} realized ·{" "}
-                {fmtUsd(totals.totalUnrealizedUsd, { signed: true })} unrealized
-              </span>
+    <>
+      <CardShell>
+        <div className="border-b border-border/60 bg-gradient-to-br from-primary/[0.04] to-transparent px-5 py-4">
+          <div className="flex items-baseline justify-between gap-3">
+            <div>
+              <p className="font-mono text-[10px] tracking-widest uppercase text-muted-foreground/70">
+                Wallet P/L · {data.windowDays}d
+              </p>
+              <p className={cn("mt-1 font-mono text-3xl font-light tracking-tight", pnlTone(totalPnl))}>
+                {fmtUsd(totalPnl, { signed: true })}
+              </p>
+              <div className="mt-1 flex items-center gap-1 text-[11px]">
+                {totalPnl >= 0 ? (
+                  <TrendingUp className="h-3 w-3 text-emerald-400" />
+                ) : (
+                  <TrendingDown className="h-3 w-3 text-rose-400" />
+                )}
+                <span className="text-muted-foreground">
+                  {fmtUsd(totals.totalRealizedUsd, { signed: true })} realized ·{" "}
+                  {fmtUsd(totals.totalUnrealizedUsd, { signed: true })} unrealized
+                </span>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="font-mono text-[10px] tracking-widest uppercase text-muted-foreground/70">
+                Wallet
+              </p>
+              <p className="mt-1 font-mono text-xs text-muted-foreground">{truncate(data.address)}</p>
+              <p className="mt-2 font-mono text-[10px] tracking-widest uppercase text-muted-foreground/70">
+                Now
+              </p>
+              <p className="mt-1 font-mono text-xs text-foreground">
+                {fmtUsd(totals.currentPortfolioUsd)}
+              </p>
             </div>
           </div>
-          <div className="text-right">
-            <p className="font-mono text-[10px] tracking-widest uppercase text-muted-foreground/70">
-              Wallet
-            </p>
-            <p className="mt-1 font-mono text-xs text-muted-foreground">{truncate(data.address)}</p>
-            <p className="mt-2 font-mono text-[10px] tracking-widest uppercase text-muted-foreground/70">
-              Now
-            </p>
-            <p className="mt-1 font-mono text-xs text-foreground">
-              {fmtUsd(totals.currentPortfolioUsd)}
-            </p>
+          <div className="mt-3 flex justify-end">
+            <ShareButton onClick={share} busy={busy} />
           </div>
         </div>
-      </div>
 
-      {tokens.length > 0 && (
-        <div>
-          <p className="px-5 pt-3 font-mono text-[10px] tracking-wider uppercase text-muted-foreground/70">
-            By token
-          </p>
-          <ExpandableList
-            items={tokens}
-            renderItem={(t) => <TokenRow token={t} />}
-          />
+        {tokens.length > 0 && (
+          <div>
+            <p className="px-5 pt-3 font-mono text-[10px] tracking-wider uppercase text-muted-foreground/70">
+              By token
+            </p>
+            <ExpandableList
+              items={tokens}
+              renderItem={(t) => <TokenRow token={t} />}
+            />
+          </div>
+        )}
+
+        {recentTxs && recentTxs.length > 0 && (
+          <div className="border-t border-border/40">
+            <p className="px-5 pt-3 font-mono text-[10px] tracking-wider uppercase text-muted-foreground/70">
+              Recent activity
+            </p>
+            <ExpandableList
+              items={recentTxs}
+              renderItem={(tx) => <TxRow tx={tx} />}
+            />
+          </div>
+        )}
+
+        <div className="border-t border-border/40 px-5 py-3 text-center font-mono text-[10px] tracking-wider uppercase text-muted-foreground/60">
+          {totals.txCount} txs analyzed · cost basis: average price
         </div>
-      )}
-
-      {recentTxs && recentTxs.length > 0 && (
-        <div className="border-t border-border/40">
-          <p className="px-5 pt-3 font-mono text-[10px] tracking-wider uppercase text-muted-foreground/70">
-            Recent activity
-          </p>
-          <ExpandableList
-            items={recentTxs}
-            renderItem={(tx) => <TxRow tx={tx} />}
-          />
-        </div>
-      )}
-
-      <div className="border-t border-border/40 px-5 py-3 text-center font-mono text-[10px] tracking-wider uppercase text-muted-foreground/60">
-        {totals.txCount} txs analyzed · cost basis: average price
-      </div>
-    </CardShell>
+      </CardShell>
+      <OffscreenShare>
+        <PnLShareCard ref={nodeRef} kind="wallet" data={data} />
+      </OffscreenShare>
+    </>
   );
 };
 
@@ -488,5 +511,35 @@ const Stat = ({
 const ErrorCard = ({ message }: { message: string }) => (
   <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
     {message}
+  </div>
+);
+
+// Inline share trigger — small, lives in card footers next to "DexScreener".
+const ShareButton = ({ onClick, busy }: { onClick: () => void; busy: boolean }) => (
+  <button
+    onClick={onClick}
+    disabled={busy}
+    className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-secondary/40 px-2.5 py-1 text-[11px] font-medium text-foreground transition hover:bg-secondary disabled:opacity-50"
+    title="Share P/L card"
+  >
+    {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Share2 className="h-3 w-3" />}
+    {busy ? "Rendering…" : "Share"}
+  </button>
+);
+
+// Off-screen container that keeps the share node mounted (so html-to-image
+// can render it instantly) but visually hidden and out of layout flow.
+const OffscreenShare = ({ children }: { children: React.ReactNode }) => (
+  <div
+    aria-hidden
+    style={{
+      position: "fixed",
+      left: -99999,
+      top: 0,
+      pointerEvents: "none",
+      opacity: 0,
+    }}
+  >
+    {children}
   </div>
 );
