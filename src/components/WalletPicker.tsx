@@ -12,6 +12,9 @@ import {
 import {
   isAndroid,
   isIOS,
+  isInThirdPartyWebView,
+  openInPhantom,
+  openInSolflare,
   shouldUseCustomMobileSheet,
 } from "@/lib/mobile-wallet";
 
@@ -64,6 +67,16 @@ export const useWalletPicker = () => {
 
   const pickWallet = async (target: "phantom" | "solflare" | "other") => {
     if (isAndroid()) {
+      // If we're in a third-party webview (Telegram, X, Instagram, etc.) on
+      // Android, MWA's intent broadcast can't escape the embedded view and
+      // either silently fails or bounces to the Play Store. Deep-link the
+      // user into the wallet's in-app browser instead, where wallet-adapter
+      // can connect via the injected provider.
+      if (isInThirdPartyWebView()) {
+        if (target === "solflare") openInSolflare();
+        else openInPhantom();
+        return;
+      }
       // MWA handles the wallet picker itself on Android — for any target we
       // just kick off MWA, which lets the user choose the right wallet.
       await connectVia((n) => n.includes("mobile wallet adapter"), "Mobile Wallet Adapter");
@@ -83,6 +96,15 @@ export const useWalletPicker = () => {
 
     setMobileSheet(false);
     setVisible(true);
+  };
+
+  // Manual fallback: if MWA / WalletConnect didn't work (no app installed,
+  // intent blocked, etc.), let the user jump straight into the wallet's
+  // in-app browser. This always works as long as the wallet is installed.
+  const openWalletBrowser = (wallet: "phantom" | "solflare") => {
+    setMobileSheet(false);
+    if (wallet === "solflare") openInSolflare();
+    else openInPhantom();
   };
 
   const Picker = (
@@ -131,6 +153,32 @@ export const useWalletPicker = () => {
             </span>
             <span className="flex-1">Other wallet (Backpack, Trust…)</span>
           </button>
+        </div>
+
+        <div className="mt-5 rounded-xl border border-border/60 bg-secondary/40 p-3">
+          <p className="text-[11px] font-medium text-foreground">
+            Not working? Open in the wallet app
+          </p>
+          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+            If tapping above does nothing or sends you to the app store, use
+            your wallet's built-in browser instead.
+          </p>
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              onClick={() => openWalletBrowser("phantom")}
+              className="flex-1 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted ease-vision"
+            >
+              Open in Phantom
+            </button>
+            <button
+              type="button"
+              onClick={() => openWalletBrowser("solflare")}
+              className="flex-1 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted ease-vision"
+            >
+              Open in Solflare
+            </button>
+          </div>
         </div>
 
         <p className="mt-4 text-center text-[10px] uppercase tracking-widest text-muted-foreground/60">

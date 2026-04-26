@@ -8,7 +8,6 @@ import { TrustWalletAdapter } from "@solana/wallet-adapter-trust";
 import {
   SolanaMobileWalletAdapter,
   createDefaultAuthorizationResultCache,
-  createDefaultWalletNotFoundHandler,
 } from "@solana-mobile/wallet-adapter-mobile";
 import { WalletConnectWalletAdapter } from "@walletconnect/solana-adapter";
 import { WalletAdapterNetwork } from "@solana/wallet-adapter-base";
@@ -93,7 +92,18 @@ export const WalletContextProvider = ({ children }: Props) => {
         },
         authorizationResultCache: createDefaultAuthorizationResultCache(),
         cluster: "mainnet-beta",
-        onWalletNotFound: createDefaultWalletNotFoundHandler(),
+        // Custom not-found handler: instead of dropping the user at the raw
+        // Play Store (the default), deep-link them into Phantom's universal
+        // link, which opens the Phantom app's in-app browser at our URL if
+        // installed, or the Play/App Store if not. From there wallet-adapter
+        // connects via the injected `window.solana` provider.
+        onWalletNotFound: () => {
+          if (typeof window !== "undefined") {
+            const url = encodeURIComponent(window.location.href);
+            window.location.href = `https://phantom.app/ul/browse/${url}?ref=${url}`;
+          }
+          return Promise.resolve();
+        },
       }),
       // iOS / desktop fallback: WalletConnect (Reown) lets Phantom, Solflare,
       // Trust, and most other Solana wallets connect from a regular Safari/

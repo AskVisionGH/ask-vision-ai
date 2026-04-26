@@ -38,6 +38,36 @@ export const isInWalletBrowser = (): boolean => {
 };
 
 /**
+ * True if we're inside a non-wallet third-party WebView (Telegram, X,
+ * Instagram, Facebook, TikTok, etc.) on mobile. These webviews break the
+ * Mobile Wallet Adapter intent broadcast on Android — the OS won't route
+ * the `solana-wallet://` intent out of the embedded view, so MWA silently
+ * fails or the system offers to install Phantom from the Play Store.
+ *
+ * We detect via the same heuristics as `detectInAppBrowser()` but lighter
+ * (no need to identify which app — just "is this a hostile webview").
+ */
+export const isInThirdPartyWebView = (): boolean => {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  // Known third-party app webviews
+  if (
+    /Telegram|Instagram|FBAN|FBAV|FB_IAB|BytedanceWebview|musical_ly|TikTok|LinkedInApp|Twitter|Snapchat|\bLine\/|MicroMessenger/i.test(
+      ua,
+    )
+  ) {
+    return true;
+  }
+  // Android WebView token (`; wv)`) — generic embedded webview marker.
+  if (/Android/i.test(ua) && /; wv\)/i.test(ua)) return true;
+  // iOS WebView with no Safari token = embedded view (real Safari has Safari/).
+  if (/iPhone|iPad|iPod/i.test(ua) && /AppleWebKit/i.test(ua) && !/Safari\//i.test(ua)) {
+    return true;
+  }
+  return false;
+};
+
+/**
  * Android browsers can stay in-place and hand off via the Solana Mobile Wallet
  * Adapter, which preserves the user's logged-in browser session. iOS browsers
  * still generally need the wallet's in-app browser for wallet connection.
