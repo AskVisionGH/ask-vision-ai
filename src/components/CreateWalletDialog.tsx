@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Keypair } from "@solana/web3.js";
 import bs58 from "bs58";
-import { AlertTriangle, Check, Copy, Eye, EyeOff, ShieldAlert } from "lucide-react";
+import { AlertTriangle, Check, Copy, Eye, EyeOff, Import, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -163,6 +163,26 @@ export const CreateWalletDialog = ({ open, onOpenChange, onDone }: Props) => {
                 <p className="text-muted-foreground">
                   Anyone with this key can drain your wallet. Never share it
                   with support, in chats, or paste into untrusted sites.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* How to actually use this wallet */}
+          <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+            <div className="flex gap-2">
+              <Import className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+              <div className="space-y-2 text-xs text-foreground/90">
+                <p>
+                  <strong>Next step: import it into a wallet app.</strong> This
+                  key on its own can't sign transactions — you need a wallet
+                  like <strong>Phantom</strong>, <strong>Solflare</strong>, or{" "}
+                  <strong>Backpack</strong> to use it.
+                </p>
+                <p className="text-muted-foreground">
+                  In your wallet app, choose{" "}
+                  <em>Add / Import wallet → Import private key</em> and paste
+                  the key above. Then come back and connect it here.
                 </p>
               </div>
             </div>
