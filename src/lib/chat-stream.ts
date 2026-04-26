@@ -78,6 +78,7 @@ export interface SwapQuoteData {
   rate: number;
   priceImpactPct: number | null;
   slippageBps: number;
+  dynamicSlippage?: boolean;
   route: SwapRouteHop[];
   estNetworkFeeSol: number;
   platformFee?: {
