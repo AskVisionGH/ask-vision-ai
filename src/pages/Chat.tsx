@@ -30,14 +30,8 @@ import {
   type ShareMode,
 } from "@/hooks/useConversations";
 import { streamChat, type ChatMessage, type ToolEvent } from "@/lib/chat-stream";
+import { pickSuggestions } from "@/lib/chat-suggestions";
 import { cn } from "@/lib/utils";
-
-const SUGGESTIONS = [
-  "Swap 1 SOL into USDC",
-  "Bridge 0.5 SOL to ETH on Ethereum",
-  "Find smart money buying memecoins right now",
-  "Show me the hottest tokens trending on Solana",
-];
 
 const Chat = () => {
   const { user } = useAuth();
@@ -60,6 +54,14 @@ const Chat = () => {
   } = useConversations();
 
   const activeId = searchParams.get("c");
+  // Refresh the starter prompts every login (user id changes) and every time
+  // the user lands on the empty-chat screen (no activeId). useMemo with these
+  // deps gives us a stable list within a single empty-state render but a
+  // fresh draw whenever they start a new chat.
+  const suggestions = useMemo(
+    () => pickSuggestions(4),
+    [user?.id, activeId],
+  );
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loadingThread, setLoadingThread] = useState(false);
   const [input, setInput] = useState("");
@@ -553,7 +555,7 @@ const Chat = () => {
                 )}
 
                 <div className="mt-10 grid w-full max-w-md grid-cols-1 gap-2 sm:grid-cols-2">
-                  {SUGGESTIONS.map((s) => (
+                  {suggestions.map((s) => (
                     <button
                       key={s}
                       onClick={() => send(s)}
