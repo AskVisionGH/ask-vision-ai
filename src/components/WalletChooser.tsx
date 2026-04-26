@@ -108,6 +108,46 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
     }
   }, [open]);
 
+  useEffect(() => {
+    if (!pendingSolanaWalletName) return;
+    if (selectedSolWallet?.adapter.name !== pendingSolanaWalletName) return;
+    if (solConnected || solConnecting) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        await connectSolWallet();
+        if (!cancelled) {
+          onOpenChange(false);
+        }
+      } catch (e) {
+        if (cancelled) return;
+        const msg = e instanceof Error ? e.message : String(e);
+        if (!/user rejected|user cancel|user closed/i.test(msg)) {
+          toast.error("Couldn't connect that wallet", {
+            description: msg,
+          });
+        }
+      } finally {
+        if (!cancelled) {
+          setPendingSolanaWalletName(null);
+          setBusyAddress(null);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    pendingSolanaWalletName,
+    selectedSolWallet?.adapter.name,
+    solConnected,
+    solConnecting,
+    connectSolWallet,
+    onOpenChange,
+  ]);
+
   // Refresh last-used + linked rows every time the chooser opens, so newly
   // connected wallets show up without remounting.
   useEffect(() => {
@@ -252,10 +292,7 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
       }
 
       selectSolWallet(walletName);
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      await connectSolWallet();
       setShowSolanaOptions(false);
-      onOpenChange(false);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (!/user rejected|user cancel|user closed/i.test(msg)) {
@@ -263,7 +300,6 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
           description: msg,
         });
       }
-    } finally {
       setPendingSolanaWalletName(null);
       setBusyAddress(null);
     }
