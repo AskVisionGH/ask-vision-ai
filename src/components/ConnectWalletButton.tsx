@@ -47,6 +47,16 @@ export const ConnectWalletButton = ({ className, size = "lg" }: Props) => {
     }
   }, [evmConnected, evmAddress, evmConnector?.name]);
 
+  // Single-wallet invariant: the app must only ever have one chain connected.
+  // If both ever end up live (e.g. lingering EVM session from a prior visit
+  // when the user reconnects Solana), drop the EVM one. Solana is treated as
+  // primary because the rest of the app is SOL-first.
+  useEffect(() => {
+    if (connected && evmConnected) {
+      try { evmDisconnect(); } catch { /* ignore */ }
+    }
+  }, [connected, evmConnected, evmDisconnect]);
+
   // The header pill prefers showing the Solana address (most users are
   // SOL-first) and falls back to the EVM address when only EVM is connected.
   const activeAddress = publicKey?.toBase58() ?? (evmConnected ? evmAddress ?? null : null);
