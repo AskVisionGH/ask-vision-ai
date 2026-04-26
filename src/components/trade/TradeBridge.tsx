@@ -454,11 +454,80 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
   };
 
   const handleBridge = useCallback(async () => {
-    if (!connected || !publicKey || !signTransaction || !quote || !fromToken || !toToken) return;
+    if (!quote || !fromToken || !toToken || !fromChain || !fromAddress) return;
     const startedAt = Date.now();
+    const outAmountUi = Number(quote.toAmountAtomic) / Math.pow(10, toToken.decimals);
+
     try {
       setPhase({ name: "building" });
       const built = await supaPost("bridge-build", { quote: quote.raw });
+
+      // ============ EVM source path ============
+      if (fromIsEvm) {
+        const txReq = built.transactionRequest;
+        if (!txReq?.to || !txReq?.data) {
+          throw new Error("Bridge route returned no EVM transaction.");
+        }
+        const approvalAddress: string | null =
+          quote.raw?.estimate?.approvalAddress ?? built.step?.estimate?.approvalAddress ?? null;
+
+        let sourceTxHash: Hex;
+        try {
+          sourceTxHash = await sendBridgeTx({
+            fromChainId: Number(fromChain.id),
+            fromTokenAddress: fromToken.address,
+            fromAmount: quote.fromAmountAtomic,
+            approvalAddress,
+            txRequest: txReq,
+            onStatus: (s) => {
+              if (!mounted.current) return;
+              if (s === "switching") setPhase({ name: "switching_chain" });
+              else if (s === "approving") setPhase({ name: "approving" });
+              else if (s === "signing") setPhase({ name: "awaiting_signature" });
+              else if (s === "confirming") setPhase({ name: "submitting" });
+            },
+          });
+        } catch (e: any) {
+          // User rejected in wallet → friendly cancelled state.
+          const msg = String(e?.message ?? "").toLowerCase();
+          if (msg.includes("user rejected") || msg.includes("denied") || msg.includes("rejected")) {
+            if (mounted.current) setPhase({
+              name: "cancelled",
+              fromAmountUi: numericAmount,
+              fromSymbol: fromToken.symbol,
+              toAmountUi: outAmountUi,
+              toSymbol: toToken.symbol,
+            });
+            return;
+          }
+          throw e;
+        }
+
+        const explorer = `https://etherscan.io/tx/${sourceTxHash}`; // overridden per-chain below if available
+        const sourceExplorer = buildExplorerUrl(Number(fromChain.id), sourceTxHash);
+
+        setPhase({
+          name: "bridging",
+          sourceTxHash,
+          sourceExplorer,
+          startedAt,
+          estimatedSec: quote.executionDurationSec ?? null,
+        });
+
+        await pollBridgeStatus({
+          txHash: sourceTxHash,
+          quote,
+          toToken,
+          startedAt,
+          sourceExplorer,
+          setPhase,
+          mounted,
+        });
+        return;
+      }
+
+      // ============ Solana source path (existing) ============
+      if (!signTransaction || !publicKey) throw new Error("Connect your Solana wallet first.");
       const txB64 = built.solanaTransaction ?? built.transactionRequest?.data;
       if (!txB64) throw new Error("Bridge route returned no Solana transaction");
 
@@ -474,7 +543,7 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
           name: "cancelled",
           fromAmountUi: numericAmount,
           fromSymbol: fromToken.symbol,
-          toAmountUi: Number(quote.toAmountAtomic) / Math.pow(10, toToken.decimals),
+          toAmountUi: outAmountUi,
           toSymbol: toToken.symbol,
         });
         return;
@@ -489,57 +558,35 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
         inputMint: fromToken.address,
         outputMint: toToken.address,
         inputAmount: numericAmount,
-        outputAmount: Number(quote.toAmountAtomic) / Math.pow(10, toToken.decimals),
+        outputAmount: outAmountUi,
         walletAddress: publicKey.toBase58(),
       });
       const signature = submitted.signature as string;
       if (!signature) throw new Error("No signature returned from submit");
 
-      setPhase({ name: "bridging", signature, startedAt, estimatedSec: quote.executionDurationSec ?? null });
+      const sourceExplorer = `https://solscan.io/tx/${signature}`;
+      setPhase({
+        name: "bridging",
+        sourceTxHash: signature,
+        sourceExplorer,
+        startedAt,
+        estimatedSec: quote.executionDurationSec ?? null,
+      });
 
-      // Poll LI.FI status until DONE / FAILED / timeout. The Solana sig is the
-      // source-chain hash; LI.FI maps it to the destination-chain receive tx.
-      const deadline = Date.now() + POLL_TIMEOUT_MS;
-      while (Date.now() < deadline) {
-        if (!mounted.current) return;
-        await sleep(POLL_INTERVAL_MS);
-        try {
-          const status = await supaGet("bridge-status", {
-            txHash: signature,
-            fromChain: String(quote.raw?.action?.fromChainId ?? ""),
-            toChain: String(quote.raw?.action?.toChainId ?? ""),
-            bridge: quote.tool ?? "",
-          });
-          if (status.status === "DONE") {
-            const recv = status.receiving;
-            const destAmountUi = recv?.amount && toToken.decimals != null
-              ? Number(recv.amount) / Math.pow(10, toToken.decimals)
-              : Number(quote.toAmountAtomic) / Math.pow(10, toToken.decimals);
-            const destExplorer = recv?.txLink ?? null;
-            if (!mounted.current) return;
-            setPhase({
-              name: "success",
-              signature,
-              durationMs: Date.now() - startedAt,
-              toAmountUi: destAmountUi,
-              toSymbol: toToken.symbol,
-              destExplorer,
-            });
-            return;
-          }
-          if (status.status === "FAILED" || status.status === "INVALID") {
-            throw new Error(status.substatus ?? "Bridge failed on-chain");
-          }
-        } catch {
-          continue;
-        }
-      }
-      throw new Error("Bridge is taking longer than expected. You can keep tracking it from the source transaction.");
+      await pollBridgeStatus({
+        txHash: signature,
+        quote,
+        toToken,
+        startedAt,
+        sourceExplorer,
+        setPhase,
+        mounted,
+      });
     } catch (e) {
       if (!mounted.current) return;
       setPhase({ name: "error", message: e instanceof Error ? e.message : "Something went wrong." });
     }
-  }, [connected, publicKey, signTransaction, quote, fromToken, toToken, numericAmount]);
+  }, [quote, fromToken, toToken, fromChain, fromAddress, fromIsEvm, sendBridgeTx, signTransaction, publicKey, numericAmount]);
 
   const reset = () => {
     setAmount("");
