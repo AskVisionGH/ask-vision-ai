@@ -1,10 +1,11 @@
-import { ArrowUp, Mic, Loader2, Square } from "lucide-react";
+import { ArrowUp, Mic, Loader2, Square, AtSign } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useProfile } from "@/hooks/useProfile";
 import { getLanguageOption } from "@/lib/languages";
+import { useContacts, type ContactRow } from "@/hooks/useContacts";
 
 interface Props {
   value: string;
