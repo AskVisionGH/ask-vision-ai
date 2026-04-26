@@ -52,12 +52,38 @@ export const useWebPush = () => {
     void refresh();
   }, [refresh]);
 
+  // Re-sync permission state whenever the tab regains focus or becomes
+  // visible. Critical for the "user flipped Chrome site permissions in
+  // another tab" flow — without this, our React state stays stale at
+  // "denied" forever and the recovery dialog keeps re-appearing on Retry.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [refresh]);
+
   const enable = useCallback(async (): Promise<boolean> => {
     if (!isSupported()) return false;
     setBusy(true);
     try {
-      const perm = await Notification.requestPermission();
-      setPermission(perm as PermissionState);
+      // Read live browser state first — `Notification.permission` is the
+      // source of truth and may have changed since we last cached it (e.g.
+      // user flipped the site permission in browser settings). Only call
+      // requestPermission() when truly in the "default" state, since calling
+      // it after a denial is a no-op and after a grant is wasted work.
+      const live = Notification.permission as PermissionState;
+      let perm: PermissionState = live;
+      if (live === "default") {
+        perm = (await Notification.requestPermission()) as PermissionState;
+      }
+      setPermission(perm);
       if (perm !== "granted") return false;
 
       // Register SW (idempotent).
