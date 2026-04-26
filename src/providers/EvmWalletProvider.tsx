@@ -70,6 +70,12 @@ export const EvmWalletProvider = ({ children, queryClient }: Props) => {
 
   return (
     <WagmiProvider config={wagmiConfig}>
+      {/*
+        reconnectOnMount=false matches the Solana side: users want the chooser
+        to surface every visit instead of silently re-binding to whichever EVM
+        wallet was used last. The chooser will still show that address as a
+        one-click option under "Last used".
+      */}
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider theme={theme} modalSize="compact">
           {children}
