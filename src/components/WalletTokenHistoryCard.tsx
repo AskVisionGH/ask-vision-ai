@@ -1,4 +1,5 @@
 import { ArrowDownLeft, ExternalLink, History } from "lucide-react";
+import { txExplorerUrl, explorerLabel } from "@/lib/explorer";
 
 /**
  * Renders the result of a deep historical wallet × token scan.
