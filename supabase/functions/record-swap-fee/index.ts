@@ -127,16 +127,45 @@ serve(async (req) => {
       },
     };
 
-    // Idempotent: dedupe on (chain, signature, asset_address). If the row
-    // already exists we don't overwrite it — first attribution wins.
-    const { error } = await admin
+    // Idempotent: the unique index is on (chain, signature, COALESCE(asset_address, 'native'))
+    // — a partial expression PostgREST can't target via onConflict, so we
+    // pre-check for an existing row and only insert if missing. First
+    // attribution wins.
+    const { data: existing } = await admin
       .from("treasury_fees")
-      .upsert(row, {
-        onConflict: "chain,signature,asset_address",
-        ignoreDuplicates: true,
-      });
+      .select("id")
+      .eq("chain", "solana")
+      .eq("signature", signature)
+      .is("asset_address", assetAddress === null ? null : undefined)
+      .eq("asset_address", assetAddress ?? "")
+      .maybeSingle();
+
+    // The above .is/.eq combo is awkward — do it cleanly:
+    let alreadyExists = false;
+    {
+      const q = admin
+        .from("treasury_fees")
+        .select("id")
+        .eq("chain", "solana")
+        .eq("signature", signature);
+      const { data: dup } = assetAddress === null
+        ? await q.is("asset_address", null).maybeSingle()
+        : await q.eq("asset_address", assetAddress).maybeSingle();
+      alreadyExists = Boolean(dup?.id) || Boolean(existing?.id);
+    }
+
+    if (alreadyExists) {
+      return json({ ok: true, deduped: true });
+    }
+
+    const { error } = await admin.from("treasury_fees").insert(row);
 
     if (error) {
+      // Index may still race-trip; treat unique violation as success.
+      const code = (error as { code?: string }).code;
+      if (code === "23505") {
+        return json({ ok: true, deduped: true });
+      }
       console.error("record-swap-fee insert failed:", error);
       return json({ error: "Failed to record fee" }, 500);
     }
