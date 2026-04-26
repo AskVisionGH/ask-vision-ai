@@ -253,6 +253,7 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
           outputToken: outputToken.address,
           amount: numericAmount,
           slippageBps,
+          dynamicSlippage,
         });
         if (mounted.current && !fresh.error) {
           setQuote(fresh);
