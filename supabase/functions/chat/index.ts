@@ -931,6 +931,14 @@ serve(async (req) => {
               const target = (args.address ?? "").trim() || walletAddress;
               if (!target) {
                 result = { error: "No wallet connected and no address provided." };
+              } else if (/^0x[a-fA-F0-9]{40}$/.test(target)) {
+                // EVM address → route to evm-wallet-pnl. Default chain: ETH
+                // mainnet; the model can pass `chainId` to override.
+                result = await invokeFn(
+                  "evm-wallet-pnl",
+                  { address: target, chainId: Number(args.chainId ?? 1), slice: "wallet_pnl" },
+                  req,
+                );
               } else {
                 result = await invokeFn(
                   "wallet-pnl",
@@ -944,6 +952,12 @@ serve(async (req) => {
               const target = (args.address ?? "").trim() || walletAddress;
               if (!target) {
                 result = { error: "No wallet connected and no address provided." };
+              } else if (/^0x[a-fA-F0-9]{40}$/.test(target)) {
+                result = await invokeFn(
+                  "evm-wallet-pnl",
+                  { address: target, chainId: Number(args.chainId ?? 1), slice: "recent_txs", limit: args.limit ?? 25 },
+                  req,
+                );
               } else {
                 result = await invokeFn(
                   "wallet-pnl",
@@ -959,6 +973,12 @@ serve(async (req) => {
                 result = { error: "No wallet connected and no address provided." };
               } else if (!args.token) {
                 result = { error: "Token ticker or mint required." };
+              } else if (/^0x[a-fA-F0-9]{40}$/.test(target)) {
+                result = await invokeFn(
+                  "evm-wallet-pnl",
+                  { address: target, chainId: Number(args.chainId ?? 1), slice: "token_pnl", tokenFilter: args.token },
+                  req,
+                );
               } else {
                 result = await invokeFn(
                   "wallet-pnl",
@@ -970,16 +990,28 @@ serve(async (req) => {
             } else if (name === "get_wallet_token_history") {
               const args = safeJson(tc.function?.arguments);
               const target = (args.wallet ?? "").trim() || walletAddress;
+              const tokenArg = String(args.mint ?? args.token ?? "");
               if (!target) {
                 result = { error: "No wallet provided." };
-              } else if (!args.mint) {
-                result = { error: "Token mint address required." };
+              } else if (!tokenArg) {
+                result = { error: "Token mint/contract address required." };
+              } else if (/^0x[a-fA-F0-9]{40}$/.test(target)) {
+                result = await invokeFn(
+                  "evm-wallet-token-history",
+                  {
+                    wallet: target,
+                    token: tokenArg,
+                    chainId: Number(args.chainId ?? 1),
+                    maxPages: args.maxPages ?? 3,
+                  },
+                  req,
+                );
               } else {
                 result = await invokeFn(
                   "wallet-token-history",
                   {
                     wallet: target,
-                    mint: args.mint,
+                    mint: tokenArg,
                     maxSignatures: args.maxSignatures ?? 3000,
                     direction: "auto",
                   },
