@@ -52,6 +52,7 @@ const Onboarding = () => {
   const [experience, setExperience] = useState<CryptoExperience | null>(null);
   const [interests, setInterests] = useState<string[]>([]);
   const [risk, setRisk] = useState<RiskTolerance | null>(null);
+  const [language, setLanguage] = useState<LanguageCode>(DEFAULT_LANGUAGE);
   const [savingAvatar, setSavingAvatar] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
