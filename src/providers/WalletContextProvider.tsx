@@ -126,7 +126,13 @@ export const WalletContextProvider = ({ children }: Props) => {
 
   return (
     <ConnectionProvider endpoint={endpoint} config={config}>
-      <WalletProvider wallets={wallets} autoConnect>
+      {/*
+        autoConnect is intentionally false: users asked to be shown the wallet
+        chooser (linked + last-used) on every fresh visit instead of being
+        silently re-bound to the most recently used adapter. Last-used is still
+        surfaced in our chooser (see WalletPicker / WalletChooser).
+      */}
+      <WalletProvider wallets={wallets} autoConnect={false}>
         <WalletModalProvider>{children}</WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>

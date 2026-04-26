@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
+import { useAccount, useDisconnect as useEvmDisconnect } from "wagmi";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -8,7 +10,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { useWalletPicker } from "@/components/WalletPicker";
+import { WalletChooser } from "@/components/WalletChooser";
+import { recordLastUsedWallet } from "@/lib/wallet-history";
 import { LogOut, Repeat } from "lucide-react";
 
 interface Props {
@@ -18,14 +21,41 @@ interface Props {
 
 /** Pill-shaped connect button matching Vision aesthetic. */
 export const ConnectWalletButton = ({ className, size = "lg" }: Props) => {
-  const { open, Picker } = useWalletPicker();
-  const { connected, publicKey, disconnect, connecting } = useWallet();
+  const [chooserOpen, setChooserOpen] = useState(false);
+  const { connected, publicKey, disconnect, connecting, wallet } = useWallet();
+  const { address: evmAddress, isConnected: evmConnected, connector: evmConnector } = useAccount();
+  const { disconnect: evmDisconnect } = useEvmDisconnect();
 
-  const short = publicKey
-    ? `${publicKey.toBase58().slice(0, 4)}…${publicKey.toBase58().slice(-4)}`
+  // Persist successful connects to the "last used" history so the chooser
+  // can offer one-click reconnects on future visits.
+  useEffect(() => {
+    if (connected && publicKey && wallet?.adapter?.name) {
+      recordLastUsedWallet({
+        address: publicKey.toBase58(),
+        chain: "solana",
+        walletName: wallet.adapter.name,
+      });
+    }
+  }, [connected, publicKey, wallet?.adapter?.name]);
+  useEffect(() => {
+    if (evmConnected && evmAddress && evmConnector?.name) {
+      recordLastUsedWallet({
+        address: evmAddress.toLowerCase(),
+        chain: "evm",
+        walletName: evmConnector.name,
+      });
+    }
+  }, [evmConnected, evmAddress, evmConnector?.name]);
+
+  // The header pill prefers showing the Solana address (most users are
+  // SOL-first) and falls back to the EVM address when only EVM is connected.
+  const activeAddress = publicKey?.toBase58() ?? (evmConnected ? evmAddress ?? null : null);
+  const anyConnected = connected || evmConnected;
+  const short = activeAddress
+    ? `${activeAddress.slice(0, 4)}…${activeAddress.slice(-4)}`
     : "";
 
-  if (connected) {
+  if (anyConnected) {
     return (
       <>
         <DropdownMenu>
@@ -43,10 +73,11 @@ export const ConnectWalletButton = ({ className, size = "lg" }: Props) => {
           <DropdownMenuContent align="end" className="w-44">
             <DropdownMenuItem
               onClick={async () => {
-                // Disconnect the current wallet first so the picker doesn't
-                // immediately reconnect to it. Then open the wallet picker.
-                try { await disconnect(); } catch { /* ignore */ }
-                open();
+                // Open the chooser without dropping the current connection —
+                // the user can pick another linked address or hit a
+                // "Connect new" CTA. Disconnect happens implicitly when they
+                // pick a different wallet.
+                setChooserOpen(true);
               }}
             >
               <Repeat className="mr-2 h-3.5 w-3.5" />
@@ -54,7 +85,10 @@ export const ConnectWalletButton = ({ className, size = "lg" }: Props) => {
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              onClick={() => disconnect()}
+              onClick={async () => {
+                try { if (connected) await disconnect(); } catch { /* ignore */ }
+                try { if (evmConnected) evmDisconnect(); } catch { /* ignore */ }
+              }}
               className="text-destructive focus:text-destructive focus:bg-destructive/10"
             >
               <LogOut className="mr-2 h-3.5 w-3.5" />
@@ -62,7 +96,7 @@ export const ConnectWalletButton = ({ className, size = "lg" }: Props) => {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        {Picker}
+        <WalletChooser open={chooserOpen} onOpenChange={setChooserOpen} />
       </>
     );
   }
@@ -70,7 +104,7 @@ export const ConnectWalletButton = ({ className, size = "lg" }: Props) => {
   return (
     <>
       <Button
-        onClick={open}
+        onClick={() => setChooserOpen(true)}
         disabled={connecting}
         size={size}
         className={cn(
@@ -80,7 +114,7 @@ export const ConnectWalletButton = ({ className, size = "lg" }: Props) => {
       >
         {connecting ? "Connecting…" : "Connect wallet to begin"}
       </Button>
-      {Picker}
+      <WalletChooser open={chooserOpen} onOpenChange={setChooserOpen} />
     </>
   );
 };
