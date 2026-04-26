@@ -133,13 +133,24 @@ export const WalletTokenHistoryCard = ({ data }: Props) => {
 
       <div
         className={`grid gap-px border-t border-border/60 bg-border/40 text-center ${
-          showTransferStats ? "grid-cols-4" : "grid-cols-3"
+          [showTransferStats, showRealized].filter(Boolean).length === 2
+            ? "grid-cols-5"
+            : showTransferStats || showRealized
+              ? "grid-cols-4"
+              : "grid-cols-3"
         }`}
       >
         <Stat label="Buys" value={data.totalBuys ?? 0} />
         <Stat label="Sells" value={data.totalSells ?? 0} />
         {showTransferStats && (
           <Stat label="Transfers" value={`${transfersIn}↓ / ${transfersOut}↑`} />
+        )}
+        {showRealized && (
+          <Stat
+            label="Realized $"
+            value={realizedFormatted}
+            valueClassName={realizedTone}
+          />
         )}
         <Stat label={`Net (${symbol})`} value={netFormatted} />
       </div>
