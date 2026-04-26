@@ -1028,7 +1028,10 @@ const SOURCE_LABELS: Record<TreasuryFee["source_kind"], string> = {
   limit_fee: "Limit fee",
   dca_fee: "DCA fee",
   bridge_fee: "Bridge fee",
-  sweep: "Sweep",
+  // Jupiter referral PDA claims — these batch-collect fees from Jupiter
+  // Swap v2 (and any limit-order fees that route through the same referral
+  // program). In practice today this is ~all swap fees, so label it as such.
+  sweep: "Jupiter swap fee",
   transfer_fee: "Transfer fee",
   other: "Other",
 };
