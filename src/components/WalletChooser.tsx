@@ -73,7 +73,6 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
   const {
     wallets: solWallets,
     select: selectSolWallet,
-    connect: connectSol,
     publicKey: solPublicKey,
     connected: solConnected,
   } = useWallet();
