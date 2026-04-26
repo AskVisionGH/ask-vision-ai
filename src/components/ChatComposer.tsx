@@ -26,6 +26,7 @@ export const ChatComposer = ({
 }: Props) => {
   const ref = useRef<HTMLTextAreaElement>(null);
   const { profile } = useProfile();
+  const { contacts } = useContacts();
   const [recState, setRecState] = useState<RecState>("idle");
   const [elapsedMs, setElapsedMs] = useState(0);
 
@@ -34,6 +35,101 @@ export const ChatComposer = ({
   const streamRef = useRef<MediaStream | null>(null);
   const startedAtRef = useRef<number>(0);
   const tickRef = useRef<number | null>(null);
+
+  // --- @mention dropdown state ---------------------------------------------
+  // We watch the textarea caret for a `@<query>` token (no whitespace inside)
+  // and surface matching contacts. Selecting one replaces the token with the
+  // contact's display name so downstream chat handlers can resolve it via
+  // findContactByName().
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionStart, setMentionStart] = useState<number>(-1);
+  const [mentionIndex, setMentionIndex] = useState(0);
+
+  const mentionMatches = useMemo<ContactRow[]>(() => {
+    if (mentionQuery === null) return [];
+    const q = mentionQuery.toLowerCase();
+    const filtered = q
+      ? contacts.filter((c) => c.name.toLowerCase().startsWith(q))
+      : contacts;
+    return filtered.slice(0, 6);
+  }, [contacts, mentionQuery]);
+
+  const mentionOpen = mentionQuery !== null && mentionMatches.length > 0;
+
+  // Reset highlight when the candidate list changes so we never point past
+  // the end of the array.
+  useEffect(() => {
+    setMentionIndex(0);
+  }, [mentionQuery, mentionMatches.length]);
+
+  /** Inspect the text around the caret to decide whether a `@token` is active. */
+  const detectMention = (text: string, caret: number) => {
+    // Walk backwards from the caret looking for `@` — stop on whitespace.
+    let i = caret - 1;
+    while (i >= 0) {
+      const ch = text[i];
+      if (ch === "@") {
+        // `@` must be at start of input OR preceded by whitespace, otherwise
+        // it's part of an email/handle inside another word.
+        if (i === 0 || /\s/.test(text[i - 1])) {
+          const query = text.slice(i + 1, caret);
+          // Bail if the query already has whitespace (mention "closed").
+          if (/\s/.test(query)) {
+            setMentionQuery(null);
+            setMentionStart(-1);
+            return;
+          }
+          setMentionQuery(query);
+          setMentionStart(i);
+          return;
+        }
+        setMentionQuery(null);
+        setMentionStart(-1);
+        return;
+      }
+      if (/\s/.test(ch)) {
+        setMentionQuery(null);
+        setMentionStart(-1);
+        return;
+      }
+      i--;
+    }
+    setMentionQuery(null);
+    setMentionStart(-1);
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const next = e.target.value;
+    onChange(next);
+    detectMention(next, e.target.selectionStart ?? next.length);
+  };
+
+  const insertMention = (contact: ContactRow) => {
+    if (mentionStart < 0) return;
+    const el = ref.current;
+    const caret = el?.selectionStart ?? value.length;
+    // Replace `@<query>` with `@Name ` (trailing space so user can keep typing).
+    const before = value.slice(0, mentionStart);
+    const after = value.slice(caret);
+    const inserted = `@${contact.name} `;
+    const next = `${before}${inserted}${after}`;
+    onChange(next);
+    setMentionQuery(null);
+    setMentionStart(-1);
+    // Restore caret right after the inserted mention.
+    requestAnimationFrame(() => {
+      const pos = before.length + inserted.length;
+      if (el) {
+        el.focus();
+        el.setSelectionRange(pos, pos);
+      }
+    });
+  };
+
+  const closeMention = () => {
+    setMentionQuery(null);
+    setMentionStart(-1);
+  };
 
   // Auto-grow up to ~6 lines.
   useEffect(() => {
