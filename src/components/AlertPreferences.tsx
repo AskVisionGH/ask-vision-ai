@@ -71,6 +71,11 @@ export const AlertPreferences = () => {
   // the pre-prompt dialog (default state) and the recovery dialog (denied
   // state, after the user has flipped permissions back to allow).
   const runEnable = async () => {
+    // Always re-sync with the live browser permission first. The React
+    // state can be stale if the user changed Chrome site permissions in
+    // another tab — without this, Retry keeps showing the denied dialog
+    // even after they've already allowed it.
+    await push.refresh();
     const ok = await push.enable();
     if (ok) {
       await update({ channel_web_push: true });
@@ -82,7 +87,7 @@ export const AlertPreferences = () => {
     // Failure paths:
     //  - "denied": browser already blocked; show recovery instructions.
     //  - other: probably unsupported / network — surface a toast.
-    if (push.permission === "denied") {
+    if (Notification.permission === "denied") {
       setShowEnableDialog(false);
       setShowDeniedDialog(true);
     } else {
@@ -94,13 +99,17 @@ export const AlertPreferences = () => {
 
   const toggleWebPush = async (on: boolean) => {
     if (on) {
-      // Route based on current permission state so we never fire the native
-      // prompt cold (which is what causes the un-recoverable denial).
-      if (push.permission === "denied") {
+      // Re-sync first so we route on the live permission state, not a
+      // stale React snapshot.
+      await push.refresh();
+      const live = typeof Notification !== "undefined"
+        ? Notification.permission
+        : "default";
+      if (live === "denied") {
         setShowDeniedDialog(true);
         return;
       }
-      if (push.permission === "granted") {
+      if (live === "granted") {
         // Already allowed at the OS level — just subscribe quietly.
         await runEnable();
         return;
