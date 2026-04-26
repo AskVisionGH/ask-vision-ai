@@ -230,13 +230,6 @@ const Auth = () => {
     return () => window.clearTimeout(id);
   }, [pendingSign]);
 
-  // Removed duplicate effect (merged into the one above).
-  const _noop = () => {
-    if (false) {
-      return;
-    }
-  };
-
   // If the user toggles the chain selector to one where they're not connected,
   // clear stale signing state. Doesn't disconnect the other chain — multi-chain.
   useEffect(() => {
