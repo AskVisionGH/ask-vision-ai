@@ -283,12 +283,23 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
     setPendingSolanaWalletName(walletName);
 
     try {
+      const isSameAdapter = selectedSolWallet?.adapter.name === walletName;
+
       if (solConnected) {
         try {
           await disconnectSolWallet();
         } catch {
           /* ignore */
         }
+      }
+
+      // `select()` is a no-op when the requested wallet name matches the
+      // currently selected adapter. That breaks same-provider account switches
+      // like Phantom → Phantom because the disconnect completes but the
+      // adapter never gets reselected, so `connect()` has nothing to open.
+      if (isSameAdapter) {
+        selectSolWallet(null);
+        await new Promise((resolve) => setTimeout(resolve, 0));
       }
 
       selectSolWallet(walletName);
