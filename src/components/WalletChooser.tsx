@@ -28,6 +28,7 @@ import {
   type WalletChain,
 } from "@/lib/wallet-history";
 import { cn } from "@/lib/utils";
+import { evmChainBadge, solanaBadge } from "@/lib/chain-badge";
 
 /**
  * Flat wallet chooser.
