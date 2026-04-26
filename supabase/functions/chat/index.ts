@@ -173,7 +173,8 @@ const TOOLS = [
           },
           slippageBps: {
             type: "number",
-            description: "Optional slippage tolerance in basis points (default 50 = 0.5%).",
+            description:
+              "Optional slippage tolerance in BASIS POINTS (1 bp = 0.01%). Default 50 = 0.5%. **CRITICAL conversion**: when the user says a percentage, multiply by 100 to get bps. Examples: '1%' → 100, '2%' → 200, '5%' → 500, '10%' → 1000, '0.5%' → 50, '0.1%' → 10. NEVER pass the raw percentage number — '5%' is 500 bps, NOT 5 and NOT 5000. Hard cap is 5000 (50%) — if the user requests more, clamp to 5000 and warn them.",
           },
         },
         required: ["inputToken", "outputToken", "amount"],
