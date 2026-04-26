@@ -56,6 +56,9 @@ export const ChatPushPrompt = () => {
   };
 
   const handleEnable = async () => {
+    // Re-sync with live browser permission so we don't act on stale state
+    // (user may have flipped Chrome site permissions since page load).
+    await push.refresh();
     const ok = await push.enable();
     if (ok) {
       // Make sure the master switch + web-push channel are on so the
@@ -66,8 +69,9 @@ export const ChatPushPrompt = () => {
         channel_web_push: true,
       });
       setOpen(false);
+      setDeniedOpen(false);
       toast.success("Notifications enabled");
-    } else if (push.permission === "denied") {
+    } else if (Notification.permission === "denied") {
       // Native prompt was answered with "Block".
       markSeen();
       setOpen(false);
@@ -95,7 +99,8 @@ export const ChatPushPrompt = () => {
       />
       <PushDeniedDialog
         open={deniedOpen}
-        onRetry={() => setDeniedOpen(false)}
+        busy={push.busy}
+        onRetry={handleEnable}
         onDismiss={() => setDeniedOpen(false)}
       />
     </>
