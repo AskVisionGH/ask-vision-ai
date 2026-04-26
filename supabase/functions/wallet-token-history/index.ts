@@ -49,6 +49,14 @@ interface HistoryEvent {
   signature: string;
   timestamp: number; // unix seconds
   side: "buy" | "sell";
+  /**
+   * Differentiates real DEX activity from plain SPL/native transfers.
+   *  - "swap": came from a Helius `events.swap` payload (real buy/sell against
+   *    a counterparty token). Counts toward buys/sells.
+   *  - "transfer": plain SPL or native transfer touching the wallet. Does
+   *    NOT count as a buy/sell — the tokens were simply moved in/out.
+   */
+  kind: "swap" | "transfer";
   /** Amount of the *target* token moved on the wallet. Always positive. */
   tokenAmount: number;
   /** Counterparty token mint (what was paid / received in exchange). */
@@ -58,6 +66,12 @@ interface HistoryEvent {
   /** Stable-equivalent USD value when one leg is USDC/USDT, else null. */
   valueUsd: number | null;
   source: string | null;
+  /**
+   * For `kind === "transfer"`: the wallet that sent us the tokens (when
+   * `side === "buy"`) or that we sent to (when `side === "sell"`). Lets the
+   * UI / LLM say "received from <addr>" instead of guessing.
+   */
+  counterparty: string | null;
 }
 
 interface CachedRow {
