@@ -730,7 +730,16 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
                 label="Slippage"
                 value={
                   <span className="font-mono text-[12px] text-foreground">
-                    {(quote.slippageBps / 100).toFixed(2)}%
+                    {quote.dynamicSlippage !== false ? (
+                      <>
+                        Dynamic{" "}
+                        <span className="text-muted-foreground">
+                          (max {(quote.slippageBps / 100).toFixed(2)}%)
+                        </span>
+                      </>
+                    ) : (
+                      `${(quote.slippageBps / 100).toFixed(2)}%`
+                    )}
                   </span>
                 }
               />
