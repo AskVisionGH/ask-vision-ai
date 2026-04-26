@@ -877,6 +877,78 @@ export type Database = {
         }
         Relationships: []
       }
+      wallet_token_history_cache: {
+        Row: {
+          created_at: string
+          events: Json
+          first_buy_amount: number | null
+          first_buy_at: string | null
+          first_buy_signature: string | null
+          first_buy_usd: number | null
+          fully_scanned: boolean
+          id: string
+          last_scanned_at: string
+          net_amount: number
+          newest_scanned_at: string | null
+          newest_scanned_signature: string | null
+          oldest_scanned_at: string | null
+          oldest_scanned_signature: string | null
+          realized_usd: number
+          signatures_scanned: number
+          token_mint: string
+          total_buys: number
+          total_sells: number
+          updated_at: string
+          wallet_address: string
+        }
+        Insert: {
+          created_at?: string
+          events?: Json
+          first_buy_amount?: number | null
+          first_buy_at?: string | null
+          first_buy_signature?: string | null
+          first_buy_usd?: number | null
+          fully_scanned?: boolean
+          id?: string
+          last_scanned_at?: string
+          net_amount?: number
+          newest_scanned_at?: string | null
+          newest_scanned_signature?: string | null
+          oldest_scanned_at?: string | null
+          oldest_scanned_signature?: string | null
+          realized_usd?: number
+          signatures_scanned?: number
+          token_mint: string
+          total_buys?: number
+          total_sells?: number
+          updated_at?: string
+          wallet_address: string
+        }
+        Update: {
+          created_at?: string
+          events?: Json
+          first_buy_amount?: number | null
+          first_buy_at?: string | null
+          first_buy_signature?: string | null
+          first_buy_usd?: number | null
+          fully_scanned?: boolean
+          id?: string
+          last_scanned_at?: string
+          net_amount?: number
+          newest_scanned_at?: string | null
+          newest_scanned_signature?: string | null
+          oldest_scanned_at?: string | null
+          oldest_scanned_signature?: string | null
+          realized_usd?: number
+          signatures_scanned?: number
+          token_mint?: string
+          total_buys?: number
+          total_sells?: number
+          updated_at?: string
+          wallet_address?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       admin_stats_summary: {
