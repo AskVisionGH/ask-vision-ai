@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ArrowDownLeft, ArrowUpRight, ChevronDown, ChevronUp, ExternalLink, Repeat, TrendingDown, TrendingUp } from "lucide-react";
 import { TokenLogo } from "@/components/TokenLogo";
 import { cn } from "@/lib/utils";
+import { txExplorerUrl, explorerLabel } from "@/lib/explorer";
 import type {
   ParsedTx,
   RecentTxsData,
@@ -54,8 +55,8 @@ const relativeTime = (ts: number) => {
 const pnlTone = (n: number) =>
   n > 0 ? "text-emerald-400" : n < 0 ? "text-rose-400" : "text-muted-foreground";
 
-const solscan = (sig: string) => `https://solscan.io/tx/${sig}`;
-
+// Per-tx explorer URL is built via @/lib/explorer (Solscan for Solana,
+// Etherscan-family for EVM) so EVM transactions don't link to Solscan.
 // ---------------- Expandable list wrapper ----------------
 
 function ExpandableList<T>({
@@ -214,11 +215,11 @@ const TxRow = ({ tx }: { tx: ParsedTx }) => {
           <span className="font-mono text-[12px] text-foreground">{fmtUsd(tx.valueUsd)}</span>
         )}
         <a
-          href={solscan(tx.signature)}
+          href={txExplorerUrl(tx.signature, tx.chainId)}
           target="_blank"
           rel="noreferrer"
           className="rounded-md p-1 text-muted-foreground/60 hover:bg-secondary hover:text-foreground"
-          title="View on Solscan"
+          title={`View on ${explorerLabel(tx.chainId)}`}
         >
           <ExternalLink className="h-3.5 w-3.5" />
         </a>

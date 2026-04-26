@@ -1,12 +1,17 @@
-// EVM equivalent of `wallet-token-history` — drill into a single ERC-20 on a
-// specific chain. Returns a buy/sell timeline, first-acquisition info, and
-// realized PnL for that one token.
+// EVM Wallet → single-token history.
 //
-// We narrow the Etherscan query to `contractaddress=` so we only pay for
-// transfers that touch the token of interest, then pair them with the
-// matching native txlist row to recover what the wallet paid/received on the
-// other side of each swap. This is the EVM analogue to wallet-token-history's
-// per-mint Helius scan.
+// Mirrors supabase/functions/wallet-token-history (Solana) so the chat UI's
+// WalletTokenHistoryCard renders the same shape. Etherscan v2's token-tx feed
+// gives us the full ERC-20 (or native) movement history for one (wallet, token)
+// pair in chronological order, classified per tx as buy / sell / transfer.
+//
+// What's intentionally simpler than the Solana version:
+//   - No DB cache: Etherscan returns up to 10K records per call, so even very
+//     active wallets fit in a single response. We can revisit caching once we
+//     see real load.
+//   - No partial-scan handling: `fullyScanned` is always true unless we hit
+//     the 10K cap (rare for a single token). Kept as a field so the LLM
+//     description stays consistent across chains.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
@@ -17,39 +22,116 @@ const corsHeaders = {
 };
 
 const NATIVE_ADDRESS = "0x0000000000000000000000000000000000000000";
-const ETH_LOGO =
-  "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png";
 
-interface ChainCfg {
-  id: number;
-  key: string;
-  nativeSymbol: string;
-  nativeCgId: string;
-  nativeLogo: string;
-  explorerTxBase: string;
-}
-
-const CHAINS: Record<number, ChainCfg> = {
-  1: { id: 1, key: "ethereum", nativeSymbol: "ETH", nativeCgId: "ethereum", nativeLogo: ETH_LOGO, explorerTxBase: "https://etherscan.io/tx/" },
-  10: { id: 10, key: "optimism", nativeSymbol: "ETH", nativeCgId: "ethereum", nativeLogo: ETH_LOGO, explorerTxBase: "https://optimistic.etherscan.io/tx/" },
-  56: { id: 56, key: "bsc", nativeSymbol: "BNB", nativeCgId: "binancecoin", nativeLogo: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/binance/info/logo.png", explorerTxBase: "https://bscscan.com/tx/" },
-  137: { id: 137, key: "polygon", nativeSymbol: "MATIC", nativeCgId: "matic-network", nativeLogo: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/polygon/info/logo.png", explorerTxBase: "https://polygonscan.com/tx/" },
-  324: { id: 324, key: "zksync", nativeSymbol: "ETH", nativeCgId: "ethereum", nativeLogo: ETH_LOGO, explorerTxBase: "https://explorer.zksync.io/tx/" },
-  8453: { id: 8453, key: "base", nativeSymbol: "ETH", nativeCgId: "ethereum", nativeLogo: ETH_LOGO, explorerTxBase: "https://basescan.org/tx/" },
-  42161: { id: 42161, key: "arbitrum", nativeSymbol: "ETH", nativeCgId: "ethereum", nativeLogo: ETH_LOGO, explorerTxBase: "https://arbiscan.io/tx/" },
-  43114: { id: 43114, key: "avalanche", nativeSymbol: "AVAX", nativeCgId: "avalanche-2", nativeLogo: "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/avalanchec/info/logo.png", explorerTxBase: "https://snowtrace.io/tx/" },
-  59144: { id: 59144, key: "linea", nativeSymbol: "ETH", nativeCgId: "ethereum", nativeLogo: ETH_LOGO, explorerTxBase: "https://lineascan.build/tx/" },
-  534352: { id: 534352, key: "scroll", nativeSymbol: "ETH", nativeCgId: "ethereum", nativeLogo: ETH_LOGO, explorerTxBase: "https://scrollscan.com/tx/" },
+const STABLES: Record<number, Set<string>> = {
+  1: new Set([
+    "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "0xdac17f958d2ee523a2206206994597c13d831ec7",
+    "0x6b175474e89094c44da98b954eedeac495271d0f",
+  ]),
+  8453: new Set([
+    "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+    "0xd9aaec86b65d86f6a7b5b1b0c42ffa531710b6ca",
+    "0xfde4c96c8593536e31f229ea8f37b2ada2699bb2",
+  ]),
+  42161: new Set([
+    "0xaf88d065e77c8cc2239327c5edb3a432268e5831",
+    "0xff970a61a04b1ca14834a43f5de4533ebddb5cc8",
+    "0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9",
+    "0xda10009cbd5d07dd0cecc66161fc93d7c9000da1",
+  ]),
+  10: new Set([
+    "0x0b2c639c533813f4aa9d7837caf62653d097ff85",
+    "0x7f5c764cbc14f9669b88837ca1490cca17c31607",
+    "0x94b008aa00579c1307b0ef2c499ad98a8ce58e58",
+  ]),
+  137: new Set([
+    "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359",
+    "0x2791bca1f2de4661ed88a30c99a7a9449aa84174",
+    "0xc2132d05d31c914a87c6611c10748aeb04b58e8f",
+    "0x8f3cf7ad23cd3cadbd9735aff958023239c6a063",
+  ]),
+  56: new Set([
+    "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
+    "0x55d398326f99059ff775485246999027b3197955",
+  ]),
+  43114: new Set([
+    "0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e",
+    "0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7",
+  ]),
+  59144: new Set(["0x176211869ca2b568f2a7d4ee941e073a821ee1ff"]),
+  534352: new Set(["0x06efdbff2a14a7c8e15944d1f4a48f9f95f663a4"]),
+  324: new Set([
+    "0x1d17cbcf0d6d143135ae902365d2e5e2a16538d4",
+    "0x493257fd37edb34451f62edf8d2a0c418852ba4c",
+  ]),
 };
 
-const STABLE_SYMBOLS = new Set([
-  "USDC", "USDC.E", "USDT", "USDT.E", "DAI", "DAI.E",
-  "BUSD", "FDUSD", "PYUSD", "USDP", "TUSD", "GUSD", "LUSD", "FRAX",
-]);
-const NATIVE_QUOTE_SYMBOLS = new Set(["ETH", "WETH", "BNB", "WBNB", "MATIC", "WMATIC", "AVAX", "WAVAX"]);
+const NATIVE_SYMBOL: Record<number, string> = {
+  1: "ETH", 8453: "ETH", 42161: "ETH", 10: "ETH", 137: "POL",
+  56: "BNB", 43114: "AVAX", 59144: "ETH", 534352: "ETH", 324: "ETH",
+};
 
-const MAX_PAGES = 5;
-const PAGE_SIZE = 1000;
+function isQuote(chainId: number, contract: string): boolean {
+  const lc = contract.toLowerCase();
+  return lc === NATIVE_ADDRESS || (STABLES[chainId]?.has(lc) ?? false);
+}
+
+interface EtherscanTokenTx {
+  hash: string;
+  timeStamp: string;
+  from: string;
+  to: string;
+  value: string;
+  contractAddress: string;
+  tokenName: string;
+  tokenSymbol: string;
+  tokenDecimal: string;
+}
+
+interface EtherscanNormalTx {
+  hash: string;
+  timeStamp: string;
+  from: string;
+  to: string;
+  value: string;
+  isError?: string;
+  functionName?: string;
+}
+
+async function etherscanFetch(
+  chainId: number,
+  params: Record<string, string>,
+  apiKey: string,
+): Promise<unknown[]> {
+  const url = new URL("https://api.etherscan.io/v2/api");
+  url.searchParams.set("chainid", String(chainId));
+  url.searchParams.set("apikey", apiKey);
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+
+  const resp = await fetch(url.toString());
+  if (!resp.ok) {
+    console.error(`etherscan ${params.action} ${resp.status}`, await resp.text().catch(() => ""));
+    return [];
+  }
+  const data = await resp.json();
+  if (!Array.isArray(data.result)) return [];
+  return data.result;
+}
+
+interface HistoryEvent {
+  signature: string;
+  timestamp: number;
+  kind: "swap" | "transfer";
+  side: "buy" | "sell" | "in" | "out";
+  tokenAmount: number;
+  valueUsd: number | null;
+  pairSymbol: string | null;
+  pairAmount: number | null;
+  counterparty: string | null;
+  source: string | null;
+  chainId: number;
+}
 
 interface LifiToken {
   address: string;
@@ -60,352 +142,293 @@ interface LifiToken {
   priceUSD?: string | null;
 }
 
-interface EtherscanTransfer {
-  hash: string;
-  timeStamp: string;
-  from: string;
-  to: string;
-  value: string;
-  contractAddress?: string;
-  tokenSymbol?: string;
-  tokenDecimal?: string;
-}
-
-interface HistoryEvent {
-  signature: string;       // tx hash (we keep the field name to match Solana shape)
-  blockTime: number;
-  side: "buy" | "sell" | "transfer_in" | "transfer_out";
-  tokenAmount: number;     // positive = inflow, negative = outflow
-  pairAddress: string | null;
-  pairSymbol: string | null;
-  pairAmount: number | null;
-  valueUsd: number | null;
-  explorerUrl: string;
-}
-
 const tokenCache = new Map<string, { ts: number; tokens: Map<string, LifiToken> }>();
 const TOKEN_TTL_MS = 5 * 60 * 1000;
 
-async function loadLifi(chainId: number): Promise<Map<string, LifiToken>> {
+async function loadLifiTokenMap(chainId: number): Promise<Map<string, LifiToken>> {
   const key = String(chainId);
   const hit = tokenCache.get(key);
   if (hit && Date.now() - hit.ts < TOKEN_TTL_MS) return hit.tokens;
+
   const apiKey = Deno.env.get("LIFI_API_KEY");
   const headers: Record<string, string> = { Accept: "application/json" };
   if (apiKey) headers["x-lifi-api-key"] = apiKey;
-  const map = new Map<string, LifiToken>();
+
   try {
-    const r = await fetch(`https://li.quest/v1/tokens?chains=${encodeURIComponent(key)}`, { headers });
-    if (r.ok) {
-      const data = await r.json();
-      const list: LifiToken[] = data.tokens?.[key] ?? [];
-      for (const t of list) if (t?.address) map.set(t.address.toLowerCase(), t);
-    }
-  } catch (e) {
-    console.error("LI.FI fetch failed:", e);
+    const resp = await fetch(`https://li.quest/v1/tokens?chains=${encodeURIComponent(key)}`, { headers });
+    if (!resp.ok) return new Map();
+    const data = await resp.json();
+    const list: LifiToken[] = data.tokens?.[key] ?? [];
+    const map = new Map<string, LifiToken>();
+    for (const t of list) if (t.address) map.set(t.address.toLowerCase(), t);
+    tokenCache.set(key, { ts: Date.now(), tokens: map });
+    return map;
+  } catch {
+    return new Map();
   }
-  tokenCache.set(key, { ts: Date.now(), tokens: map });
-  return map;
 }
-
-async function etherscan<T = any>(
-  chainId: number,
-  module: string,
-  action: string,
-  params: Record<string, string>,
-): Promise<T[]> {
-  const apiKey = Deno.env.get("ETHERSCAN_API_KEY");
-  if (!apiKey) throw new Error("ETHERSCAN_API_KEY missing");
-  const url = new URL("https://api.etherscan.io/v2/api");
-  url.searchParams.set("chainid", String(chainId));
-  url.searchParams.set("module", module);
-  url.searchParams.set("action", action);
-  url.searchParams.set("apikey", apiKey);
-  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-  const r = await fetch(url.toString());
-  if (!r.ok) return [];
-  const d = await r.json();
-  return Array.isArray(d?.result) ? (d.result as T[]) : [];
-}
-
-function asBig(s: string | undefined): bigint {
-  if (!s) return 0n;
-  try { return BigInt(s); } catch { return 0n; }
-}
-
-const isStable = (sym: string) => STABLE_SYMBOLS.has(sym.toUpperCase());
-const isNativeQuote = (sym: string) => NATIVE_QUOTE_SYMBOLS.has(sym.toUpperCase());
-const isQuote = (sym: string) => isStable(sym) || isNativeQuote(sym);
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  const startedAt = Date.now();
+
   try {
     const body = await req.json();
-    const wallet: string = String(body.wallet ?? "").trim();
-    const tokenAddr: string = String(body.token ?? body.mint ?? "").trim().toLowerCase();
+    const wallet: string = (body.wallet ?? "").trim().toLowerCase();
+    const contract: string = (body.contract ?? body.mint ?? "").trim().toLowerCase();
     const chainId: number = Number(body.chainId ?? 1);
-    const maxPages: number = Math.min(Math.max(Number(body.maxPages ?? 3), 1), MAX_PAGES);
+    const maxTxs: number = Math.min(Math.max(Number(body.maxTxs ?? 3000), 100), 10000);
 
-    if (!/^0x[a-fA-F0-9]{40}$/.test(wallet)) return json({ error: "Invalid wallet" }, 400);
-    if (!/^0x[a-fA-F0-9]{40}$/.test(tokenAddr)) return json({ error: "Invalid token address" }, 400);
-    const chain = CHAINS[chainId];
-    if (!chain) return json({ error: `Unsupported chainId: ${chainId}` }, 400);
+    if (!/^0x[a-f0-9]{40}$/.test(wallet)) return json({ error: "Invalid wallet" }, 400);
+    if (!/^0x[a-f0-9]{40}$/.test(contract)) return json({ error: "Invalid contract" }, 400);
+    if (!NATIVE_SYMBOL[chainId]) return json({ error: `Unsupported chainId: ${chainId}` }, 400);
 
-    const lifi = await loadLifi(chainId);
-    const ownerLower = wallet.toLowerCase();
+    const apiKey = Deno.env.get("ETHERSCAN_API_KEY");
+    if (!apiKey) return json({ error: "ETHERSCAN_API_KEY missing" }, 500);
 
-    // 1) Pull all transfers of the target token for this wallet (paginated).
-    const tokenTransfers: EtherscanTransfer[] = [];
-    for (let page = 1; page <= maxPages; page++) {
-      const batch = await etherscan<EtherscanTransfer>(chainId, "account", "tokentx", {
-        contractaddress: tokenAddr,
+    // Etherscan v2 supports filtering tokentx by `contractaddress` — gives us
+    // every transfer of this single token to/from the wallet across the chain.
+    const tokenTxs = (await etherscanFetch(
+      chainId,
+      {
+        module: "account",
+        action: "tokentx",
         address: wallet,
-        page: String(page),
-        offset: String(PAGE_SIZE),
-        sort: "desc",
-      });
-      tokenTransfers.push(...batch);
-      if (batch.length < PAGE_SIZE) break;
-    }
+        contractaddress: contract,
+        startblock: "0",
+        endblock: "99999999",
+        page: "1",
+        offset: String(Math.min(maxTxs, 10000)),
+        sort: "asc",
+      },
+      apiKey,
+    )) as EtherscanTokenTx[];
 
-    if (tokenTransfers.length === 0) {
+    if (tokenTxs.length === 0) {
       return json({
         wallet,
-        chainId,
-        chain: chain.key,
-        token: tokenAddr,
-        events: [],
+        contract,
+        mint: contract, // alias for UI compat
+        tokenSymbol: null,
+        firstBuy: null,
         firstAcquisition: null,
-        netAmount: 0,
-        realizedUsd: 0,
         totalBuys: 0,
         totalSells: 0,
+        transfersIn: 0,
+        transfersOut: 0,
+        netAmount: 0,
+        realizedUsd: 0,
+        events: [],
+        eventsTruncated: false,
+        eventsTotal: 0,
+        signaturesScannedThisRun: 0,
+        signaturesScannedTotal: 0,
+        pagesThisRun: 1,
+        fullyScanned: true,
+        stoppedReason: "end" as const,
+        oldestScannedAt: null,
+        newestScannedAt: null,
+        durationMs: Date.now() - startedAt,
+        chainId,
       });
     }
 
-    // 2) For each unique tx hash, fetch the matching txlist + tokentx rows so
-    //    we can recover the "other side" of any swap. Etherscan exposes a
-    //    per-hash endpoint via `txhash=` on `proxy/eth_getTransactionByHash`,
-    //    but pulling the full tokentx + txlist over the same window is much
-    //    cheaper than 1 RPC call per hash. We already have most rows; for
-    //    efficiency, batch-fetch the ERC-20-only mirror once and union.
-    const hashes = new Set(tokenTransfers.map((t) => t.hash));
-    const oldestTs = Number(tokenTransfers[tokenTransfers.length - 1]?.timeStamp ?? 0);
+    const tokenSymbol = tokenTxs[0].tokenSymbol;
+    const tokenDecimals = Number(tokenTxs[0].tokenDecimal ?? 18);
 
-    // Bound the secondary scans to the same time window.
-    const startblock = "0";
-    const endblock = "99999999";
-
-    const [allTokenTx, allNativeTx] = await Promise.all([
-      etherscan<EtherscanTransfer>(chainId, "account", "tokentx", {
+    // Pull every "normal" tx for the same wallet so we can pair the token
+    // transfer with the other side of a swap (USDC paid in, ETH spent, etc.).
+    const hashes = new Set(tokenTxs.map((t) => t.hash));
+    const normalTxs = (await etherscanFetch(
+      chainId,
+      {
+        module: "account",
+        action: "txlist",
         address: wallet,
-        startblock,
-        endblock,
+        startblock: "0",
+        endblock: "99999999",
         page: "1",
-        offset: String(PAGE_SIZE),
+        offset: "10000",
         sort: "desc",
-      }),
-      etherscan<EtherscanTransfer>(chainId, "account", "txlist", {
+      },
+      apiKey,
+    )) as EtherscanNormalTx[];
+    const normalByHash = new Map<string, EtherscanNormalTx>();
+    for (const t of normalTxs) {
+      if (hashes.has(t.hash)) normalByHash.set(t.hash, t);
+    }
+
+    // Pull all erc20 movements for this wallet to find the "other side" of swaps.
+    const allErc20 = (await etherscanFetch(
+      chainId,
+      {
+        module: "account",
+        action: "tokentx",
         address: wallet,
-        startblock,
-        endblock,
+        startblock: "0",
+        endblock: "99999999",
         page: "1",
-        offset: String(PAGE_SIZE),
+        offset: "10000",
         sort: "desc",
-      }),
-    ]);
+      },
+      apiKey,
+    )) as EtherscanTokenTx[];
+    const otherErc20ByHash = new Map<string, EtherscanTokenTx[]>();
+    for (const t of allErc20) {
+      if (!hashes.has(t.hash)) continue;
+      if (t.contractAddress.toLowerCase() === contract) continue;
+      const arr = otherErc20ByHash.get(t.hash) ?? [];
+      arr.push(t);
+      otherErc20ByHash.set(t.hash, arr);
+    }
 
-    // Index counter-leg rows by hash.
-    type Row = { t: EtherscanTransfer; isNative: boolean };
-    const otherByHash = new Map<string, Row[]>();
-    const indexRow = (t: EtherscanTransfer, isNative: boolean) => {
-      if (!hashes.has(t.hash)) return;
-      // Skip the target token rows — those are already in `tokenTransfers`.
-      if (!isNative && (t.contractAddress ?? "").toLowerCase() === tokenAddr) return;
-      const arr = otherByHash.get(t.hash) ?? [];
-      arr.push({ t, isNative });
-      otherByHash.set(t.hash, arr);
-    };
-    for (const t of allTokenTx) indexRow(t, false);
-    for (const t of allNativeTx) indexRow(t, true);
+    const lifi = await loadLifiTokenMap(chainId);
+    const nativePriceUsd = (() => {
+      const m = lifi.get(NATIVE_ADDRESS);
+      return m?.priceUSD ? Number(m.priceUSD) : null;
+    })();
 
-    // 3) Build a HistoryEvent per tx hash from this wallet's perspective.
     const events: HistoryEvent[] = [];
     let netAmount = 0;
     let totalBuys = 0;
     let totalSells = 0;
-    let realizedUsd = 0;
-    let firstAcquisition: HistoryEvent | null = null;
+    let transfersIn = 0;
+    let transfersOut = 0;
 
-    // First, aggregate target-token movement per hash so multi-leg swaps net out.
-    const tokenNetByHash = new Map<string, { amount: number; ts: number; decimals: number; symbol: string }>();
-    for (const t of tokenTransfers) {
-      const decimals = Number(t.tokenDecimal ?? 18);
-      const symbol = (t.tokenSymbol ?? "?").toUpperCase();
-      const raw = asBig(t.value);
-      if (raw === 0n) continue;
-      const human = Number(raw) / Math.pow(10, decimals);
-      const from = (t.from ?? "").toLowerCase();
-      const to = (t.to ?? "").toLowerCase();
-      let signed = 0;
-      if (to === ownerLower && from !== ownerLower) signed = +human;
-      else if (from === ownerLower && to !== ownerLower) signed = -human;
-      else continue;
-      const prev = tokenNetByHash.get(t.hash);
-      const ts = Number(t.timeStamp);
-      if (prev) {
-        prev.amount += signed;
-        if (ts > prev.ts) prev.ts = ts;
-      } else {
-        tokenNetByHash.set(t.hash, { amount: signed, ts, decimals, symbol });
-      }
-    }
+    for (const tx of tokenTxs) {
+      const dir: "in" | "out" = tx.to.toLowerCase() === wallet ? "in" : "out";
+      const amount = Number(BigInt(tx.value || "0")) / Math.pow(10, tokenDecimals);
+      if (dir === "in") netAmount += amount;
+      else netAmount -= amount;
 
-    for (const [hash, info] of tokenNetByHash.entries()) {
-      if (Math.abs(info.amount) < 1e-12) continue;
+      const counterparty = dir === "in" ? tx.from : tx.to;
+      const others = otherErc20ByHash.get(tx.hash) ?? [];
+      const normal = normalByHash.get(tx.hash);
 
-      // Find the "other side" of the swap, if any: the largest counter-leg
-      // moving in the opposite direction of `info.amount`.
-      const others = otherByHash.get(hash) ?? [];
-      let pair: { addr: string; symbol: string; amount: number; price: number | null } | null = null;
-      let bestScore = 0;
+      // Identify the "other side" — opposite-direction token leg or native value.
+      const opposite = others.find((o) => (dir === "in" ? o.from.toLowerCase() === wallet : o.to.toLowerCase() === wallet));
 
-      for (const { t, isNative } of others) {
-        const raw = asBig(t.value);
-        if (raw === 0n) continue;
-        const from = (t.from ?? "").toLowerCase();
-        const to = (t.to ?? "").toLowerCase();
-        const incoming = to === ownerLower && from !== ownerLower;
-        const outgoing = from === ownerLower && to !== ownerLower;
-        if (!incoming && !outgoing) continue;
-        // For a BUY of the target, we expect the counter-leg to be OUTGOING.
-        if (info.amount > 0 && !outgoing) continue;
-        if (info.amount < 0 && !incoming) continue;
-
-        let addr: string;
-        let symbol: string;
-        let amount: number;
-        if (isNative) {
-          addr = NATIVE_ADDRESS;
-          symbol = chain.nativeSymbol;
-          amount = Number(raw) / 1e18;
-        } else {
-          addr = (t.contractAddress ?? "").toLowerCase();
-          symbol = (t.tokenSymbol ?? "?").toUpperCase();
-          const decimals = Number(t.tokenDecimal ?? 18);
-          amount = Number(raw) / Math.pow(10, decimals);
-        }
-
-        const meta = lifi.get(addr);
-        const price = meta?.priceUSD ? Number(meta.priceUSD) : null;
-        const score = price && price > 0 ? amount * price : amount;
-        // Prefer recognized quote assets so we always book USD when possible.
-        const bonus = isQuote(symbol) ? 1e6 : 0;
-        if (score + bonus > bestScore) {
-          bestScore = score + bonus;
-          pair = { addr, symbol, amount, price };
-        }
-      }
-
+      let pairSymbol: string | null = null;
+      let pairAmount: number | null = null;
+      let pairContract: string | null = null;
       let valueUsd: number | null = null;
-      if (pair) {
-        if (isStable(pair.symbol)) valueUsd = pair.amount;
-        else if (pair.price != null) valueUsd = pair.amount * pair.price;
-      }
 
-      const isSwap = !!pair;
-      const side: HistoryEvent["side"] =
-        info.amount > 0
-          ? isSwap ? "buy" : "transfer_in"
-          : isSwap ? "sell" : "transfer_out";
-
-      const ev: HistoryEvent = {
-        signature: hash,
-        blockTime: info.ts,
-        side,
-        tokenAmount: info.amount,
-        pairAddress: pair?.addr ?? null,
-        pairSymbol: pair?.symbol ?? null,
-        pairAmount: pair?.amount ?? null,
-        valueUsd,
-        explorerUrl: chain.explorerTxBase + hash,
-      };
-      events.push(ev);
-
-      netAmount += info.amount;
-      if (side === "buy") totalBuys += 1;
-      if (side === "sell") totalSells += 1;
-      if (side === "buy" && valueUsd != null) realizedUsd -= valueUsd;
-      if (side === "sell" && valueUsd != null) realizedUsd += valueUsd;
-    }
-
-    // Native-price backfill for events we couldn't price (e.g. LI.FI missing
-    // a long-tail chain's native). Identical pattern to wallet-pnl.
-    const needsBackfill = events.some(
-      (e) => e.valueUsd == null && e.pairAddress === NATIVE_ADDRESS && (e.pairAmount ?? 0) > 0,
-    );
-    if (needsBackfill) {
-      let nativePrice: number | null = null;
-      const nativeMeta = lifi.get(NATIVE_ADDRESS);
-      const lifiPrice = nativeMeta?.priceUSD ? Number(nativeMeta.priceUSD) : NaN;
-      if (Number.isFinite(lifiPrice) && lifiPrice > 0) nativePrice = lifiPrice;
-      else {
-        try {
-          const r = await fetch(
-            `https://api.coingecko.com/api/v3/simple/price?ids=${chain.nativeCgId}&vs_currencies=usd`,
-          );
-          if (r.ok) {
-            const d = await r.json();
-            const p = Number(d?.[chain.nativeCgId]?.usd);
-            if (Number.isFinite(p) && p > 0) nativePrice = p;
+      if (opposite) {
+        pairSymbol = opposite.tokenSymbol;
+        pairContract = opposite.contractAddress.toLowerCase();
+        pairAmount = Number(BigInt(opposite.value || "0")) / Math.pow(10, Number(opposite.tokenDecimal ?? 18));
+        if (isQuote(chainId, pairContract)) {
+          // Quote-priced: stable = $1, otherwise look up LI.FI
+          if (STABLES[chainId]?.has(pairContract)) {
+            valueUsd = pairAmount;
+          } else {
+            const meta = lifi.get(pairContract);
+            const px = meta?.priceUSD ? Number(meta.priceUSD) : null;
+            if (px != null) valueUsd = pairAmount * px;
           }
-        } catch (e) {
-          console.error("native price backfill failed:", e);
+        }
+      } else if (normal && normal.value && normal.value !== "0") {
+        // Native ETH/BNB/etc paid or received alongside the token transfer.
+        const nativeAmount = Number(BigInt(normal.value)) / 1e18;
+        const nativeFromUser = normal.from.toLowerCase() === wallet;
+        const nativeToUser = normal.to.toLowerCase() === wallet;
+        if ((dir === "in" && nativeFromUser) || (dir === "out" && nativeToUser)) {
+          pairSymbol = NATIVE_SYMBOL[chainId];
+          pairContract = NATIVE_ADDRESS;
+          pairAmount = nativeAmount;
+          if (nativePriceUsd != null) valueUsd = nativeAmount * nativePriceUsd;
         }
       }
-      if (nativePrice != null) {
-        for (const ev of events) {
-          if (ev.valueUsd != null) continue;
-          if (ev.pairAddress !== NATIVE_ADDRESS) continue;
-          if (!ev.pairAmount) continue;
-          ev.valueUsd = ev.pairAmount * nativePrice;
-          if (ev.side === "buy") realizedUsd -= ev.valueUsd;
-          if (ev.side === "sell") realizedUsd += ev.valueUsd;
-        }
+
+      const isSwap = pairContract != null;
+      const kind: "swap" | "transfer" = isSwap ? "swap" : "transfer";
+      const side: "buy" | "sell" | "in" | "out" =
+        isSwap ? (dir === "in" ? "buy" : "sell") : dir;
+
+      if (kind === "swap") {
+        if (side === "buy") totalBuys += 1;
+        else totalSells += 1;
+      } else {
+        if (side === "in") transfersIn += 1;
+        else transfersOut += 1;
+      }
+
+      events.push({
+        signature: tx.hash,
+        timestamp: Number(tx.timeStamp),
+        kind,
+        side,
+        tokenAmount: amount,
+        valueUsd,
+        pairSymbol,
+        pairAmount,
+        counterparty,
+        source: normal?.functionName?.split("(")[0] || null,
+        chainId,
+      });
+    }
+
+    // Realized PnL via average cost basis (mirrors Solana version's approach).
+    let unitsBought = 0;
+    let costUsd = 0;
+    let proceedsUsd = 0;
+    let unitsSold = 0;
+    for (const e of events) {
+      if (e.kind !== "swap" || e.valueUsd == null) continue;
+      if (e.side === "buy") {
+        unitsBought += e.tokenAmount;
+        costUsd += e.valueUsd;
+      } else if (e.side === "sell") {
+        unitsSold += e.tokenAmount;
+        proceedsUsd += e.valueUsd;
       }
     }
+    const avgCost = unitsBought > 0 ? costUsd / unitsBought : 0;
+    const realizedUsd = proceedsUsd - avgCost * unitsSold;
 
-    // Sort newest first; first acquisition is the OLDEST inflow.
-    events.sort((a, b) => b.blockTime - a.blockTime);
-    const inflows = events.filter((e) => e.tokenAmount > 0);
-    if (inflows.length > 0) {
-      firstAcquisition = inflows[inflows.length - 1];
-    }
+    const swaps = events.filter((e) => e.kind === "swap" && e.side === "buy");
+    const acquisitions = events.filter(
+      (e) => (e.kind === "swap" && e.side === "buy") || (e.kind === "transfer" && e.side === "in"),
+    );
+    const firstBuy = swaps.length > 0 ? swaps.reduce((a, b) => (a.timestamp < b.timestamp ? a : b)) : null;
+    const firstAcquisition =
+      acquisitions.length > 0 ? acquisitions.reduce((a, b) => (a.timestamp < b.timestamp ? a : b)) : null;
 
-    // Token meta (prefer LI.FI, fall back to first observed transfer)
-    const meta = lifi.get(tokenAddr);
-    const sample = tokenTransfers[0];
-    const tokenMeta = {
-      address: tokenAddr,
-      symbol: meta?.symbol ?? sample?.tokenSymbol ?? "?",
-      name: meta?.name ?? sample?.tokenSymbol ?? "Token",
-      decimals: Number(meta?.decimals ?? sample?.tokenDecimal ?? 18),
-      logo: meta?.logoURI ?? null,
-      priceUsd: meta?.priceUSD ? Number(meta.priceUSD) : null,
-    };
+    const fullyScanned = tokenTxs.length < Math.min(maxTxs, 10000);
+    const stoppedReason: "cap" | "end" = fullyScanned ? "end" : "cap";
 
     return json({
       wallet,
+      contract,
+      mint: contract, // UI compat
       chainId,
-      chain: chain.key,
-      token: tokenMeta,
-      events: events.slice(0, 50), // cap response size
+      tokenSymbol,
+      firstBuy,
       firstAcquisition,
-      netAmount,
-      realizedUsd,
       totalBuys,
       totalSells,
-      scannedTransfers: tokenTransfers.length,
+      transfersIn,
+      transfersOut,
+      netAmount,
+      realizedUsd,
+      events: events
+        .slice()
+        .sort((a, b) => b.timestamp - a.timestamp)
+        .slice(0, 50),
+      eventsTruncated: events.length > 50,
+      eventsTotal: events.length,
+      signaturesScannedThisRun: tokenTxs.length,
+      signaturesScannedTotal: tokenTxs.length,
+      pagesThisRun: 1,
+      fullyScanned,
+      stoppedReason,
+      oldestScannedAt:
+        tokenTxs.length > 0 ? new Date(Number(tokenTxs[0].timeStamp) * 1000).toISOString() : null,
+      newestScannedAt:
+        tokenTxs.length > 0
+          ? new Date(Number(tokenTxs[tokenTxs.length - 1].timeStamp) * 1000).toISOString()
+          : null,
+      durationMs: Date.now() - startedAt,
     });
   } catch (e) {
     console.error("evm-wallet-token-history error:", e);
