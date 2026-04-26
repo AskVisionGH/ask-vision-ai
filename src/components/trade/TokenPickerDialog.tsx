@@ -62,10 +62,16 @@ export const pushRecentToken = (t: TokenMeta) => {
   } catch { /* ignore */ }
 };
 
+// Display rule: only show prices we can render meaningfully at 3 decimals.
+// Anything below $0.001 (sub-tenth-of-a-cent) is hidden so we don't print
+// "$0.000" or scientific notation noise. Bigger-cap tokens (BONK, etc.) often
+// fall below this; that's intentional — the unit price isn't useful at that
+// scale, the user cares about market cap / their holding value instead.
 const fmtPrice = (n: number | null) => {
-  if (n == null) return "";
-  if (n < 0.01 && n > 0) return `$${n.toExponential(2)}`;
-  return `$${n.toLocaleString("en-US", { maximumFractionDigits: n < 1 ? 6 : 2 })}`;
+  if (n == null || !Number.isFinite(n) || n <= 0) return "";
+  if (n < 0.001) return "";
+  if (n >= 1) return `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+  return `$${n.toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 })}`;
 };
 
 const fmtUsd = (n: number) => `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
