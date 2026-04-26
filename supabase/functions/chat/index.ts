@@ -345,13 +345,17 @@ const TOOLS = [
     function: {
       name: "get_wallet_pnl",
       description:
-        "Full 30-day PnL dashboard for a Solana wallet: per-token realized + unrealized profit, totals, and current holdings. Use for 'how am I doing', 'my pnl', 'show performance', 'am I up or down'. Defaults to the connected wallet if no address is given.",
+        "Full 30-day PnL dashboard for a wallet: per-token realized + unrealized profit, totals, and current holdings. Works for BOTH Solana wallets (base58 32-44 chars) and EVM wallets (0x… 42 chars across Ethereum, Base, Arbitrum, Optimism, Polygon, BSC, Avalanche, Linea, Scroll, zkSync). Use for 'how am I doing', 'my pnl', 'show performance', 'am I up or down'. Defaults to the connected wallet if no address is given. For EVM, pass `chainId` to focus on one chain (default: Ethereum mainnet, 1).",
       parameters: {
         type: "object",
         properties: {
           address: {
             type: "string",
-            description: "Optional wallet address to analyze. Omit to use the connected wallet.",
+            description: "Optional wallet address (Solana base58 OR EVM 0x…). Omit to use the connected wallet.",
+          },
+          chainId: {
+            type: "number",
+            description: "EVM chain id (1=Ethereum, 8453=Base, 42161=Arbitrum, 10=Optimism, 137=Polygon, 56=BSC, 43114=Avalanche, 59144=Linea, 534352=Scroll, 324=zkSync). Ignored for Solana.",
           },
         },
         additionalProperties: false,
@@ -363,13 +367,17 @@ const TOOLS = [
     function: {
       name: "get_recent_txs",
       description:
-        "Last 30 days of parsed transactions (swaps, transfers in/out) for a Solana wallet with USD values. Use for 'recent transactions', 'what did I trade', 'tx history', 'show my activity'. Defaults to the connected wallet.",
+        "Last 30 days of parsed transactions (swaps, transfers in/out) with USD values. Works for BOTH Solana and EVM wallets (auto-detected from address shape). Use for 'recent transactions', 'what did I trade', 'tx history', 'show my activity'. Defaults to the connected wallet.",
       parameters: {
         type: "object",
         properties: {
           address: {
             type: "string",
-            description: "Optional wallet address. Omit to use the connected wallet.",
+            description: "Optional wallet address (Solana base58 OR EVM 0x…). Omit to use the connected wallet.",
+          },
+          chainId: {
+            type: "number",
+            description: "EVM chain id (see get_wallet_pnl for the list). Ignored for Solana.",
           },
           limit: {
             type: "number",
@@ -385,17 +393,21 @@ const TOOLS = [
     function: {
       name: "get_token_pnl",
       description:
-        "Single-token PnL deep-dive for a Solana wallet: bought/sold amounts, average entry, realized + unrealized P/L, current position. Use for 'how am I doing on $X', 'my pnl on X', 'am I up on X'.",
+        "Single-token PnL deep-dive: bought/sold amounts, average entry, realized + unrealized P/L, current position. Works for BOTH Solana and EVM wallets. Use for 'how am I doing on $X', 'my pnl on X', 'am I up on X'.",
       parameters: {
         type: "object",
         properties: {
           token: {
             type: "string",
-            description: "Token ticker (e.g. 'BONK', 'JUP') or full mint address.",
+            description: "Token ticker (e.g. 'BONK', 'PEPE') or full mint/contract address.",
           },
           address: {
             type: "string",
-            description: "Optional wallet address. Omit to use the connected wallet.",
+            description: "Optional wallet address (Solana base58 OR EVM 0x…). Omit to use the connected wallet.",
+          },
+          chainId: {
+            type: "number",
+            description: "EVM chain id (see get_wallet_pnl for the list). Ignored for Solana.",
           },
         },
         required: ["token"],
