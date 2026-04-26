@@ -209,13 +209,9 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
         for (const candidate of candidates) {
           try {
             const adapter = candidate.adapter;
-            const silentReconnect =
-              typeof (adapter as { autoConnect?: () => Promise<void> }).autoConnect === "function"
-                ? (adapter as { autoConnect: () => Promise<void> }).autoConnect.bind(adapter)
-                : adapter.connect.bind(adapter);
-
             selectSolWallet(adapter.name);
 
+            // Already on the right address — nothing to do.
             if (adapter.publicKey?.toBase58() === row.address) {
               recordLastUsedWallet({
                 address: row.address,
@@ -226,26 +222,59 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
               return;
             }
 
-            await silentReconnect();
-
-            const connectedAddress = adapter.publicKey?.toBase58();
-            if (connectedAddress === row.address) {
-              recordLastUsedWallet({
-                address: row.address,
-                chain: "solana",
-                walletName: adapter.name,
-              });
-              onOpenChange(false);
-              return;
-            }
-
-            if (connectedAddress && connectedAddress !== row.address) {
+            // If the adapter is currently connected to a *different* address
+            // (typical when "Switch wallet" is pressed), we have to disconnect
+            // first — Phantom won't show its account picker otherwise.
+            const wasConnected = !!adapter.publicKey;
+            if (wasConnected) {
               try {
                 await adapter.disconnect();
               } catch {
                 /* ignore */
               }
             }
+
+            // Try a silent reconnect first (works when the site is already
+            // trusted for the target address). If that lands on the wrong
+            // address, fall through to the explicit `connect()` which opens
+            // Phantom's account picker.
+            const tryAutoConnect =
+              !wasConnected &&
+              typeof (adapter as { autoConnect?: () => Promise<void> }).autoConnect === "function";
+            if (tryAutoConnect) {
+              try {
+                await (adapter as { autoConnect: () => Promise<void> }).autoConnect();
+                if (adapter.publicKey?.toBase58() === row.address) {
+                  recordLastUsedWallet({
+                    address: row.address,
+                    chain: "solana",
+                    walletName: adapter.name,
+                  });
+                  onOpenChange(false);
+                  return;
+                }
+                // Wrong address — disconnect so the explicit connect can prompt.
+                try {
+                  await adapter.disconnect();
+                } catch {
+                  /* ignore */
+                }
+              } catch {
+                /* fall through to explicit connect */
+              }
+            }
+
+            // Explicit connect — Phantom will surface its account picker so
+            // the user can switch to the registered address. We close the
+            // chooser optimistically so its overlay doesn't block the popup.
+            onOpenChange(false);
+            await adapter.connect();
+            recordLastUsedWallet({
+              address: adapter.publicKey?.toBase58() ?? row.address,
+              chain: "solana",
+              walletName: adapter.name,
+            });
+            return;
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             if (/user rejected|user cancel|user closed/i.test(msg)) {
