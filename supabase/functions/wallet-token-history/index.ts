@@ -293,9 +293,12 @@ serve(async (req) => {
       console.error("[wallet-token-history] upsert failed", upsertError);
     }
 
+    const tokenSymbol = await fetchTokenSymbol(mint);
+
     return json({
       wallet,
       mint,
+      tokenSymbol,
       firstBuy: aggregates.firstBuy,
       totalBuys: aggregates.totalBuys,
       totalSells: aggregates.totalSells,
@@ -552,6 +555,26 @@ function shortMint(m: string | null | undefined): string {
   if (m === "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v") return "USDC";
   if (m === "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB") return "USDT";
   return `${m.slice(0, 4)}…${m.slice(-4)}`;
+}
+
+async function fetchTokenSymbol(mint: string): Promise<string | null> {
+  if (mint === SOL_MINT) return "SOL";
+  if (mint === "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v") return "USDC";
+  if (mint === "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB") return "USDT";
+  try {
+    const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`, {
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const pair = Array.isArray(data?.pairs) ? data.pairs[0] : null;
+    const sym = pair?.baseToken?.address === mint
+      ? pair?.baseToken?.symbol
+      : pair?.quoteToken?.symbol;
+    return typeof sym === "string" && sym.length > 0 ? sym : null;
+  } catch {
+    return null;
+  }
 }
 
 function clamp(n: number, min: number, max: number): number {
