@@ -693,7 +693,19 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
       });
     } catch (e) {
       if (!mounted.current) return;
-      setPhase({ name: "error", message: e instanceof Error ? e.message : "Something went wrong." });
+      const msg = e instanceof Error ? e.message : "Something went wrong.";
+      setPhase({ name: "error", message: msg });
+      // Surface failure inside the EVM progress modal too so users see the
+      // error in context rather than a small CTA label.
+      setEvmProgress((p) =>
+        p
+          ? {
+              ...p,
+              errorMessage: msg,
+              bridgeStatus: p.bridgeStatus === "active" ? "error" : p.bridgeStatus,
+            }
+          : p,
+      );
     }
   }, [quote, fromToken, toToken, fromChain, fromAddress, fromIsEvm, sendBridgeTx, signTransaction, publicKey, numericAmount]);
 
@@ -701,6 +713,7 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
     setAmount("");
     setQuote(null);
     setPhase({ name: "idle" });
+    setEvmProgress(null);
   };
 
   // ---------- Success ----------
