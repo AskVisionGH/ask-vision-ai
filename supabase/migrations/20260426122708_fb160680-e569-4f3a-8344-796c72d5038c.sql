@@ -1,0 +1,2 @@
+ALTER TABLE public.treasury_fees DROP CONSTRAINT IF EXISTS treasury_fees_source_kind_check;
+ALTER TABLE public.treasury_fees ADD CONSTRAINT treasury_fees_source_kind_check CHECK (source_kind = ANY (ARRAY['swap_fee'::text, 'swap_upfront_fee'::text, 'dca_fee'::text, 'bridge_fee'::text, 'sweep'::text, 'limit_fee'::text, 'transfer_fee'::text, 'other'::text]));
