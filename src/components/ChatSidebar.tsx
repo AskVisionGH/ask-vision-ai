@@ -351,14 +351,37 @@ export const ChatSidebar = ({
           <PanelLeftOpen className="h-4 w-4" />
         </Button>
         <div className="mt-3 flex flex-col items-center gap-1.5">
-          <Link
-            to="/chat"
-            className="flex h-8 w-8 items-center justify-center rounded-md bg-secondary text-foreground hover:bg-secondary/80"
-            aria-label="Chat"
-            title="Chat"
-          >
-            <MessageSquare className="h-4 w-4" />
-          </Link>
+          {getAppNavItems(isAdmin).map(({ id, to, label, icon: Icon, disabled }) => {
+            const isActive = id === "chat";
+            if (disabled) {
+              return (
+                <div
+                  key={id}
+                  className="flex h-8 w-8 cursor-not-allowed items-center justify-center rounded-md text-muted-foreground/40"
+                  aria-disabled="true"
+                  title={`${label} — coming soon`}
+                >
+                  <Icon className="h-4 w-4" />
+                </div>
+              );
+            }
+            return (
+              <Link
+                key={id}
+                to={to}
+                className={cn(
+                  "flex h-8 w-8 items-center justify-center rounded-md ease-vision",
+                  isActive
+                    ? "bg-secondary text-foreground hover:bg-secondary/80"
+                    : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
+                )}
+                aria-label={label}
+                title={label}
+              >
+                <Icon className="h-4 w-4" />
+              </Link>
+            );
+          })}
           <Button
             variant="ghost"
             size="icon"
@@ -369,50 +392,7 @@ export const ChatSidebar = ({
           >
             <MessageSquarePlus className="h-4 w-4" />
           </Button>
-          <Link
-            to="/trade"
-            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
-            aria-label="Trade"
-            title="Trade"
-          >
-            <Repeat className="h-4 w-4" />
-          </Link>
-          <Link
-            to="/trade?tab=bridge"
-            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
-            aria-label="Bridge"
-            title="Bridge"
-          >
-            <ArrowLeftRight className="h-4 w-4" />
-          </Link>
-          <div
-            className="flex h-8 w-8 cursor-not-allowed items-center justify-center rounded-md text-muted-foreground/40"
-            aria-disabled="true"
-            title="Tracking — coming soon"
-          >
-            <Radar className="h-4 w-4" />
-          </div>
-          <Link
-            to="/contacts"
-            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
-            aria-label="Contacts"
-            title="Contacts"
-          >
-            <Users className="h-4 w-4" />
-          </Link>
         </div>
-        {isAdmin && (
-          <div className="mt-1.5 flex flex-col items-center">
-            <Link
-              to="/admin"
-              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
-              aria-label="Admin"
-              title="Admin"
-            >
-              <Shield className="h-4 w-4" />
-            </Link>
-          </div>
-        )}
         <div className="mt-auto flex flex-col items-center gap-1.5">
           <Link
             to="/settings"
