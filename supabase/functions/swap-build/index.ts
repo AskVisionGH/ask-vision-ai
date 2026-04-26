@@ -258,12 +258,36 @@ serve(async (req) => {
       swapData = await swapResp.json();
     }
 
+    // For Token-2022 outputs we skipped Jupiter's fee path, so build a
+    // separate upfront fee-transfer transaction (1% of input) that the
+    // client signs+submits BEFORE the swap. Same pattern as DCA orders.
+    let feeTransaction: string | null = null;
+    let feeAmountAtomic: string | null = null;
+    if (outputIsToken2022 && referralAccount) {
+      try {
+        const inputIsToken2022 = await detectToken2022Mint(inputMint);
+        const built = await buildUpfrontFeeTx({
+          userPublicKey,
+          inputMint,
+          totalAtomic: BigInt(Math.floor(amount)),
+          inputIsToken2022,
+        });
+        feeTransaction = built.transaction;
+        feeAmountAtomic = built.feeAmountAtomic;
+      } catch (e) {
+        console.error("Failed to build upfront fee tx (continuing without fee):", e);
+      }
+    }
+
     return json({
       swapTransaction: swapData.swapTransaction,
       lastValidBlockHeight: swapData.lastValidBlockHeight,
       prioritizationFeeLamports: swapData.prioritizationFeeLamports ?? null,
       dynamicSlippage: usedDynamicSlippage,
       dynamicSlippageReport: swapData.dynamicSlippageReport ?? null,
+      feeTransaction,
+      feeAmountAtomic,
+      feeCollectedUpfront: Boolean(feeTransaction),
     });
   } catch (e) {
     console.error("swap-build error:", e);
