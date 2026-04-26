@@ -313,9 +313,17 @@ serve(async (req) => {
       wallet,
       mint,
       tokenSymbol,
+      // First DEX buy (swap-only). May be null if the wallet only ever
+      // received tokens via transfer.
       firstBuy: aggregates.firstBuy,
+      // First time the wallet acquired this mint at all — buy OR transfer-in.
+      // The card / LLM should prefer this when explaining how a wallet got
+      // its initial position.
+      firstAcquisition: aggregates.firstAcquisition,
       totalBuys: aggregates.totalBuys,
       totalSells: aggregates.totalSells,
+      transfersIn: aggregates.transfersIn,
+      transfersOut: aggregates.transfersOut,
       netAmount: aggregates.netAmount,
       realizedUsd: aggregates.realizedUsd,
       events: allEvents
