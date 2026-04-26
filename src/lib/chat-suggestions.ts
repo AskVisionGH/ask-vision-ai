@@ -26,6 +26,12 @@ const SUGGESTION_POOL: string[] = [
   "What are the top movers in the last 24 hours?",
   "Show me new tokens with strong early buyers",
 
+  // Historical wallet × token deep-dives
+  "When did this wallet first buy BONK?",
+  "Find the earliest entry of a wallet into a token",
+  "Show every historical buy and sell of WIF by a wallet",
+  "How long has this wallet held JUP?",
+
   // Portfolio / wallet
   "What's in my wallet right now?",
   "How is my portfolio performing this week?",
