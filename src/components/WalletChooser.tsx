@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -305,12 +305,9 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
               Loading your wallets…
             </div>
           ) : rows.length === 0 ? (
-            <div className="flex flex-col items-center gap-1 py-4 text-center">
-              <Wallet className="h-5 w-5 text-muted-foreground/60" />
-              <p className="text-xs text-muted-foreground">
-                No wallets yet. Connect one below to get started.
-              </p>
-            </div>
+            <p className="px-1 pb-1 text-center text-[11px] text-muted-foreground">
+              No registered wallets yet — pick a chain below to connect one.
+            </p>
           ) : (
             rows.map((row) => {
               const isBusy = busyAddress === row.address;
@@ -375,30 +372,34 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
 
         {/* New wallet CTAs */}
         <div className="mt-4 grid grid-cols-2 gap-2">
-          <Button
-            variant="outline"
-            size="sm"
+          <button
+            type="button"
             onClick={handleNewSolana}
             className={cn(
-              "ease-vision rounded-xl border-border/70 text-xs",
+              "ease-vision flex flex-col items-center gap-1 rounded-xl border border-border/70 bg-secondary/50 px-3 py-3 text-xs hover:border-primary/50 hover:bg-secondary",
               preferredChain === "solana" && "border-primary/60 bg-primary/10",
             )}
           >
-            <Plus className="mr-1.5 h-3 w-3" />
-            New Solana wallet
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/15 text-primary">
+              <Plus className="h-3.5 w-3.5" />
+            </span>
+            <span className="font-medium text-foreground">Solana wallet</span>
+            <span className="text-[10px] text-muted-foreground">Phantom, Solflare…</span>
+          </button>
+          <button
+            type="button"
             onClick={handleNewEvm}
             className={cn(
-              "ease-vision rounded-xl border-border/70 text-xs",
+              "ease-vision flex flex-col items-center gap-1 rounded-xl border border-border/70 bg-secondary/50 px-3 py-3 text-xs hover:border-accent/50 hover:bg-secondary",
               preferredChain === "evm" && "border-accent/60 bg-accent/10",
             )}
           >
-            <Plus className="mr-1.5 h-3 w-3" />
-            New EVM wallet
-          </Button>
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/20 text-accent-foreground">
+              <Plus className="h-3.5 w-3.5" />
+            </span>
+            <span className="font-medium text-foreground">EVM wallet</span>
+            <span className="text-[10px] text-muted-foreground">MetaMask, Rabby…</span>
+          </button>
         </div>
 
         <p className="mt-3 text-center text-[10px] uppercase tracking-widest text-muted-foreground/60">
