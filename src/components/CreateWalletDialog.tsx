@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Keypair } from "@solana/web3.js";
 import bs58 from "bs58";
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { AlertTriangle, Check, Copy, Eye, EyeOff, Import, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -21,14 +22,21 @@ interface Props {
   onDone: () => void;
 }
 
+type Chain = "solana" | "ethereum";
+
+interface GeneratedWallet {
+  publicKey: string;
+  secretKey: string;
+}
+
 /**
- * Generate a brand-new Solana keypair entirely in the browser, show the
- * private key + public key once, and require explicit confirmation that the
- * user has saved them before letting them continue.
+ * Generate a brand-new wallet (Solana or Ethereum) entirely in the browser,
+ * show the private key + public key once, and require explicit confirmation
+ * that the user has saved them before letting them continue.
  *
  * Security model:
- * - Keypair is generated client-side via `Keypair.generate()` (uses
- *   `crypto.getRandomValues` under the hood — cryptographically secure).
+ * - Solana: `Keypair.generate()` → `crypto.getRandomValues` under the hood.
+ * - Ethereum: viem's `generatePrivateKey()` → also CSPRNG.
  * - The secret never touches the network. We never POST it anywhere, never
  *   write it to localStorage, and discard the in-memory copy when the
  *   dialog closes (React unmount).
@@ -36,26 +44,44 @@ interface Props {
  *   becomes enabled. There is no recovery — losing the key = losing funds.
  */
 export const CreateWalletDialog = ({ open, onOpenChange, onDone }: Props) => {
-  // Generate exactly once when the dialog opens. Memoizing on `open` ensures
-  // a fresh key for each open cycle (e.g. user closes + reopens) and prevents
-  // re-generating on every render.
-  const keypair = useMemo(() => (open ? Keypair.generate() : null), [open]);
-  const publicKey = keypair?.publicKey.toBase58() ?? "";
-  const secretKeyB58 = useMemo(
-    () => (keypair ? bs58.encode(keypair.secretKey) : ""),
-    [keypair],
-  );
+  const [chain, setChain] = useState<Chain>("solana");
+
+  // Generate a fresh wallet whenever the dialog opens OR the user switches
+  // chain. Memoizing on (open, chain) ensures a brand-new key per cycle and
+  // prevents re-generating on every render.
+  const wallet: GeneratedWallet | null = useMemo(() => {
+    if (!open) return null;
+    if (chain === "solana") {
+      const kp = Keypair.generate();
+      return {
+        publicKey: kp.publicKey.toBase58(),
+        secretKey: bs58.encode(kp.secretKey),
+      };
+    }
+    // Ethereum: viem returns 0x-prefixed hex private key + derives address.
+    const pk = generatePrivateKey();
+    const account = privateKeyToAccount(pk);
+    return { publicKey: account.address, secretKey: pk };
+  }, [open, chain]);
+
+  const publicKey = wallet?.publicKey ?? "";
+  const secretKey = wallet?.secretKey ?? "";
 
   const [revealed, setRevealed] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
 
-  // Reset reveal/ack state every time the dialog re-opens so we never bleed
-  // confirmation across separate wallet creations.
+  // Reset reveal/ack state every time the dialog re-opens OR chain changes
+  // so we never bleed confirmation across separate wallet creations.
   useEffect(() => {
     if (open) {
       setRevealed(false);
       setAcknowledged(false);
     }
+  }, [open, chain]);
+
+  // Reset chain selection on close so reopening starts fresh on Solana.
+  useEffect(() => {
+    if (!open) setChain("solana");
   }, [open]);
 
   const copy = async (value: string, label: string) => {
@@ -67,13 +93,19 @@ export const CreateWalletDialog = ({ open, onOpenChange, onDone }: Props) => {
     }
   };
 
+  const isSol = chain === "solana";
+  const secretLabel = isSol ? "Private key (base58)" : "Private key (hex)";
+  const walletApps = isSol
+    ? "Phantom, Solflare, or Backpack"
+    : "MetaMask, Rabby, or Rainbow";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ShieldAlert className="h-5 w-5 text-primary" />
-            Your new Solana wallet
+            Your new {isSol ? "Solana" : "Ethereum"} wallet
           </DialogTitle>
           <DialogDescription>
             Generated locally in your browser. We never see or store your
@@ -82,6 +114,33 @@ export const CreateWalletDialog = ({ open, onOpenChange, onDone }: Props) => {
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* Chain selector */}
+          <div className="space-y-1.5">
+            <label className="text-xs uppercase tracking-wider text-muted-foreground">
+              Network
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <ChainOption
+                label="Solana"
+                sublabel="SOL · SPL tokens"
+                active={chain === "solana"}
+                onClick={() => setChain("solana")}
+              />
+              <ChainOption
+                label="Ethereum"
+                sublabel="ETH · EVM chains"
+                active={chain === "ethereum"}
+                onClick={() => setChain("ethereum")}
+              />
+            </div>
+            {!isSol && (
+              <p className="text-[11px] text-muted-foreground/70">
+                Same address works on Ethereum, Base, Arbitrum, Optimism, and
+                other EVM chains.
+              </p>
+            )}
+          </div>
+
           {/* Public address — safe to share */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
@@ -109,7 +168,7 @@ export const CreateWalletDialog = ({ open, onOpenChange, onDone }: Props) => {
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <label className="text-xs uppercase tracking-wider text-destructive">
-                Private key (base58)
+                {secretLabel}
               </label>
               <div className="flex items-center gap-3">
                 <button
@@ -129,7 +188,7 @@ export const CreateWalletDialog = ({ open, onOpenChange, onDone }: Props) => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => copy(secretKeyB58, "Private key")}
+                  onClick={() => copy(secretKey, "Private key")}
                   className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
                   disabled={!revealed}
                 >
@@ -146,7 +205,7 @@ export const CreateWalletDialog = ({ open, onOpenChange, onDone }: Props) => {
                   : "border-border bg-card/30 select-none",
               )}
             >
-              {revealed ? secretKeyB58 : "•".repeat(64)}
+              {revealed ? secretKey : "•".repeat(64)}
             </div>
           </div>
 
@@ -176,8 +235,7 @@ export const CreateWalletDialog = ({ open, onOpenChange, onDone }: Props) => {
                 <p>
                   <strong>Next step: import it into a wallet app.</strong> This
                   key on its own can't sign transactions — you need a wallet
-                  like <strong>Phantom</strong>, <strong>Solflare</strong>, or{" "}
-                  <strong>Backpack</strong> to use it.
+                  like <strong>{walletApps}</strong> to use it.
                 </p>
                 <p className="text-muted-foreground">
                   In your wallet app, choose{" "}
@@ -225,3 +283,31 @@ export const CreateWalletDialog = ({ open, onOpenChange, onDone }: Props) => {
     </Dialog>
   );
 };
+
+const ChainOption = ({
+  label,
+  sublabel,
+  active,
+  onClick,
+}: {
+  label: string;
+  sublabel: string;
+  active: boolean;
+  onClick: () => void;
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className={cn(
+      "rounded-lg border px-3 py-2 text-left ease-vision",
+      active
+        ? "border-primary/60 bg-primary/10"
+        : "border-border bg-card/30 hover:border-primary/30 hover:bg-card",
+    )}
+  >
+    <div className={cn("text-sm font-medium", active ? "text-foreground" : "text-foreground/90")}>
+      {label}
+    </div>
+    <div className="text-[11px] text-muted-foreground">{sublabel}</div>
+  </button>
+);
