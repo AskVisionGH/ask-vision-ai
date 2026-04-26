@@ -195,6 +195,7 @@ serve(async (req) => {
         userPublicKey,
         wrapAndUnwrapSol: true,
         dynamicComputeUnitLimit: true,
+        ...(dynamicSlippage ? { dynamicSlippage: true } : {}),
         ...(feeAccount ? { feeAccount } : {}),
         prioritizationFeeLamports: {
           priorityLevelWithMaxLamports: {
