@@ -332,6 +332,7 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
         outputMint: quote.output.address,
         amount: quote.input.amountAtomic,
         slippageBps: quote.slippageBps,
+        dynamicSlippage,
       });
       if (!built.swapTransaction) throw new Error("No transaction returned");
 
