@@ -1,13 +1,10 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  ArrowLeftRight,
-  Bell,
   GripVertical,
   Link2,
   Link2Off,
   LogOut,
-  MessageSquare,
   MessageSquarePlus,
   MoreHorizontal,
   PanelLeftClose,
@@ -15,13 +12,9 @@ import {
   Pencil,
   Pin,
   PinOff,
-  Radar,
-  Repeat,
   Search,
   Settings as SettingsIcon,
-  Shield,
   Trash2,
-  Users,
   X,
 } from "lucide-react";
 import {
