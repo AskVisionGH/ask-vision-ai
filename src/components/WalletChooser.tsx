@@ -161,8 +161,10 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
   const [recent, setRecent] = useState<LastUsedWallet[]>([]);
   const [loadingLinked, setLoadingLinked] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [pendingSolanaWalletName, setPendingSolanaWalletName] =
-    useState<WalletName | null>(null);
+  const [pendingSolanaSelection, setPendingSolanaSelection] = useState<{
+    name: WalletName;
+    adapter: unknown;
+  } | null>(null);
   const [search, setSearch] = useState("");
 
   // ---------------------------------------------------------------------------
@@ -170,8 +172,8 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
   // the chosen adapter is reflected in `selectedSolWallet`, then `connect()`.
   // ---------------------------------------------------------------------------
   useEffect(() => {
-    if (!pendingSolanaWalletName) return;
-    if (selectedSolWallet?.adapter.name !== pendingSolanaWalletName) return;
+    if (!pendingSolanaSelection) return;
+    if (selectedSolWallet?.adapter !== pendingSolanaSelection.adapter) return;
 
     // Some adapters/providers can complete the connection as soon as the
     // selection propagates (for example after a wallet-side account switch).
@@ -192,7 +194,7 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
     // spinning forever.
     const stuckTimeout = setTimeout(() => {
       if (cancelled) return;
-      setPendingSolanaWalletName(null);
+      setPendingSolanaSelection(null);
       setBusyId(null);
     }, 30_000);
 
@@ -208,7 +210,7 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
         }
       } finally {
         if (!cancelled) {
-          setPendingSolanaWalletName(null);
+          setPendingSolanaSelection(null);
           setBusyId(null);
         }
       }
@@ -219,8 +221,8 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
       clearTimeout(stuckTimeout);
     };
   }, [
-    pendingSolanaWalletName,
-    selectedSolWallet?.adapter.name,
+    pendingSolanaSelection,
+    selectedSolWallet?.adapter,
     solConnected,
     solConnecting,
     connectSolWallet,
@@ -231,7 +233,7 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
   useEffect(() => {
     if (!open) {
       setBusyId(null);
-      setPendingSolanaWalletName(null);
+      setPendingSolanaSelection(null);
       setSearch("");
     }
   }, [open]);
@@ -330,10 +332,15 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
   // ---------------------------------------------------------------------------
   // Click handlers
   // ---------------------------------------------------------------------------
-  const openSolanaAdapter = async (walletName: WalletName, busyKey: string) => {
+  const openSolanaAdapter = async (
+    targetWallet: (typeof solWallets)[number],
+    busyKey: string,
+  ) => {
     setBusyId(busyKey);
     try {
-      const isSameAdapter = selectedSolWallet?.adapter.name === walletName;
+      const walletName = targetWallet.adapter.name;
+      const isSameAdapter = selectedSolWallet?.adapter === targetWallet.adapter;
+      const isSameWalletName = selectedSolWallet?.adapter.name === walletName;
 
       // Only short-circuit if we're ACTUALLY connected to this adapter — not
       // just if the adapter is sticky-selected from a previous session.
@@ -363,8 +370,8 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
       // selectSolWallet(walletName) is a no-op (state doesn't change), so the
       // handoff effect never fires. Force a clean re-select by clearing first,
       // then selecting on the next tick so the effect picks it up.
-      setPendingSolanaWalletName(walletName);
-      if (isSameAdapter) {
+      setPendingSolanaSelection({ name: walletName, adapter: targetWallet.adapter });
+      if (isSameWalletName) {
         // selectSolWallet accepts null to clear the active adapter, but the
         // typings only expose WalletName. Cast through unknown so we can
         // force-clear and re-trigger the handoff effect on the next tick.
@@ -379,7 +386,7 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
         toast.error("Couldn't open that wallet", { description: msg });
       }
       setBusyId(null);
-      setPendingSolanaWalletName(null);
+      setPendingSolanaSelection(null);
     }
   };
 
