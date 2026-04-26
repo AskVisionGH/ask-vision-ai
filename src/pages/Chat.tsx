@@ -555,7 +555,7 @@ const Chat = () => {
                 )}
 
                 <div className="mt-10 grid w-full max-w-md grid-cols-1 gap-2 sm:grid-cols-2">
-                  {SUGGESTIONS.map((s) => (
+                  {suggestions.map((s) => (
                     <button
                       key={s}
                       onClick={() => send(s)}
