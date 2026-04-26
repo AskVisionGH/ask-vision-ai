@@ -215,11 +215,11 @@ const TxRow = ({ tx }: { tx: ParsedTx }) => {
           <span className="font-mono text-[12px] text-foreground">{fmtUsd(tx.valueUsd)}</span>
         )}
         <a
-          href={solscan(tx.signature)}
+          href={txExplorerUrl(tx.signature, tx.chainId)}
           target="_blank"
           rel="noreferrer"
           className="rounded-md p-1 text-muted-foreground/60 hover:bg-secondary hover:text-foreground"
-          title="View on Solscan"
+          title={`View on ${explorerLabel(tx.chainId)}`}
         >
           <ExternalLink className="h-3.5 w-3.5" />
         </a>
