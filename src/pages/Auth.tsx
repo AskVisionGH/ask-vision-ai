@@ -1,12 +1,14 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useWallet } from "@solana/wallet-adapter-react";
+import { useAccount, useSignMessage, useDisconnect as useEvmDisconnect } from "wagmi";
 import { toast } from "sonner";
 import { Apple, Copy, ExternalLink, Mail, ShieldAlert, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
 import { useAuth } from "@/hooks/useAuth";
 import { signInWithSolana } from "@/lib/siws";
+import { signInWithEthereum } from "@/lib/siwe";
 import { useWalletPicker } from "@/components/WalletPicker";
 import { VisionLogo } from "@/components/VisionLogo";
 import { Button } from "@/components/ui/button";
@@ -16,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SEO } from "@/components/SEO";
 import { cn } from "@/lib/utils";
 import { detectInAppBrowser, type InAppBrowserInfo } from "@/lib/in-app-browser";
+import { evmChainBadge, solanaBadge } from "@/lib/chain-badge";
 
 const GoogleGlyph = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden>
@@ -30,9 +33,21 @@ const Auth = () => {
   const navigate = useNavigate();
   const { session, loading } = useAuth();
   const { publicKey, signMessage, connected, disconnect } = useWallet();
+  // EVM side via wagmi — used for SIWE.
+  const {
+    address: evmAddress,
+    isConnected: evmConnected,
+    chainId: evmChainId,
+  } = useAccount();
+  const { signMessageAsync } = useSignMessage();
+  const { disconnect: evmDisconnect } = useEvmDisconnect();
   const { open: openWalletPicker, Picker } = useWalletPicker();
 
   const [tab, setTab] = useState<"email" | "wallet">("email");
+  // Inside the wallet tab the user picks which chain to sign with — Solana
+  // (SIWS / ed25519) or Ethereum (SIWE / personal_sign). Both produce a
+  // wallet-only Supabase account that can later be linked to an email.
+  const [walletChain, setWalletChain] = useState<"solana" | "evm">("solana");
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
