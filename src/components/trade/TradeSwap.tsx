@@ -130,7 +130,7 @@ const supaPost = async (fn: string, body: unknown, attempt = 0): Promise<any> =>
     }
     throw new Error(serverMsg ?? error.message ?? `${fn} failed`);
   }
-  if (data && typeof data === "object" && "error" in (data as any) && (data as any).error) {
+  if (data && typeof data === "object" && "error" in (data as any) && (data as any).error && !(data as any).fallback) {
     throw new Error((data as any).error);
   }
   return data;
@@ -367,6 +367,9 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
         outputAmount: quote.output.amountUi,
         walletAddress: publicKey.toBase58(),
       });
+      if (submitted?.fallback && submitted?.error) {
+        throw new Error(submitted.error as string);
+      }
       const signature = submitted.signature as string;
       if (!signature) throw new Error("No signature returned from submit");
 
