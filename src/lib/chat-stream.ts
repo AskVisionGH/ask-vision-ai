@@ -584,6 +584,7 @@ export type ToolEvent =
   | { type: "ladder_quote"; data: LadderQuoteData }
   | { type: "open_orders"; data: OpenOrdersData }
   | { type: "bridge_quote"; data: BridgeQuoteData }
+  | { type: "wallet_token_history"; data: any }
   | { type: string; data: any };
 
 export interface ChatMessage {

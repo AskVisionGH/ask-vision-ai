@@ -21,6 +21,7 @@ import { BracketPreviewCard } from "@/components/BracketPreviewCard";
 import { LadderPreviewCard } from "@/components/LadderPreviewCard";
 import { OpenOrdersCard } from "@/components/OpenOrdersCard";
 import { BridgePreviewCard } from "@/components/BridgePreviewCard";
+import { WalletTokenHistoryCard } from "@/components/WalletTokenHistoryCard";
 
 interface Props {
   message: ChatMessage;
@@ -219,6 +220,9 @@ export const ChatBubble = ({ message, onEdit, readOnly = false }: Props) => {
         }
         if (event.type === "bridge_quote") {
           return <BridgePreviewCard key={i} data={event.data} />;
+        }
+        if (event.type === "wallet_token_history") {
+          return <WalletTokenHistoryCard key={i} data={event.data} />;
         }
         return null;
       })}
