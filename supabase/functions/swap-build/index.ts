@@ -218,6 +218,8 @@ serve(async (req) => {
       swapTransaction: swapData.swapTransaction,
       lastValidBlockHeight: swapData.lastValidBlockHeight,
       prioritizationFeeLamports: swapData.prioritizationFeeLamports ?? null,
+      dynamicSlippage: dynamicSlippage,
+      dynamicSlippageReport: swapData.dynamicSlippageReport ?? null,
     });
   } catch (e) {
     console.error("swap-build error:", e);
