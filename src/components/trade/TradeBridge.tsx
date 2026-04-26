@@ -842,12 +842,12 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
         </div>
 
         <div className="space-y-3 p-4">
-          {/* From row (Solana, locked for v1) */}
+          {/* From row — chain + token picker both unlocked */}
           <PanelRow
             label="From"
-            chainName={fromChain?.name ?? "Solana"}
+            chainName={fromChain?.name ?? "Select chain"}
             chainLogo={fromChain?.logo ?? null}
-            chainLocked
+            onPickChain={() => setChainPicker("from")}
             token={fromToken}
             onPickToken={() => fromChain && setPicker({ side: "from" })}
             amount={amount}
