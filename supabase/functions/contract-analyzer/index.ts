@@ -51,6 +51,12 @@ interface RiskReport {
     mintAuthorityRevoked: boolean | null;
     freezeAuthorityRevoked: boolean | null;
   };
+  topHolders?: Array<{
+    address: string;
+    pct: number | null;
+    amount: number | null;
+    insider: boolean | null;
+  }>;
   error?: string;
 }
 
