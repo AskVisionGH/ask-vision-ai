@@ -13,24 +13,7 @@ import { cn } from "@/lib/utils";
 import { WalletChooser } from "@/components/WalletChooser";
 import { recordLastUsedWallet } from "@/lib/wallet-history";
 import { LogOut, Repeat } from "lucide-react";
-
-// EVM chain id → 3-letter ticker + brand-ish dot colour. Kept in-file
-// because it's only used for the header pill badge.
-const evmChainBadge = (chainId: number | undefined): { label: string; dotClass: string } => {
-  switch (chainId) {
-    case 1: return { label: "ETH", dotClass: "bg-[#627EEA]" };
-    case 42161: return { label: "ARB", dotClass: "bg-[#28A0F0]" };
-    case 10: return { label: "OPT", dotClass: "bg-[#FF0420]" };
-    case 8453: return { label: "BAS", dotClass: "bg-[#0052FF]" };
-    case 137: return { label: "POL", dotClass: "bg-[#8247E5]" };
-    case 56: return { label: "BSC", dotClass: "bg-[#F0B90B]" };
-    case 43114: return { label: "AVA", dotClass: "bg-[#E84142]" };
-    case 59144: return { label: "LIN", dotClass: "bg-[#61DFFF]" };
-    case 534352: return { label: "SCR", dotClass: "bg-[#FFEEDA]" };
-    case 324: return { label: "ZKS", dotClass: "bg-[#8C8DFC]" };
-    default: return { label: "EVM", dotClass: "bg-muted-foreground" };
-  }
-};
+import { evmChainBadge, solanaBadge } from "@/lib/chain-badge";
 
 interface Props {
   className?: string;
@@ -86,8 +69,8 @@ export const ConnectWalletButton = ({ className, size = "lg" }: Props) => {
   // Chain badge — small coloured dot + 3-letter ticker so users instantly
   // see which network the connected wallet is on. Solana takes precedence
   // because of the single-wallet invariant above.
-  const chainBadge: { label: string; dotClass: string } | null = connected
-    ? { label: "SOL", dotClass: "bg-[#14F195]" }
+  const chainBadge = connected
+    ? solanaBadge()
     : evmConnected
       ? evmChainBadge(evmChainId)
       : null;
