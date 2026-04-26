@@ -142,17 +142,31 @@ const Auth = () => {
   };
 
   const runWalletSignature = async () => {
-    if (!publicKey || !signMessage) return;
     setWalletSigning(true);
     try {
-      const result = await signInWithSolana({
-        walletAddress: publicKey.toBase58(),
-        signMessage: (msg) => signMessage(msg),
-      });
-      if (result.error) {
-        toast.error("Wallet sign-in failed", { description: result.error });
+      if (walletChain === "solana") {
+        if (!publicKey || !signMessage) return;
+        const result = await signInWithSolana({
+          walletAddress: publicKey.toBase58(),
+          signMessage: (msg) => signMessage(msg),
+        });
+        if (result.error) {
+          toast.error("Wallet sign-in failed", { description: result.error });
+        } else {
+          toast.success("Signed in with Solana wallet");
+        }
       } else {
-        toast.success("Signed in with wallet");
+        if (!evmAddress) return;
+        const result = await signInWithEthereum({
+          walletAddress: evmAddress,
+          chainId: evmChainId ?? 1,
+          signMessage: (message) => signMessageAsync({ message }),
+        });
+        if (result.error) {
+          toast.error("Wallet sign-in failed", { description: result.error });
+        } else {
+          toast.success("Signed in with Ethereum wallet");
+        }
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Couldn't complete signature";
@@ -163,7 +177,11 @@ const Auth = () => {
   };
 
   const signWithWallet = () => {
-    if (!connected || !publicKey || !signMessage) {
+    const isReady =
+      walletChain === "solana"
+        ? connected && publicKey && signMessage
+        : evmConnected && evmAddress;
+    if (!isReady) {
       // Open the wallet picker, then auto-sign once a wallet connects.
       setPendingSign(true);
       openWalletPicker();
@@ -172,15 +190,28 @@ const Auth = () => {
     void runWalletSignature();
   };
 
-  // Once the wallet finishes connecting after the user clicked the pill,
+  // Once a wallet finishes connecting after the user clicked the pill,
   // immediately ask for a signature so it's a single-click flow end-to-end.
+  // We watch BOTH chains and let `walletChain` decide which one to drive.
   useEffect(() => {
-    if (pendingSign && connected && publicKey && signMessage) {
+    if (!pendingSign) return;
+    if (walletChain === "solana" && connected && publicKey && signMessage) {
+      setPendingSign(false);
+      void runWalletSignature();
+      return;
+    }
+    if (walletChain === "evm" && evmConnected && evmAddress) {
       setPendingSign(false);
       void runWalletSignature();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingSign, connected, publicKey, signMessage]);
+  }, [pendingSign, walletChain, connected, publicKey, signMessage, evmConnected, evmAddress]);
+
+  // If the user toggles the chain selector to one where they're not connected,
+  // clear stale signing state. Doesn't disconnect the other chain — multi-chain.
+  useEffect(() => {
+    setPendingSign(false);
+  }, [walletChain]);
 
 
   return (
