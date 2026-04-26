@@ -22,6 +22,10 @@ const STABLES = new Set([
   "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
   "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", // USDT
 ]);
+// "Quote" assets we can derive USD value from. Stables are 1:1; SOL gets a
+// historical price lookup. Anything in here counts as the "money side" of a
+// buy/sell — without this, SOL-funded buys are silently dropped from PnL.
+const QUOTES = new Set<string>([...STABLES, SOL_MINT]);
 
 const WINDOW_DAYS = 30;
 const MAX_PAGES = 5;            // Helius caps at 100 per page
@@ -91,6 +95,10 @@ serve(async (req) => {
 
     // 3) Snapshot current holdings (for unrealized + symbol/logo enrichment)
     const balance = await fetchBalanceSnapshot(address, HELIUS_API_KEY);
+
+    // 3b) Backfill USD value for SOL-paired swaps using historical SOL price
+    //     (so e.g. "bought $HENRY with SOL" still produces cost basis).
+    await backfillSolValueUsd(parsed, balance);
 
     // 4) Compute per-token PnL
     const tokenPnL = computeTokenPnL(parsed, balance);
@@ -408,19 +416,22 @@ function computeTokenPnL(parsed: ParsedTx[], balance: BalanceSnapshot): TokenPnL
     return row;
   };
 
-  // First pass: aggregate buys/sells from swaps with known USD value
+  // First pass: aggregate buys/sells from swaps with known USD value.
+  // We treat anything in QUOTES (USDC/USDT/SOL) as the "money side". This
+  // keeps SOL-funded buys (the most common path on Solana) from being
+  // silently dropped — backfillSolValueUsd() has already filled valueUsd.
   for (const tx of parsed) {
     if (tx.type !== "swap" || tx.valueUsd == null) continue;
 
-    // BUY: wallet RECEIVED a non-stable token, paid in stable
-    if (tx.outToken && !STABLES.has(tx.outToken.mint) && tx.inToken && STABLES.has(tx.inToken.mint)) {
+    // BUY: wallet RECEIVED a non-quote token, paid in a quote (stable or SOL)
+    if (tx.outToken && !QUOTES.has(tx.outToken.mint) && tx.inToken && QUOTES.has(tx.inToken.mint)) {
       const row = ensure(tx.outToken.mint, tx.outToken.symbol);
       row.buys += 1;
       row.costUsd += tx.valueUsd;
       row.unitsBought += tx.outToken.amount;
     }
-    // SELL: wallet SENT a non-stable token, received stable
-    if (tx.inToken && !STABLES.has(tx.inToken.mint) && tx.outToken && STABLES.has(tx.outToken.mint)) {
+    // SELL: wallet SENT a non-quote token, received a quote (stable or SOL)
+    if (tx.inToken && !QUOTES.has(tx.inToken.mint) && tx.outToken && QUOTES.has(tx.outToken.mint)) {
       const row = ensure(tx.inToken.mint, tx.inToken.symbol);
       row.sells += 1;
       row.proceedsUsd += tx.valueUsd;
@@ -451,6 +462,47 @@ function computeTokenPnL(parsed: ParsedTx[], balance: BalanceSnapshot): TokenPnL
 function shortMint(m: string): string {
   if (!m) return "?";
   return m.length > 8 ? `${m.slice(0, 4)}…${m.slice(-4)}` : m;
+}
+
+// Fill in valueUsd for swaps where the quote leg is SOL (and therefore not
+// already 1:1 with USD). We try the snapshot's current SOL price first
+// (cheap, already in memory) and fall back to CoinGecko's spot price. This
+// is intentionally an approximation — close enough for "did I make/lose
+// money on this trade today" but not tax-grade. Without it, every SOL-paired
+// swap shows "No data" in the PnL card.
+async function backfillSolValueUsd(parsed: ParsedTx[], balance: BalanceSnapshot) {
+  // Quick exit if nothing needs backfilling
+  const needsSolPrice = parsed.some(
+    (tx) =>
+      tx.type === "swap" &&
+      tx.valueUsd == null &&
+      ((tx.inToken?.mint === SOL_MINT && tx.outToken && !QUOTES.has(tx.outToken.mint)) ||
+        (tx.outToken?.mint === SOL_MINT && tx.inToken && !QUOTES.has(tx.inToken.mint))),
+  );
+  if (!needsSolPrice) return;
+
+  let solPrice = balance.byMint.get(SOL_MINT)?.priceUsd ?? null;
+  if (solPrice == null || solPrice <= 0) {
+    try {
+      const r = await fetch(
+        "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd",
+      );
+      if (r.ok) {
+        const d = await r.json();
+        const p = Number(d?.solana?.usd);
+        if (Number.isFinite(p) && p > 0) solPrice = p;
+      }
+    } catch (e) {
+      console.error("SOL price fetch failed:", e);
+    }
+  }
+  if (solPrice == null || solPrice <= 0) return; // give up silently
+
+  for (const tx of parsed) {
+    if (tx.type !== "swap" || tx.valueUsd != null) continue;
+    if (tx.inToken?.mint === SOL_MINT) tx.valueUsd = tx.inToken.amount * solPrice;
+    else if (tx.outToken?.mint === SOL_MINT) tx.valueUsd = tx.outToken.amount * solPrice;
+  }
 }
 
 function json(body: unknown, status = 200) {
