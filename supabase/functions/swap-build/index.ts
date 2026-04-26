@@ -148,6 +148,15 @@ serve(async (req) => {
     const PLATFORM_FEE_BPS = 100; // 1%
     const referralAccount = Deno.env.get("JUPITER_REFERRAL_ACCOUNT") ?? "";
 
+    // Token-2022 outputs (transfer-fee / hooks / etc.) break Jupiter's
+    // output-side platform fee path on certain routes — the on-chain math
+    // fails and surfaces as a misleading "slippage exceeded" error
+    // (custom program error 0x1789). Skip the fee path for these mints so
+    // the swap actually lands. We forgo the 1% on these specific tokens
+    // rather than blocking the user.
+    const outputIsToken2022 = await detectToken2022Mint(outputMint);
+    const useJupiterFeePath = Boolean(referralAccount) && !outputIsToken2022;
+
     // Re-fetch a fresh quote at submission time so the transaction is built
     // against the current on-chain state (not the 15s-old preview).
     const quoteUrl = new URL("https://lite-api.jup.ag/swap/v1/quote");
@@ -156,7 +165,7 @@ serve(async (req) => {
     quoteUrl.searchParams.set("amount", String(Math.floor(amount)));
     quoteUrl.searchParams.set("slippageBps", String(slippageBps));
     quoteUrl.searchParams.set("restrictIntermediateTokens", "true");
-    if (referralAccount) {
+    if (useJupiterFeePath) {
       quoteUrl.searchParams.set("platformFeeBps", String(PLATFORM_FEE_BPS));
     }
 
