@@ -29,7 +29,11 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
+// Accept both Solana base58 addresses and EVM 0x addresses, since wallet-only
+// accounts can now be created via either SIWS or SIWE.
 const BASE58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+const EVM_ADDR = /^0x[0-9a-fA-F]{40}$/;
+const isValidWallet = (addr: string) => BASE58.test(addr) || EVM_ADDR.test(addr);
 
 function jsonError(status: number, error: string) {
   return new Response(JSON.stringify({ error }), {
@@ -59,8 +63,10 @@ Deno.serve(async (req) => {
     const keepId = userData.user.id;
 
     const body = await req.json().catch(() => ({}));
-    const wallet = String(body?.walletAddress ?? "").trim();
-    if (!BASE58.test(wallet)) return jsonError(400, "Invalid wallet address");
+    const rawWallet = String(body?.walletAddress ?? "").trim();
+    if (!isValidWallet(rawWallet)) return jsonError(400, "Invalid wallet address");
+    // EVM addresses are stored lowercased in wallet_links; Solana stays as-is.
+    const wallet = EVM_ADDR.test(rawWallet) ? rawWallet.toLowerCase() : rawWallet;
 
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
       auth: { persistSession: false },

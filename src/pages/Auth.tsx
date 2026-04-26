@@ -1,12 +1,14 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useWallet } from "@solana/wallet-adapter-react";
+import { useAccount, useSignMessage, useDisconnect as useEvmDisconnect } from "wagmi";
 import { toast } from "sonner";
 import { Apple, Copy, ExternalLink, Mail, ShieldAlert, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
 import { useAuth } from "@/hooks/useAuth";
 import { signInWithSolana } from "@/lib/siws";
+import { signInWithEthereum } from "@/lib/siwe";
 import { useWalletPicker } from "@/components/WalletPicker";
 import { VisionLogo } from "@/components/VisionLogo";
 import { Button } from "@/components/ui/button";
@@ -16,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SEO } from "@/components/SEO";
 import { cn } from "@/lib/utils";
 import { detectInAppBrowser, type InAppBrowserInfo } from "@/lib/in-app-browser";
+import { evmChainBadge, solanaBadge } from "@/lib/chain-badge";
 
 const GoogleGlyph = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden>
@@ -30,9 +33,21 @@ const Auth = () => {
   const navigate = useNavigate();
   const { session, loading } = useAuth();
   const { publicKey, signMessage, connected, disconnect } = useWallet();
+  // EVM side via wagmi — used for SIWE.
+  const {
+    address: evmAddress,
+    isConnected: evmConnected,
+    chainId: evmChainId,
+  } = useAccount();
+  const { signMessageAsync } = useSignMessage();
+  const { disconnect: evmDisconnect } = useEvmDisconnect();
   const { open: openWalletPicker, Picker } = useWalletPicker();
 
   const [tab, setTab] = useState<"email" | "wallet">("email");
+  // Inside the wallet tab the user picks which chain to sign with — Solana
+  // (SIWS / ed25519) or Ethereum (SIWE / personal_sign). Both produce a
+  // wallet-only Supabase account that can later be linked to an email.
+  const [walletChain, setWalletChain] = useState<"solana" | "evm">("solana");
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -127,17 +142,31 @@ const Auth = () => {
   };
 
   const runWalletSignature = async () => {
-    if (!publicKey || !signMessage) return;
     setWalletSigning(true);
     try {
-      const result = await signInWithSolana({
-        walletAddress: publicKey.toBase58(),
-        signMessage: (msg) => signMessage(msg),
-      });
-      if (result.error) {
-        toast.error("Wallet sign-in failed", { description: result.error });
+      if (walletChain === "solana") {
+        if (!publicKey || !signMessage) return;
+        const result = await signInWithSolana({
+          walletAddress: publicKey.toBase58(),
+          signMessage: (msg) => signMessage(msg),
+        });
+        if (result.error) {
+          toast.error("Wallet sign-in failed", { description: result.error });
+        } else {
+          toast.success("Signed in with Solana wallet");
+        }
       } else {
-        toast.success("Signed in with wallet");
+        if (!evmAddress) return;
+        const result = await signInWithEthereum({
+          walletAddress: evmAddress,
+          chainId: evmChainId ?? 1,
+          signMessage: (message) => signMessageAsync({ account: evmAddress as `0x${string}`, message }),
+        });
+        if (result.error) {
+          toast.error("Wallet sign-in failed", { description: result.error });
+        } else {
+          toast.success("Signed in with Ethereum wallet");
+        }
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Couldn't complete signature";
@@ -148,7 +177,11 @@ const Auth = () => {
   };
 
   const signWithWallet = () => {
-    if (!connected || !publicKey || !signMessage) {
+    const isReady =
+      walletChain === "solana"
+        ? connected && publicKey && signMessage
+        : evmConnected && evmAddress;
+    if (!isReady) {
       // Open the wallet picker, then auto-sign once a wallet connects.
       setPendingSign(true);
       openWalletPicker();
@@ -157,15 +190,28 @@ const Auth = () => {
     void runWalletSignature();
   };
 
-  // Once the wallet finishes connecting after the user clicked the pill,
+  // Once a wallet finishes connecting after the user clicked the pill,
   // immediately ask for a signature so it's a single-click flow end-to-end.
+  // We watch BOTH chains and let `walletChain` decide which one to drive.
   useEffect(() => {
-    if (pendingSign && connected && publicKey && signMessage) {
+    if (!pendingSign) return;
+    if (walletChain === "solana" && connected && publicKey && signMessage) {
+      setPendingSign(false);
+      void runWalletSignature();
+      return;
+    }
+    if (walletChain === "evm" && evmConnected && evmAddress) {
       setPendingSign(false);
       void runWalletSignature();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingSign, connected, publicKey, signMessage]);
+  }, [pendingSign, walletChain, connected, publicKey, signMessage, evmConnected, evmAddress]);
+
+  // If the user toggles the chain selector to one where they're not connected,
+  // clear stale signing state. Doesn't disconnect the other chain — multi-chain.
+  useEffect(() => {
+    setPendingSign(false);
+  }, [walletChain]);
 
 
   return (
@@ -384,17 +430,43 @@ const Auth = () => {
               </form>
             </TabsContent>
 
-            {/* Wallet tab — single pill that opens the wallet picker and
-                auto-signs the moment a wallet connects. */}
+            {/* Wallet tab — pick a chain (Solana / Ethereum) then sign with
+                that wallet. Uses SIWS for SOL and SIWE for EVM. */}
             <TabsContent value="wallet" className="mt-5">
               <div className="rounded-2xl border border-border bg-card/40 p-5 backdrop-blur-md">
+                {/* Chain selector */}
+                <div className="mb-4 flex gap-1 rounded-full bg-secondary p-1 text-xs">
+                  {(["solana", "evm"] as const).map((c) => {
+                    const badge = c === "solana" ? solanaBadge() : evmChainBadge(1);
+                    const isActive = walletChain === c;
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setWalletChain(c)}
+                        className={cn(
+                          "flex flex-1 items-center justify-center gap-1.5 rounded-full py-1.5 ease-vision",
+                          isActive
+                            ? "bg-background text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        <span className={cn("h-1.5 w-1.5 rounded-full", badge.dotClass)} aria-hidden />
+                        {c === "solana" ? "Solana" : "Ethereum"}
+                      </button>
+                    );
+                  })}
+                </div>
+
                 <div className="flex items-start gap-3">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
                     <Wallet className="h-4 w-4" />
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-foreground">
-                      Sign in with your Solana wallet
+                      {walletChain === "solana"
+                        ? "Sign in with your Solana wallet"
+                        : "Sign in with your Ethereum wallet"}
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
                       You'll sign a one-time message — no transaction, no gas.
@@ -413,12 +485,14 @@ const Auth = () => {
                     ? "Waiting for signature…"
                     : pendingSign
                       ? "Choose a wallet…"
-                      : connected && publicKey
+                      : walletChain === "solana" && connected && publicKey
                         ? `Sign in as ${publicKey.toBase58().slice(0, 4)}…${publicKey.toBase58().slice(-4)}`
-                        : "Sign in with wallet"}
+                        : walletChain === "evm" && evmConnected && evmAddress
+                          ? `Sign in as ${evmAddress.slice(0, 6)}…${evmAddress.slice(-4)}`
+                          : "Sign in with wallet"}
                 </Button>
 
-                {connected && publicKey && (
+                {walletChain === "solana" && connected && publicKey && (
                   <button
                     onClick={() => disconnect()}
                     className="mt-2 w-full text-center text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground ease-vision"
@@ -426,9 +500,19 @@ const Auth = () => {
                     Use a different wallet
                   </button>
                 )}
+                {walletChain === "evm" && evmConnected && evmAddress && (
+                  <button
+                    onClick={() => evmDisconnect()}
+                    className="mt-2 w-full text-center text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground ease-vision"
+                  >
+                    Use a different wallet
+                  </button>
+                )}
 
                 <p className="mt-3 text-center text-[10px] text-muted-foreground/70">
-                  Phantom, Solflare, Backpack, Coinbase, Trust & more
+                  {walletChain === "solana"
+                    ? "Phantom, Solflare, Backpack, Coinbase, Trust & more"
+                    : "MetaMask, Rabby, Rainbow, WalletConnect & more"}
                 </p>
               </div>
             </TabsContent>
