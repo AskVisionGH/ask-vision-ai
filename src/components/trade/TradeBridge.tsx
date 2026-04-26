@@ -264,6 +264,9 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
   const [picker, setPicker] = useState<null | { side: "from" | "to" }>(null);
   const [chainPicker, setChainPicker] = useState<null | "from" | "to">(null);
   const [phase, setPhase] = useState<Phase>({ name: "idle" });
+  // Modal-driven progress for EVM bridges. The Solana flow already feels
+  // tight (single signature) so it keeps the inline CTA label.
+  const [evmProgress, setEvmProgress] = useState<EvmProgressState | null>(null);
 
   // EVM hooks (active whenever source is an EVM chain).
   const { address: evmAddress, isConnected: evmConnected } = useAccount();
