@@ -531,6 +531,62 @@ function shortMint(m: string): string {
   return m.length > 8 ? `${m.slice(0, 4)}…${m.slice(-4)}` : m;
 }
 
+// Replace placeholder symbols (e.g. "CJUr…pump") on parsed tx legs with the
+// real ticker pulled from the holdings snapshot — purely cosmetic, but the
+// difference between "swap → CJUr…pump" and "swap → HENRY" is huge in chat.
+function enrichTxSymbols(parsed: ParsedTx[], balance: BalanceSnapshot) {
+  const lookup = (mint: string): string | null => {
+    if (KNOWN_SYMBOLS[mint]) return KNOWN_SYMBOLS[mint];
+    const meta = balance.byMint.get(mint);
+    if (meta?.symbol && meta.symbol !== "?") return meta.symbol;
+    return null;
+  };
+  for (const tx of parsed) {
+    if (tx.inToken) {
+      const s = lookup(tx.inToken.mint);
+      if (s) tx.inToken.symbol = s;
+    }
+    if (tx.outToken) {
+      const s = lookup(tx.outToken.mint);
+      if (s) tx.outToken.symbol = s;
+    }
+  }
+}
+
+/** Fetch metadata for a single mint via Helius DAS (used when the wallet no
+ *  longer holds the token, so it's not in the balance snapshot). Returns the
+ *  symbol, name, and logo so per-token PnL cards stay readable post-exit. */
+async function fetchAssetMetadata(
+  mint: string,
+  apiKey: string,
+): Promise<{ symbol: string; name: string; logo: string | null; priceUsd: number | null } | null> {
+  try {
+    const r = await fetch(`https://mainnet.helius-rpc.com/?api-key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "vision-meta",
+        method: "getAsset",
+        params: { id: mint, displayOptions: { showFungible: true } },
+      }),
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    const item = d?.result;
+    if (!item) return null;
+    const info = item.token_info ?? {};
+    return {
+      symbol: info.symbol ?? "?",
+      name: item.content?.metadata?.name ?? info.symbol ?? "Unknown",
+      logo: item.content?.links?.image ?? null,
+      priceUsd: info.price_info?.price_per_token ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 // Fill in valueUsd for swaps where the quote leg is SOL (and therefore not
 // already 1:1 with USD). We try the snapshot's current SOL price first
 // (cheap, already in memory) and fall back to CoinGecko's spot price. This
