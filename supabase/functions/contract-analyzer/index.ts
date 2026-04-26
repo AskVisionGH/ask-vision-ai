@@ -440,6 +440,7 @@ function buildReport(args: {
       mintAuthorityRevoked,
       freezeAuthorityRevoked,
     },
+    topHolders,
   };
 }
 
