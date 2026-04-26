@@ -306,6 +306,52 @@ export const ChatComposer = ({
       }}
       className="relative w-full"
     >
+      {/* @mention dropdown — anchored above the composer. */}
+      {mentionOpen && (
+        <div
+          className="absolute bottom-full left-0 z-30 mb-2 w-full max-w-xs overflow-hidden rounded-xl border border-border bg-popover shadow-soft"
+          role="listbox"
+          aria-label="Contacts"
+        >
+          <div className="flex items-center gap-1.5 border-b border-border px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            <AtSign className="h-3 w-3" />
+            Contacts
+          </div>
+          <ul className="max-h-60 overflow-y-auto py-1">
+            {mentionMatches.map((c, idx) => {
+              const active = idx === mentionIndex;
+              return (
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={active}
+                    // Use mousedown so the click registers before the textarea
+                    // blur fires and we lose the caret position.
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      insertMention(c);
+                    }}
+                    onMouseEnter={() => setMentionIndex(idx)}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-3 px-3 py-2 text-left ease-vision",
+                      active ? "bg-primary/10 text-foreground" : "text-muted-foreground hover:bg-accent/40 hover:text-foreground",
+                    )}
+                  >
+                    <span className="truncate text-sm font-medium">{c.name}</span>
+                    <span className="font-mono text-[10px] text-muted-foreground/70">
+                      {c.address.length > 12
+                        ? `${c.address.slice(0, 4)}…${c.address.slice(-4)}`
+                        : c.address}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
       <div
         className={cn(
           "flex items-end gap-2 rounded-2xl border border-border bg-popover px-4 py-3 shadow-soft ease-vision",
