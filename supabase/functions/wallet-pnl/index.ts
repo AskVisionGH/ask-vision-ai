@@ -511,8 +511,18 @@ function computeTokenPnL(parsed: ParsedTx[], balance: BalanceSnapshot): TokenPnL
   return [...map.values()];
 }
 
+// Best-effort symbol for a mint when we have nothing better than the address.
+// We special-case the well-known quote assets so swap rows don't show
+// "So11…1112" or "EPjF…Dt1v" in the chat — even before the balance snapshot
+// has been merged in.
+const KNOWN_SYMBOLS: Record<string, string> = {
+  [SOL_MINT]: "SOL",
+  EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v: "USDC",
+  Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB: "USDT",
+};
 function shortMint(m: string): string {
   if (!m) return "?";
+  if (KNOWN_SYMBOLS[m]) return KNOWN_SYMBOLS[m];
   return m.length > 8 ? `${m.slice(0, 4)}…${m.slice(-4)}` : m;
 }
 
