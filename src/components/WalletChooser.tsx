@@ -186,6 +186,15 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
     if (solConnecting) return;
 
     let cancelled = false;
+    // Hard safety: if the wallet provider never resolves (e.g. user closed
+    // the popup without an explicit reject event), don't leave the chooser
+    // spinning forever.
+    const stuckTimeout = setTimeout(() => {
+      if (cancelled) return;
+      setPendingSolanaWalletName(null);
+      setBusyId(null);
+    }, 30_000);
+
     void (async () => {
       try {
         await connectSolWallet();
@@ -206,6 +215,7 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
 
     return () => {
       cancelled = true;
+      clearTimeout(stuckTimeout);
     };
   }, [
     pendingSolanaWalletName,
@@ -331,11 +341,19 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
       if (evmConnected) {
         try { await disconnectEvm(); } catch { /* ignore */ }
       }
-      // wallet-adapter ignores `select(name)` if it matches the current
-      // adapter; clear first so same-wallet reconnects (Phantom→Phantom) work.
       if (isSameAdapter) {
-        selectSolWallet(null);
-        await new Promise((r) => setTimeout(r, 0));
+        // wallet-adapter ignores `select(name)` if it matches the current
+        // adapter, AND the wallet's `connect()` after a `disconnect()` will
+        // silently reconnect to the same account (Phantom auto-trust). We
+        // can't force Phantom's account picker from a dApp, so we tell the
+        // user how to switch accounts inside the wallet itself.
+        toast.info("To switch Phantom accounts", {
+          description:
+            "Open Phantom → tap your account name → choose another account, then disconnect this site from Phantom and reconnect.",
+          duration: 8000,
+        });
+        setBusyId(null);
+        return;
       }
       setPendingSolanaWalletName(walletName);
       selectSolWallet(walletName);
