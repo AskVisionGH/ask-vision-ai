@@ -12,6 +12,9 @@ import {
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { LAMPORTS_PER_SOL, PublicKey, VersionedTransaction } from "@solana/web3.js";
+import { useAccount, useBalance, useDisconnect } from "wagmi";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { erc20Abi, formatUnits, type Hex } from "viem";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -20,14 +23,17 @@ import { TradeTabs, type TradeTab } from "@/components/trade/TradeTabs";
 import { TokenLogo } from "@/components/TokenLogo";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { useEvmBridge } from "@/hooks/useEvmBridge";
+import { findEvmChain } from "@/lib/evm-chains";
 
 // LI.FI uses numeric ids for every chain. Solana's id is this constant.
-// (We previously assumed "SOL" but LI.FI's API expects the numeric form.)
 const SOLANA_CHAIN_ID = 1151111081099710 as const;
 // Native SOL address per LI.FI's token list (the all-zeroes Solana system program).
 const SOL_NATIVE_ADDRESS = "11111111111111111111111111111111";
 // Fallback to wrapped SOL mint when LI.FI's list returns it instead.
 const WSOL_MINT = "So11111111111111111111111111111111111111112";
+// Standard EVM "native" placeholder (zero address).
+const EVM_NATIVE_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 interface Chain {
   id: number | string;
