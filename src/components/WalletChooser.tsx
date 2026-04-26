@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
-import { useAccount, useConnect, useConnectors } from "wagmi";
+import { useAccount, useConnect, useConnectors, useDisconnect as useEvmDisconnect } from "wagmi";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { Loader2, Plus, Wallet, History as HistoryIcon } from "lucide-react";
 import { toast } from "sonner";
