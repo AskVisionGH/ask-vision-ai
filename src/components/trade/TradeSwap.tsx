@@ -63,6 +63,7 @@ interface QuoteData {
   rate: number;
   priceImpactPct: number | null;
   slippageBps: number;
+  dynamicSlippage?: boolean;
   route: { ammKey: string | null; label: string; inputMint: string | null; outputMint: string | null }[];
   estNetworkFeeSol: number;
   platformFee: { bps: number; amountUi: number; symbol: string; valueUsd: number | null } | null;
