@@ -17,14 +17,17 @@ const BORING_MINTS = new Set([
   "3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh", // wBTC
 ]);
 
+type Timeframe = "5m" | "1h" | "6h" | "24h";
+const VALID_TIMEFRAMES: Timeframe[] = ["5m", "1h", "6h", "24h"];
+
 interface TrendingToken {
   symbol: string;
   name: string;
   address: string;
   logo: string | null;
   priceUsd: number | null;
-  priceChange24h: number | null;
-  volume24hUsd: number | null;
+  priceChange: number | null;
+  volumeUsd: number | null;
   liquidityUsd: number | null;
   marketCapUsd: number | null;
   pairUrl: string | null;
@@ -34,8 +37,16 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
+    let timeframe: Timeframe = "24h";
+    try {
+      const body = await req.json();
+      if (body?.timeframe && VALID_TIMEFRAMES.includes(body.timeframe)) {
+        timeframe = body.timeframe;
+      }
+    } catch { /* no body — default 24h */ }
+
     // DexScreener "token-boosts/top" returns currently boosted/promoted tokens.
-    // We then enrich each with full pair data and rank by 24h volume.
+    // We then enrich each with full pair data and rank by volume in the chosen window.
     const boostsResp = await fetch("https://api.dexscreener.com/token-boosts/top/v1");
     if (!boostsResp.ok) {
       console.error("Boosts error:", boostsResp.status);
@@ -45,7 +56,7 @@ serve(async (req) => {
     const solanaBoosts = boosts.filter((b) => b.chainId === "solana").slice(0, 25);
 
     if (solanaBoosts.length === 0) {
-      return json({ tokens: [] });
+      return json({ tokens: [], timeframe });
     }
 
     // Batch enrich (DexScreener tokens endpoint accepts up to 30 comma-separated mints)
@@ -59,6 +70,10 @@ serve(async (req) => {
       pairs = (await enrichResp.json()) as any[];
     }
 
+    // Map our timeframe to DexScreener's keys.
+    const volKey = ({ "5m": "m5", "1h": "h1", "6h": "h6", "24h": "h24" } as const)[timeframe];
+    const changeKey = ({ "5m": "m5", "1h": "h1", "6h": "h6", "24h": "h24" } as const)[timeframe];
+
     // Group pairs by base token, pick most liquid pair per token
     const byToken = new Map<string, any>();
     for (const p of pairs) {
@@ -70,24 +85,27 @@ serve(async (req) => {
       }
     }
 
+    // Volume floor scales with the window so 5m doesn't get nuked by the 1k 24h cutoff.
+    const volFloor = ({ "5m": 50, "1h": 200, "6h": 500, "24h": 1000 } as const)[timeframe];
+
     const tokens: TrendingToken[] = [...byToken.values()]
-      .filter((p) => (p.volume?.h24 ?? 0) > 1000) // ignore dead pairs
+      .filter((p) => (p.volume?.[volKey] ?? 0) > volFloor)
       .map((p) => ({
         symbol: p.baseToken?.symbol ?? "?",
         name: p.baseToken?.name ?? "Unknown",
         address: p.baseToken?.address ?? "",
         logo: p.info?.imageUrl ?? null,
         priceUsd: p.priceUsd ? Number(p.priceUsd) : null,
-        priceChange24h: p.priceChange?.h24 ?? null,
-        volume24hUsd: p.volume?.h24 ?? null,
+        priceChange: p.priceChange?.[changeKey] ?? null,
+        volumeUsd: p.volume?.[volKey] ?? null,
         liquidityUsd: p.liquidity?.usd ?? null,
         marketCapUsd: p.marketCap ?? null,
         pairUrl: p.url ?? null,
       }))
-      .sort((a, b) => (b.volume24hUsd ?? 0) - (a.volume24hUsd ?? 0))
+      .sort((a, b) => (b.volumeUsd ?? 0) - (a.volumeUsd ?? 0))
       .slice(0, 10);
 
-    return json({ tokens });
+    return json({ tokens, timeframe });
   } catch (e) {
     console.error("trending-tokens error:", e);
     return json({ error: e instanceof Error ? e.message : "Unknown error" }, 500);
