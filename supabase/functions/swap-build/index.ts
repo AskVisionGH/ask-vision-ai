@@ -181,7 +181,7 @@ serve(async (req) => {
     // Jupiter expects `feeAccount` to be a referral-program token account for
     // the OUTPUT mint, derived as PDA(["referral_ata", referralAccount, mint]).
     let feeAccount: string | undefined;
-    if (referralAccount) {
+    if (useJupiterFeePath) {
       try {
         const { address } = await findProgramAddress(
           [
