@@ -1,13 +1,10 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  ArrowLeftRight,
-  Bell,
   GripVertical,
   Link2,
   Link2Off,
   LogOut,
-  MessageSquare,
   MessageSquarePlus,
   MoreHorizontal,
   PanelLeftClose,
@@ -15,13 +12,9 @@ import {
   Pencil,
   Pin,
   PinOff,
-  Radar,
-  Repeat,
   Search,
   Settings as SettingsIcon,
-  Shield,
   Trash2,
-  Users,
   X,
 } from "lucide-react";
 import {
@@ -63,6 +56,7 @@ import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { useProfile } from "@/hooks/useProfile";
 import { UserAvatar } from "@/components/UserAvatar";
 import { VisionLogo } from "@/components/VisionLogo";
+import { getAppNavItems } from "@/lib/app-nav";
 import { cn } from "@/lib/utils";
 import type { ConversationRow } from "@/hooks/useConversations";
 
@@ -351,14 +345,37 @@ export const ChatSidebar = ({
           <PanelLeftOpen className="h-4 w-4" />
         </Button>
         <div className="mt-3 flex flex-col items-center gap-1.5">
-          <Link
-            to="/chat"
-            className="flex h-8 w-8 items-center justify-center rounded-md bg-secondary text-foreground hover:bg-secondary/80"
-            aria-label="Chat"
-            title="Chat"
-          >
-            <MessageSquare className="h-4 w-4" />
-          </Link>
+          {getAppNavItems(isAdmin).map(({ id, to, label, icon: Icon, disabled }) => {
+            const isActive = id === "chat";
+            if (disabled) {
+              return (
+                <div
+                  key={id}
+                  className="flex h-8 w-8 cursor-not-allowed items-center justify-center rounded-md text-muted-foreground/40"
+                  aria-disabled="true"
+                  title={`${label} — coming soon`}
+                >
+                  <Icon className="h-4 w-4" />
+                </div>
+              );
+            }
+            return (
+              <Link
+                key={id}
+                to={to}
+                className={cn(
+                  "flex h-8 w-8 items-center justify-center rounded-md ease-vision",
+                  isActive
+                    ? "bg-secondary text-foreground hover:bg-secondary/80"
+                    : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
+                )}
+                aria-label={label}
+                title={label}
+              >
+                <Icon className="h-4 w-4" />
+              </Link>
+            );
+          })}
           <Button
             variant="ghost"
             size="icon"
@@ -369,50 +386,7 @@ export const ChatSidebar = ({
           >
             <MessageSquarePlus className="h-4 w-4" />
           </Button>
-          <Link
-            to="/trade"
-            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
-            aria-label="Trade"
-            title="Trade"
-          >
-            <Repeat className="h-4 w-4" />
-          </Link>
-          <Link
-            to="/trade?tab=bridge"
-            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
-            aria-label="Bridge"
-            title="Bridge"
-          >
-            <ArrowLeftRight className="h-4 w-4" />
-          </Link>
-          <div
-            className="flex h-8 w-8 cursor-not-allowed items-center justify-center rounded-md text-muted-foreground/40"
-            aria-disabled="true"
-            title="Tracking — coming soon"
-          >
-            <Radar className="h-4 w-4" />
-          </div>
-          <Link
-            to="/contacts"
-            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
-            aria-label="Contacts"
-            title="Contacts"
-          >
-            <Users className="h-4 w-4" />
-          </Link>
         </div>
-        {isAdmin && (
-          <div className="mt-1.5 flex flex-col items-center">
-            <Link
-              to="/admin"
-              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
-              aria-label="Admin"
-              title="Admin"
-            >
-              <Shield className="h-4 w-4" />
-            </Link>
-          </div>
-        )}
         <div className="mt-auto flex flex-col items-center gap-1.5">
           <Link
             to="/settings"
@@ -506,63 +480,50 @@ export const ChatSidebar = ({
         </div>
       </div>
 
-      {/* Quick links */}
+      {/* Quick links — order/contents come from the shared APP_NAV_ITEMS so
+          this matches AppSidebar exactly. Chat is always the active item here. */}
       <div className="shrink-0 border-b border-border/60 px-2 py-2">
-        <Link
-          to="/chat"
-          className="flex items-center gap-2 rounded-lg bg-secondary px-3 py-2 text-xs text-foreground ease-vision"
-        >
-          <MessageSquare className="h-3.5 w-3.5" />
-          Chat
-        </Link>
-        <Link
-          to="/trade"
-          className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground ease-vision hover:bg-secondary/60 hover:text-foreground"
-        >
-          <Repeat className="h-3.5 w-3.5" />
-          Trade
-        </Link>
-        <Link
-          to="/trade?tab=bridge"
-          className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground ease-vision hover:bg-secondary/60 hover:text-foreground"
-        >
-          <ArrowLeftRight className="h-3.5 w-3.5" />
-          Bridge
-        </Link>
-        <div
-          className="ease-vision flex cursor-not-allowed items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground/50"
-          aria-disabled="true"
-          title="Tracking — coming soon"
-        >
-          <Radar className="h-3.5 w-3.5" />
-          <span>Tracking</span>
-          <span className="ml-auto rounded-full border border-border/60 bg-secondary/40 px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
-            Soon
-          </span>
-        </div>
-        <Link
-          to="/contacts"
-          className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground ease-vision hover:bg-secondary/60 hover:text-foreground"
-        >
-          <Users className="h-3.5 w-3.5" />
-          Contacts
-        </Link>
-        <Link
-          to="/alerts"
-          className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground ease-vision hover:bg-secondary/60 hover:text-foreground"
-        >
-          <Bell className="h-3.5 w-3.5" />
-          Alerts
-        </Link>
-        {isAdmin ? (
-          <Link
-            to="/admin"
-            className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground ease-vision hover:bg-secondary/60 hover:text-foreground"
-          >
-            <Shield className="h-3.5 w-3.5" />
-            Admin
-          </Link>
-        ) : null}
+        {getAppNavItems(isAdmin).map(({ id, to, label, icon: Icon, disabled, badge }) => {
+          const isActive = id === "chat";
+          if (disabled) {
+            return (
+              <div
+                key={id}
+                className="ease-vision flex cursor-not-allowed items-center gap-2 rounded-lg px-3 py-2 text-xs text-muted-foreground/50"
+                aria-disabled="true"
+                title={`${label} — coming soon`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                <span>{label}</span>
+                {badge && (
+                  <span className="ml-auto rounded-full border border-border/60 bg-secondary/40 px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
+                    {badge}
+                  </span>
+                )}
+              </div>
+            );
+          }
+          return (
+            <Link
+              key={id}
+              to={to}
+              className={cn(
+                "ease-vision flex items-center gap-2 rounded-lg px-3 py-2 text-xs",
+                isActive
+                  ? "bg-secondary text-foreground"
+                  : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
+              )}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              <span>{label}</span>
+              {badge && (
+                <span className="ml-auto rounded-full border border-border/60 bg-secondary/40 px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-muted-foreground/70">
+                  {badge}
+                </span>
+              )}
+            </Link>
+          );
+        })}
       </div>
 
       {/* Thread list */}

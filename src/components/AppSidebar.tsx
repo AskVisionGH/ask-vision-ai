@@ -1,21 +1,15 @@
 import { Link } from "react-router-dom";
 import {
-  ArrowLeftRight,
-  Bell,
   LogOut,
-  MessageSquare,
   MessageSquarePlus,
   PanelLeftClose,
   PanelLeftOpen,
-  Radar,
-  Repeat,
   Settings as SettingsIcon,
-  Shield,
-  Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/UserAvatar";
 import { VisionLogo } from "@/components/VisionLogo";
+import { getActiveNavId, getAppNavItems } from "@/lib/app-nav";
 import { cn } from "@/lib/utils";
 
 /**
@@ -55,9 +49,8 @@ export const AppSidebar = ({
   profile,
   onSignOut,
 }: Props) => {
-  const isTradePath = activePath === "/trade";
-  const isBridgeActive = isTradePath && activeTradeTab === "bridge";
-  const isTradeActive = isTradePath && !isBridgeActive;
+  const navItems = getAppNavItems(isAdmin);
+  const activeId = getActiveNavId(activePath, activeTradeTab);
 
   if (collapsed) {
     return (
@@ -72,54 +65,17 @@ export const AppSidebar = ({
           <PanelLeftOpen className="h-4 w-4" />
         </Button>
         <div className="mt-3 flex flex-col items-center gap-1.5">
-          <IconLink
-            to="/chat"
-            icon={<MessageSquare className="h-4 w-4" />}
-            label="Chat"
-            active={activePath === "/chat"}
-          />
-          <IconLink
-            to="/trade?tab=trade"
-            icon={<Repeat className="h-4 w-4" />}
-            label="Trade"
-            active={isTradeActive}
-          />
-          <IconLink
-            to="/trade?tab=bridge"
-            icon={<ArrowLeftRight className="h-4 w-4" />}
-            label="Bridge"
-            active={isBridgeActive}
-          />
-          <IconLink
-            to="/tracked-wallets"
-            icon={<Radar className="h-4 w-4" />}
-            label="Tracking (soon)"
-            active={false}
-            disabled
-          />
-          <IconLink
-            to="/alerts"
-            icon={<Bell className="h-4 w-4" />}
-            label="Alerts"
-            active={activePath === "/alerts"}
-          />
-          <IconLink
-            to="/contacts"
-            icon={<Users className="h-4 w-4" />}
-            label="Contacts"
-            active={activePath === "/contacts"}
-          />
-        </div>
-        {isAdmin && (
-          <div className="mt-1.5 flex flex-col items-center">
+          {navItems.map(({ id, to, label, icon: Icon, disabled }) => (
             <IconLink
-              to="/admin"
-              icon={<Shield className="h-4 w-4" />}
-              label="Admin"
-              active={activePath === "/admin"}
+              key={id}
+              to={to}
+              icon={<Icon className="h-4 w-4" />}
+              label={disabled ? `${label} (soon)` : label}
+              active={activeId === id}
+              disabled={disabled}
             />
-          </div>
-        )}
+          ))}
+        </div>
         <div className="mt-auto flex flex-col items-center gap-1.5">
           <IconLink
             to="/settings"
@@ -192,52 +148,17 @@ export const AppSidebar = ({
       </div>
 
       <div className="shrink-0 px-2 py-2">
-        <NavRow
-          to="/chat"
-          icon={<MessageSquare className="h-3.5 w-3.5" />}
-          label="Chat"
-          active={activePath === "/chat"}
-        />
-        <NavRow
-          to="/trade?tab=trade"
-          icon={<Repeat className="h-3.5 w-3.5" />}
-          label="Trade"
-          active={isTradeActive}
-        />
-        <NavRow
-          to="/trade?tab=bridge"
-          icon={<ArrowLeftRight className="h-3.5 w-3.5" />}
-          label="Bridge"
-          active={isBridgeActive}
-        />
-        <NavRow
-          to="/tracked-wallets"
-          icon={<Radar className="h-3.5 w-3.5" />}
-          label="Tracking"
-          active={false}
-          disabled
-          badge="Soon"
-        />
-        <NavRow
-          to="/alerts"
-          icon={<Bell className="h-3.5 w-3.5" />}
-          label="Alerts"
-          active={activePath === "/alerts"}
-        />
-        <NavRow
-          to="/contacts"
-          icon={<Users className="h-3.5 w-3.5" />}
-          label="Contacts"
-          active={activePath === "/contacts"}
-        />
-        {isAdmin && (
+        {navItems.map(({ id, to, label, icon: Icon, disabled, badge }) => (
           <NavRow
-            to="/admin"
-            icon={<Shield className="h-3.5 w-3.5" />}
-            label="Admin"
-            active={activePath === "/admin"}
+            key={id}
+            to={to}
+            icon={<Icon className="h-3.5 w-3.5" />}
+            label={label}
+            active={activeId === id}
+            disabled={disabled}
+            badge={badge}
           />
-        )}
+        ))}
       </div>
 
       <div className="flex-1" />
