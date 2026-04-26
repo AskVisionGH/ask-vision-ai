@@ -67,18 +67,27 @@ export const useWalletPicker = () => {
 
   const pickWallet = async (target: "phantom" | "solflare" | "other") => {
     if (isAndroid()) {
-      // If we're in a third-party webview (Telegram, X, Instagram, etc.) on
-      // Android, MWA's intent broadcast can't escape the embedded view and
-      // either silently fails or bounces to the Play Store. Deep-link the
-      // user into the wallet's in-app browser instead, where wallet-adapter
-      // can connect via the injected provider.
-      if (isInThirdPartyWebView()) {
-        if (target === "solflare") openInSolflare();
-        else openInPhantom();
+      // Android MWA works in many browsers, but some users on Brave/Chrome hit
+      // a dead-end where choosing Phantom does nothing or opens the store.
+      // When they explicitly pick Phantom or Solflare, honor that choice with
+      // a direct deep link into the wallet app's in-app browser.
+      if (target === "phantom") {
+        openInPhantom();
         return;
       }
-      // MWA handles the wallet picker itself on Android — for any target we
-      // just kick off MWA, which lets the user choose the right wallet.
+      if (target === "solflare") {
+        openInSolflare();
+        return;
+      }
+
+      // For other wallets, keep the native Mobile Wallet Adapter path. In
+      // third-party webviews this can still be blocked, so fall back to a
+      // wallet browser jump instead of leaving the user stuck.
+      if (isInThirdPartyWebView()) {
+        openInPhantom();
+        return;
+      }
+
       await connectVia((n) => n.includes("mobile wallet adapter"), "Mobile Wallet Adapter");
       return;
     }
