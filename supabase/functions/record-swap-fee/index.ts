@@ -131,30 +131,16 @@ serve(async (req) => {
     // — a partial expression PostgREST can't target via onConflict, so we
     // pre-check for an existing row and only insert if missing. First
     // attribution wins.
-    const { data: existing } = await admin
+    const dupQuery = admin
       .from("treasury_fees")
       .select("id")
       .eq("chain", "solana")
-      .eq("signature", signature)
-      .is("asset_address", assetAddress === null ? null : undefined)
-      .eq("asset_address", assetAddress ?? "")
-      .maybeSingle();
+      .eq("signature", signature);
+    const { data: existing } = assetAddress === null
+      ? await dupQuery.is("asset_address", null).maybeSingle()
+      : await dupQuery.eq("asset_address", assetAddress).maybeSingle();
 
-    // The above .is/.eq combo is awkward — do it cleanly:
-    let alreadyExists = false;
-    {
-      const q = admin
-        .from("treasury_fees")
-        .select("id")
-        .eq("chain", "solana")
-        .eq("signature", signature);
-      const { data: dup } = assetAddress === null
-        ? await q.is("asset_address", null).maybeSingle()
-        : await q.eq("asset_address", assetAddress).maybeSingle();
-      alreadyExists = Boolean(dup?.id) || Boolean(existing?.id);
-    }
-
-    if (alreadyExists) {
+    if (existing?.id) {
       return json({ ok: true, deduped: true });
     }
 
