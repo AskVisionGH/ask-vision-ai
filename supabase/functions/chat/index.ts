@@ -127,7 +127,7 @@ const TOOLS = [
     function: {
       name: "get_trending",
       description:
-        "Fetch the top 10 trending Solana tokens right now, ranked by trading volume in the chosen window. Use for 'what's trending', 'top tokens', 'what's hot on Solana', etc. Pick the timeframe that matches the user — '5m' for 'last few minutes / right now', '1h' for 'last hour', '6h' for 'last 6 hours / this morning', '24h' for 'today / 24h / day' (default).",
+        "Fetch the top 10 trending Solana tokens right now, ranked by trading volume in the chosen window. Use for 'what's trending', 'top tokens', 'what's hot on Solana', etc. Supported timeframes are ONLY: '5m', '1h', '6h', '24h' (default). Pick the one that matches the user — '5m' for 'last few minutes / right now', '1h' for 'last hour', '6h' for 'last 6 hours / this morning', '24h' for 'today / 24h / day'. CRITICAL: If the user asks for any other window (3d, 7d, week, month, etc.), DO NOT call this tool — instead reply asking them to pick one of: 5m, 1h, 6h, or 24h.",
       parameters: {
         type: "object",
         properties: {
