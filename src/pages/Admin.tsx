@@ -192,7 +192,6 @@ const Admin = () => {
             <TabsTrigger value="stats">Stats</TabsTrigger>
             <TabsTrigger value="treasury">Treasury</TabsTrigger>
             <TabsTrigger value="users">Users</TabsTrigger>
-            <TabsTrigger value="emails">Emails</TabsTrigger>
             <TabsTrigger value="roles">Roles</TabsTrigger>
           </TabsList>
 
@@ -204,9 +203,6 @@ const Admin = () => {
           </TabsContent>
           <TabsContent value="users">
             <UsersTab />
-          </TabsContent>
-          <TabsContent value="emails">
-            <EmailsTab />
           </TabsContent>
           <TabsContent value="roles">
             <RolesTab />
