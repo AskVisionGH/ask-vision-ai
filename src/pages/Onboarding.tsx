@@ -1,7 +1,8 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowRight, Camera, Check, ChevronLeft, Mail, Sparkles } from "lucide-react";
+import { ArrowRight, Camera, Check, ChevronLeft, Languages, Mail, Sparkles } from "lucide-react";
+import { DEFAULT_LANGUAGE, LANGUAGE_OPTIONS, type LanguageCode } from "@/lib/languages";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -24,7 +25,7 @@ import { cn } from "@/lib/utils";
 
 // "email" is conditionally injected right after "welcome" for wallet-only
 // accounts that signed in via SIWS and don't yet have a real inbox attached.
-type Step = "welcome" | "email" | "experience" | "interests" | "risk";
+type Step = "welcome" | "email" | "experience" | "interests" | "risk" | "language";
 
 const STEP_LABELS: Record<Step, string> = {
   welcome: "About you",
@@ -32,6 +33,7 @@ const STEP_LABELS: Record<Step, string> = {
   experience: "Experience",
   interests: "Interests",
   risk: "Risk",
+  language: "Language",
 };
 
 const Onboarding = () => {
@@ -50,6 +52,7 @@ const Onboarding = () => {
   const [experience, setExperience] = useState<CryptoExperience | null>(null);
   const [interests, setInterests] = useState<string[]>([]);
   const [risk, setRisk] = useState<RiskTolerance | null>(null);
+  const [language, setLanguage] = useState<LanguageCode>(DEFAULT_LANGUAGE);
   const [savingAvatar, setSavingAvatar] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
@@ -74,6 +77,7 @@ const Onboarding = () => {
     setExperience(profile.experience);
     setInterests(profile.interests ?? []);
     setRisk(profile.risk_tolerance);
+    setLanguage((profile.language as LanguageCode) ?? DEFAULT_LANGUAGE);
   }, [profile]);
 
   // If they already finished onboarding, send them straight to chat.
@@ -86,13 +90,13 @@ const Onboarding = () => {
   // Step list is dynamic: only show the email step when we actually need one.
   const steps = useMemo<Step[]>(() => {
     const base: Step[] = isRerun
-      ? ["experience", "interests", "risk"]
-      : ["welcome", "experience", "interests", "risk"];
+      ? ["experience", "interests", "risk", "language"]
+      : ["welcome", "experience", "interests", "risk", "language"];
     // Inject the email step right after welcome (or at the start on rerun)
     // for wallet-only users who still need to attach a real inbox.
     if (!needsRealEmail) return base;
     if (isRerun) return ["email", ...base];
-    return ["welcome", "email", "experience", "interests", "risk"];
+    return ["welcome", "email", "experience", "interests", "risk", "language"];
   }, [needsRealEmail, isRerun]);
   const stepIndex = steps.indexOf(step);
   const isLast = stepIndex === steps.length - 1;
@@ -156,6 +160,8 @@ const Onboarding = () => {
       await updateProfile({ experience });
     } else if (step === "interests") {
       await updateProfile({ interests });
+    } else if (step === "risk") {
+      await updateProfile({ risk_tolerance: risk });
     }
     if (isLast) {
       advance("finish");
@@ -172,6 +178,7 @@ const Onboarding = () => {
     setFinishing(true);
     const ok = await updateProfile({
       risk_tolerance: risk,
+      language,
       onboarding_completed: true,
     });
     setFinishing(false);
@@ -554,6 +561,48 @@ const Onboarding = () => {
                     );
                   })}
                 </div>
+              </div>
+            )}
+
+            {step === "language" && (
+              <div className="space-y-6">
+                <div>
+                  <div className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-[10px] uppercase tracking-widest text-primary">
+                    <Languages className="h-3 w-3" />
+                    Speak my language
+                  </div>
+                  <h2 className="text-xl font-light tracking-tight sm:text-2xl">
+                    What <span className="font-serif-italic text-primary">language</span> should I reply in?
+                  </h2>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Affects chat replies and voice transcription. Auto-detect mirrors whatever you write in.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {LANGUAGE_OPTIONS.map((opt) => {
+                    const active = language === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setLanguage(opt.value)}
+                        className={cn(
+                          "flex flex-col items-start gap-0.5 rounded-xl border px-3 py-2.5 text-left ease-vision",
+                          active
+                            ? "border-primary/60 bg-primary/10"
+                            : "border-border bg-card/30 hover:border-primary/30 hover:bg-card",
+                        )}
+                      >
+                        <span className="text-sm font-medium text-foreground">{opt.label}</span>
+                        <span className="text-[11px] text-muted-foreground">{opt.native}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[11px] text-muted-foreground/70">
+                  You can change this anytime in Settings.
+                </p>
               </div>
             )}
           </div>
