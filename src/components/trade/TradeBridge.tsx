@@ -615,12 +615,12 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
           </div>
           <div className="flex flex-col gap-2">
             <a
-              href={`https://solscan.io/tx/${phase.signature}`}
+              href={phase.sourceExplorer}
               target="_blank"
               rel="noopener noreferrer"
               className="ease-vision inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-secondary/40 px-3 py-1.5 font-mono text-[11px] text-primary transition-colors hover:bg-secondary"
             >
-              Source tx {truncSig(phase.signature)}
+              Source tx {truncSig(phase.sourceTxHash)}
               <ExternalLink className="h-3 w-3" />
             </a>
             {phase.destExplorer && (
