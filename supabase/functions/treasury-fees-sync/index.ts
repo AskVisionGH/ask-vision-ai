@@ -217,15 +217,20 @@ async function syncDcaFees(supabase: any): Promise<number> {
     //   metadata.platform_fee === true
     const isDcaFee =
       meta.kind === "dca_fee" ||
+      meta.kind === "swap_upfront_fee" ||
       meta.platform_fee === true ||
       meta.platformFee === true;
     if (!isDcaFee) continue;
+
+    // Distinguish DCA vs Token-2022 swap upfront fees in the ledger.
+    const sourceKind =
+      meta.kind === "swap_upfront_fee" ? "swap_upfront_fee" : "dca_fee";
 
     const feeAmount = Number(meta.feeAmount ?? meta.fee_amount ?? ev.input_amount ?? 0);
     rows.push({
       chain: "solana",
       treasury_address: SOL_TREASURY,
-      source_kind: "dca_fee",
+      source_kind: sourceKind,
       asset_symbol: (meta.symbol as string) ?? null,
       asset_address: (ev.input_mint as string | null) ?? null,
       amount: feeAmount,
