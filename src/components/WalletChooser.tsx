@@ -82,7 +82,17 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
   const evmConnectors = useConnectors();
   const { connectAsync: connectEvm } = useConnect();
   const { address: evmAddress, isConnected: evmConnected } = useAccount();
+  const { disconnectAsync: disconnectEvm } = useEvmDisconnect();
   const { openConnectModal: openRainbowKit } = useConnectModal();
+  // Defer opening the RainbowKit modal until after a disconnect lands —
+  // useConnectModal returns `undefined` while a wallet is still connected.
+  const [pendingEvmModal, setPendingEvmModal] = useState(false);
+  useEffect(() => {
+    if (pendingEvmModal && !evmConnected && openRainbowKit) {
+      setPendingEvmModal(false);
+      openRainbowKit();
+    }
+  }, [pendingEvmModal, evmConnected, openRainbowKit]);
 
   const [linked, setLinked] = useState<LinkedWallet[]>([]);
   const [recent, setRecent] = useState<LastUsedWallet[]>([]);
