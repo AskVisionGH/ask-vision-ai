@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import type { WalletName } from "@solana/wallet-adapter-base";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useAccount, useConnect, useConnectors, useDisconnect as useEvmDisconnect } from "wagmi";
-import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { Loader2, Plus, Wallet, History as HistoryIcon } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -86,16 +85,6 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
   const { connectAsync: connectEvm } = useConnect();
   const { address: evmAddress, isConnected: evmConnected } = useAccount();
   const { disconnectAsync: disconnectEvm } = useEvmDisconnect();
-  const { openConnectModal: openRainbowKit } = useConnectModal();
-  // Defer opening the RainbowKit modal until after a disconnect lands —
-  // useConnectModal returns `undefined` while a wallet is still connected.
-  const [pendingEvmModal, setPendingEvmModal] = useState(false);
-  useEffect(() => {
-    if (pendingEvmModal && !evmConnected && openRainbowKit) {
-      setPendingEvmModal(false);
-      openRainbowKit();
-    }
-  }, [pendingEvmModal, evmConnected, openRainbowKit]);
 
   const [linked, setLinked] = useState<LinkedWallet[]>([]);
   const [recent, setRecent] = useState<LastUsedWallet[]>([]);
