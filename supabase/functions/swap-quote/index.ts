@@ -173,8 +173,9 @@ serve(async (req) => {
     const userSlippageBps = Number.isFinite(Number(body.slippageBps))
       ? Math.max(1, Math.min(5000, Number(body.slippageBps)))
       : 50;
+    const dynamicSlippageCeilingBps = 1500;
     const slippageBps = dynamicSlippage
-      ? Math.max(userSlippageBps, 500)
+      ? Math.max(userSlippageBps, dynamicSlippageCeilingBps)
       : userSlippageBps;
 
     if (!inputToken || !outputToken) {

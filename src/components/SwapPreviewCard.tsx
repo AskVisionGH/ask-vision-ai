@@ -83,7 +83,7 @@ const supaPost = async (fn: string, body: unknown, attempt = 0): Promise<any> =>
     }
     throw new Error(message);
   }
-  if (data && typeof data === "object" && "error" in (data as any) && (data as any).error) {
+  if (data && typeof data === "object" && "error" in (data as any) && (data as any).error && !(data as any).fallback) {
     throw new Error((data as any).error);
   }
   return data;
@@ -185,6 +185,9 @@ export const SwapPreviewCard = ({ data: initial }: Props) => {
         outputAmount: data.output.amountUi,
         walletAddress: publicKey.toBase58(),
       });
+      if (submitted?.fallback && submitted?.error) {
+        throw new Error(submitted.error as string);
+      }
       signature = submitted.signature as string;
       if (!signature) throw new Error("No signature returned from submit");
 

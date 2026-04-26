@@ -11,6 +11,12 @@ const corsHeaders = {
 
 type EventKind = "swap" | "transfer" | "bridge";
 
+type MappedRpcError = {
+  code: string;
+  error: string;
+  fallback: boolean;
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -49,7 +55,8 @@ serve(async (req) => {
       const msg = typeof data.error.message === "string"
         ? data.error.message
         : JSON.stringify(data.error);
-      return json({ error: mapRpcError(msg) }, 400);
+      const mapped = mapRpcError(msg);
+      return json(mapped, mapped.fallback ? 200 : 400);
     }
 
     const signature: string = data.result;
@@ -64,7 +71,14 @@ serve(async (req) => {
     return json({ signature });
   } catch (e) {
     console.error("tx-submit error:", e);
-    return json({ error: e instanceof Error ? e.message : "Unknown error" }, 500);
+    return json(
+      {
+        code: "SERVICE_FAILED",
+        error: "Transaction submission is temporarily unavailable. Try again.",
+        fallback: true,
+      },
+      200,
+    );
   }
 });
 
@@ -116,25 +130,37 @@ function strOrNull(v: unknown): string | null {
   return typeof v === "string" && v.length > 0 ? v : null;
 }
 
-function mapRpcError(msg: string): string {
-  // Slippage-exceeded errors across the major Solana AMMs. Each program
-  // emits its own custom error code, but they all mean the same thing:
-  // the price moved between quote and execution past the user's tolerance.
-  // - 0x1771: Jupiter / Raydium / Orca (most common)
-  // - 0x1788, 0x1789: Pump.fun AMM (low-liquidity memecoins move fast)
-  // - "slippage tolerance exceeded": generic fallback string
+function mapRpcError(msg: string): MappedRpcError {
   const slippageCodes = ["0x1771", "0x1788", "0x1789"];
   if (
     slippageCodes.some((c) => msg.includes(c)) ||
     /slippage/i.test(msg)
   ) {
-    return "Price moved beyond your slippage tolerance. Try again or increase slippage for volatile tokens.";
+    return {
+      code: "SLIPPAGE_TOLERANCE_EXCEEDED",
+      error: "Price moved beyond your slippage tolerance. Refresh and retry to rebuild the swap at the latest price.",
+      fallback: true,
+    };
   }
   if (msg.includes("BlockhashNotFound") || msg.includes("blockhash")) {
-    return "Quote expired before submission. Try again.";
+    return {
+      code: "QUOTE_EXPIRED",
+      error: "Quote expired before submission. Refresh and try again.",
+      fallback: true,
+    };
   }
-  if (msg.includes("insufficient")) return "Insufficient balance for this swap.";
-  return msg.slice(0, 200);
+  if (msg.toLowerCase().includes("insufficient")) {
+    return {
+      code: "INSUFFICIENT_BALANCE",
+      error: "Insufficient balance for this swap.",
+      fallback: false,
+    };
+  }
+  return {
+    code: "TX_SUBMIT_FAILED",
+    error: msg.slice(0, 200),
+    fallback: false,
+  };
 }
 
 function json(body: unknown, status = 200) {
