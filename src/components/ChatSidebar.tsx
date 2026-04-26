@@ -63,6 +63,7 @@ import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { useProfile } from "@/hooks/useProfile";
 import { UserAvatar } from "@/components/UserAvatar";
 import { VisionLogo } from "@/components/VisionLogo";
+import { getAppNavItems } from "@/lib/app-nav";
 import { cn } from "@/lib/utils";
 import type { ConversationRow } from "@/hooks/useConversations";
 
