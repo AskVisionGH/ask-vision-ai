@@ -148,52 +148,17 @@ export const AppSidebar = ({
       </div>
 
       <div className="shrink-0 px-2 py-2">
-        <NavRow
-          to="/chat"
-          icon={<MessageSquare className="h-3.5 w-3.5" />}
-          label="Chat"
-          active={activePath === "/chat"}
-        />
-        <NavRow
-          to="/trade?tab=trade"
-          icon={<Repeat className="h-3.5 w-3.5" />}
-          label="Trade"
-          active={isTradeActive}
-        />
-        <NavRow
-          to="/trade?tab=bridge"
-          icon={<ArrowLeftRight className="h-3.5 w-3.5" />}
-          label="Bridge"
-          active={isBridgeActive}
-        />
-        <NavRow
-          to="/tracked-wallets"
-          icon={<Radar className="h-3.5 w-3.5" />}
-          label="Tracking"
-          active={false}
-          disabled
-          badge="Soon"
-        />
-        <NavRow
-          to="/alerts"
-          icon={<Bell className="h-3.5 w-3.5" />}
-          label="Alerts"
-          active={activePath === "/alerts"}
-        />
-        <NavRow
-          to="/contacts"
-          icon={<Users className="h-3.5 w-3.5" />}
-          label="Contacts"
-          active={activePath === "/contacts"}
-        />
-        {isAdmin && (
+        {navItems.map(({ id, to, label, icon: Icon, disabled, badge }) => (
           <NavRow
-            to="/admin"
-            icon={<Shield className="h-3.5 w-3.5" />}
-            label="Admin"
-            active={activePath === "/admin"}
+            key={id}
+            to={to}
+            icon={<Icon className="h-3.5 w-3.5" />}
+            label={label}
+            active={activeId === id}
+            disabled={disabled}
+            badge={badge}
           />
-        )}
+        ))}
       </div>
 
       <div className="flex-1" />
