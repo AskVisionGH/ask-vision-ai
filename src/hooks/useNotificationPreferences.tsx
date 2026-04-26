@@ -34,6 +34,7 @@ const DEFAULTS: NotificationPreferences = {
       ? Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
       : "UTC",
   post_order_prompt_seen: false,
+  chat_push_prompt_seen: false,
 };
 
 /**
