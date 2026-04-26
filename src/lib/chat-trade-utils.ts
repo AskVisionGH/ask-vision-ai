@@ -57,12 +57,29 @@ export const supaPost = async (
       }
     }
     const message = serverMsg ?? error.message ?? `${fn} failed`;
+    const lower = message.toLowerCase();
+    // "Failed to send a request to the Edge Function" / "Failed to fetch" /
+    // "Load failed" all mean the browser couldn't reach the function at all
+    // (cold start, network blip, CDN hiccup). These have no status because
+    // no response was received — retry them aggressively.
+    const networkFailure =
+      status === undefined &&
+      (lower.includes("failed to send") ||
+        lower.includes("failed to fetch") ||
+        lower.includes("load failed") ||
+        lower.includes("network") ||
+        lower.includes("networkerror"));
     const transient =
+      networkFailure ||
+      status === 502 ||
       status === 503 ||
       status === 504 ||
-      message.toLowerCase().includes("temporarily unavailable") ||
-      message.toLowerCase().includes("runtime_error");
-    if (transient && attempt < 2) {
+      lower.includes("temporarily unavailable") ||
+      lower.includes("runtime_error");
+    // Up to 4 retries for pure network failures (matches what the user saw),
+    // 2 for server-side transient errors.
+    const maxAttempts = networkFailure ? 4 : 2;
+    if (transient && attempt < maxAttempts) {
       await sleep(400 * (attempt + 1));
       return supaPost(fn, body, attempt + 1);
     }
