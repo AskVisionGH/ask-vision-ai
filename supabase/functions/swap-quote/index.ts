@@ -257,6 +257,7 @@ serve(async (req) => {
       rate: outUi / inUi,
       priceImpactPct,
       slippageBps,
+      dynamicSlippage,
       route,
       // Typical Solana network fee for a swap (rough estimate, in SOL)
       estNetworkFeeSol: 0.000075,
