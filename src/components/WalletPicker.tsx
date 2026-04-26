@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -9,6 +8,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { WalletChooser } from "@/components/WalletChooser";
 import {
   isAndroid,
   isIOS,
@@ -28,16 +28,16 @@ import {
  * default modal does nothing because `window.solana` is undefined.
  */
 export const useWalletPicker = () => {
-  const { setVisible } = useWalletModal();
   const { wallets, select, connect } = useWallet();
   const [mobileSheet, setMobileSheet] = useState(false);
+  const [chooserOpen, setChooserOpen] = useState(false);
 
   const open = () => {
     if (shouldUseCustomMobileSheet()) {
       setMobileSheet(true);
       return;
     }
-    setVisible(true);
+    setChooserOpen(true);
   };
 
   // Mobile bridge order:
@@ -104,7 +104,7 @@ export const useWalletPicker = () => {
     }
 
     setMobileSheet(false);
-    setVisible(true);
+    setChooserOpen(true);
   };
 
   // Manual fallback: if MWA / WalletConnect didn't work (no app installed,
@@ -117,84 +117,87 @@ export const useWalletPicker = () => {
   };
 
   const Picker = (
-    <Dialog open={mobileSheet} onOpenChange={setMobileSheet}>
-      <DialogContent className="max-w-sm rounded-2xl border-border bg-card p-6">
-        <DialogHeader>
-          <DialogTitle className="text-center text-lg font-light">
-            Connect a wallet
-          </DialogTitle>
-          <DialogDescription className="text-center text-xs text-muted-foreground">
-            Pick a wallet — you'll approve the connection in the wallet app
-            and come right back here.
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <WalletChooser open={chooserOpen} onOpenChange={setChooserOpen} />
+      <Dialog open={mobileSheet} onOpenChange={setMobileSheet}>
+        <DialogContent className="max-w-sm rounded-2xl border-border bg-card p-6">
+          <DialogHeader>
+            <DialogTitle className="text-center text-lg font-light">
+              Connect a wallet
+            </DialogTitle>
+            <DialogDescription className="text-center text-xs text-muted-foreground">
+              Pick a wallet — you'll approve the connection in the wallet app
+              and come right back here.
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="mt-2 space-y-2">
-          <button
-            type="button"
-            onClick={() => pickWallet("phantom")}
-            className="flex w-full items-center gap-3 rounded-xl border border-border bg-secondary px-4 py-3 text-left text-sm font-medium text-foreground hover:bg-muted ease-vision"
-          >
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#AB9FF2] text-base">
-              👻
-            </span>
-            <span className="flex-1">Phantom</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => pickWallet("solflare")}
-            className="flex w-full items-center gap-3 rounded-xl border border-border bg-secondary px-4 py-3 text-left text-sm font-medium text-foreground hover:bg-muted ease-vision"
-          >
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#FFCC00] text-base">
-              ☀️
-            </span>
-            <span className="flex-1">Solflare</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => pickWallet("other")}
-            className="flex w-full items-center gap-3 rounded-xl border border-border bg-secondary px-4 py-3 text-left text-sm font-medium text-foreground hover:bg-muted ease-vision"
-          >
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 text-primary">
-              📱
-            </span>
-            <span className="flex-1">Other wallet (Backpack, Trust…)</span>
-          </button>
-        </div>
-
-        <div className="mt-5 rounded-xl border border-border/60 bg-secondary/40 p-3">
-          <p className="text-[11px] font-medium text-foreground">
-            Not working? Open in the wallet app
-          </p>
-          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
-            If tapping above does nothing or sends you to the app store, use
-            your wallet's built-in browser instead.
-          </p>
-          <div className="mt-2 flex gap-2">
+          <div className="mt-2 space-y-2">
             <button
               type="button"
-              onClick={() => openWalletBrowser("phantom")}
-              className="flex-1 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted ease-vision"
+              onClick={() => pickWallet("phantom")}
+              className="flex w-full items-center gap-3 rounded-xl border border-border bg-secondary px-4 py-3 text-left text-sm font-medium text-foreground hover:bg-muted ease-vision"
             >
-              Open in Phantom
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#AB9FF2] text-base">
+                👻
+              </span>
+              <span className="flex-1">Phantom</span>
             </button>
+
             <button
               type="button"
-              onClick={() => openWalletBrowser("solflare")}
-              className="flex-1 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted ease-vision"
+              onClick={() => pickWallet("solflare")}
+              className="flex w-full items-center gap-3 rounded-xl border border-border bg-secondary px-4 py-3 text-left text-sm font-medium text-foreground hover:bg-muted ease-vision"
             >
-              Open in Solflare
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#FFCC00] text-base">
+                ☀️
+              </span>
+              <span className="flex-1">Solflare</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => pickWallet("other")}
+              className="flex w-full items-center gap-3 rounded-xl border border-border bg-secondary px-4 py-3 text-left text-sm font-medium text-foreground hover:bg-muted ease-vision"
+            >
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                📱
+              </span>
+              <span className="flex-1">Other wallet (Backpack, Trust…)</span>
             </button>
           </div>
-        </div>
 
-        <p className="mt-4 text-center text-[10px] uppercase tracking-widest text-muted-foreground/60">
-          Don't have a wallet? Install Phantom or Solflare first.
-        </p>
-      </DialogContent>
-    </Dialog>
+          <div className="mt-5 rounded-xl border border-border/60 bg-secondary/40 p-3">
+            <p className="text-[11px] font-medium text-foreground">
+              Not working? Open in the wallet app
+            </p>
+            <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+              If tapping above does nothing or sends you to the app store, use
+              your wallet's built-in browser instead.
+            </p>
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => openWalletBrowser("phantom")}
+                className="flex-1 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted ease-vision"
+              >
+                Open in Phantom
+              </button>
+              <button
+                type="button"
+                onClick={() => openWalletBrowser("solflare")}
+                className="flex-1 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted ease-vision"
+              >
+                Open in Solflare
+              </button>
+            </div>
+          </div>
+
+          <p className="mt-4 text-center text-[10px] uppercase tracking-widest text-muted-foreground/60">
+            Don't have a wallet? Install Phantom or Solflare first.
+          </p>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 
   return { open, Picker };
