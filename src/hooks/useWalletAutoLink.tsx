@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
+import { useAccount } from "wagmi";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -21,19 +22,17 @@ export type MergeCandidate = {
 export const useWalletAutoLink = () => {
   const { session } = useAuth();
   const { connected, publicKey } = useWallet();
+  // EVM side (wagmi). Address is lowercased so wallet_links rows are
+  // canonicalised and we don't accidentally double-insert checksum variants.
+  const { address: evmAddress, isConnected: evmConnected } = useAccount();
   const handledRef = useRef<string | null>(null);
   const [mergeCandidate, setMergeCandidate] = useState<MergeCandidate | null>(null);
   const [merging, setMerging] = useState(false);
 
-  useEffect(() => {
-    const userId = session?.user?.id;
-    if (!userId) return;
-    if (!connected || !publicKey) {
-      handledRef.current = null;
-      return;
-    }
-
-    const address = publicKey.toBase58();
+  // Shared linker — handles both Solana base58 addresses and lowercased EVM
+  // addresses. We dedupe per (userId, address) to avoid hammering wallet_links
+  // when adapters re-emit the same connect event.
+  const linkAddress = (userId: string, address: string) => {
     const cacheKey = `${userId}:${address}`;
     if (handledRef.current === cacheKey) return;
     handledRef.current = cacheKey;
@@ -71,7 +70,26 @@ export const useWalletAutoLink = () => {
         }
       }
     })();
+  };
+
+  // Solana branch.
+  useEffect(() => {
+    const userId = session?.user?.id;
+    if (!userId) return;
+    if (!connected || !publicKey) {
+      handledRef.current = null;
+      return;
+    }
+    linkAddress(userId, publicKey.toBase58());
   }, [session?.user?.id, connected, publicKey]);
+
+  // EVM branch — fires whenever a wagmi connector reports an address.
+  useEffect(() => {
+    const userId = session?.user?.id;
+    if (!userId) return;
+    if (!evmConnected || !evmAddress) return;
+    linkAddress(userId, evmAddress.toLowerCase());
+  }, [session?.user?.id, evmConnected, evmAddress]);
 
   const acceptMerge = async (): Promise<{ ok: boolean; error?: string }> => {
     if (!mergeCandidate) return { ok: false, error: "Nothing to merge" };
