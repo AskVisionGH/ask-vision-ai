@@ -204,29 +204,42 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
             )
           : null;
         if (target) {
+          // Select via the React hook so context state stays consistent…
           selectSolWallet(target.adapter.name);
-          // Give react-wallet-adapter a tick to apply the selection before
-          // we trigger the connect flow.
-          await new Promise((r) => setTimeout(r, 0));
+          // …but call the adapter directly to avoid the React state race
+          // where `connectSol()` reads a stale `wallet` ref. If the wallet
+          // is already trusted by Phantom (likely for a "registered" row),
+          // this resolves silently with no popup.
           try {
-            await connectSol();
+            const adapter = target.adapter;
+            // If somehow already connected to the same address, we're done.
+            if (adapter.publicKey?.toBase58() === row.address) {
+              recordLastUsedWallet({
+                address: row.address,
+                chain: "solana",
+                walletName: adapter.name,
+              });
+              onOpenChange(false);
+              return;
+            }
+            await adapter.connect();
             recordLastUsedWallet({
               address: row.address,
               chain: "solana",
-              walletName: target.adapter.name,
+              walletName: adapter.name,
             });
             onOpenChange(false);
             return;
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
-            if (!/user rejected|user cancel|user closed/i.test(msg)) {
-              // Fall back to the modal — the wallet might not be installed
-              // anymore (e.g. extension uninstalled).
-              setSolModalVisible(true);
-              onOpenChange(false);
+            if (/user rejected|user cancel|user closed/i.test(msg)) {
+              // User cancelled — keep chooser open, no toast.
               return;
             }
-            // User cancelled — keep chooser open, no toast.
+            // Adapter failed (extension locked, uninstalled, etc.) — surface
+            // the modal so the user can pick something else.
+            setSolModalVisible(true);
+            onOpenChange(false);
             return;
           }
         }
