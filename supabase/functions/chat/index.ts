@@ -387,6 +387,32 @@ const TOOLS = [
   {
     type: "function",
     function: {
+      name: "get_wallet_token_history",
+      description:
+        "SLOW historical scan (10-60s) that walks a wallet's full Solana signature history for one token to answer questions the 30-day PnL window cannot — e.g. 'when did wallet X first buy token Y', 'show every buy/sell of token Y by wallet X', 'first entry on $BONK'. ONLY call when the user explicitly asks about FIRST/EARLIEST/HISTORICAL/ALL-TIME activity for a SPECIFIC (wallet, token) pair. Do NOT use for recent/30-day questions — use get_recent_txs / get_token_pnl instead. Results are cached and incremental on re-ask.",
+      parameters: {
+        type: "object",
+        properties: {
+          wallet: { type: "string", description: "Solana wallet address to scan." },
+          mint: {
+            type: "string",
+            description:
+              "Full Solana mint address of the token (NOT a ticker — resolve with get_token_info first if you only have a ticker).",
+          },
+          maxSignatures: {
+            type: "number",
+            description:
+              "Max signatures to scan this call. Default 3000 (~30s). Use 6000-10000 for a deeper dig when the user asks to keep going. Hard cap 12000.",
+          },
+        },
+        required: ["wallet", "mint"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "prepare_limit_order",
       description: "Preview a limit order. NEVER executes — user signs in the rendered card.",
       parameters: {
@@ -920,6 +946,26 @@ serve(async (req) => {
                 );
               }
               eventType = "token_pnl";
+            } else if (name === "get_wallet_token_history") {
+              const args = safeJson(tc.function?.arguments);
+              const target = (args.wallet ?? "").trim() || walletAddress;
+              if (!target) {
+                result = { error: "No wallet provided." };
+              } else if (!args.mint) {
+                result = { error: "Token mint address required." };
+              } else {
+                result = await invokeFn(
+                  "wallet-token-history",
+                  {
+                    wallet: target,
+                    mint: args.mint,
+                    maxSignatures: args.maxSignatures ?? 3000,
+                    direction: "auto",
+                  },
+                  req,
+                );
+              }
+              eventType = "wallet_token_history";
             } else if (name === "prepare_limit_order") {
               const args = safeJson(tc.function?.arguments);
               result = await invokeFn(
