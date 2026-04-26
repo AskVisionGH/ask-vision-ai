@@ -370,6 +370,7 @@ function parseTxForToken(
   tx: Record<string, unknown> & {
     signature?: string;
     timestamp?: number;
+    type?: string | null;
     source?: string | null;
     events?: { swap?: SwapEvent };
     tokenTransfers?: TokenTransfer[];
@@ -380,6 +381,8 @@ function parseTxForToken(
 ): HistoryEvent | null {
   if (!tx?.signature || !tx?.timestamp) return null;
 
+  // Helius enriches some swaps with `events.swap`. When present, this is
+  // the cleanest signal because it already separates the in/out legs.
   const swap = tx.events?.swap;
   if (swap) {
     const inSide = pickSwapSide(swap.tokenInputs, swap.nativeInput, "in");
@@ -419,44 +422,76 @@ function parseTxForToken(
     }
   }
 
-  // SPL token transfer touching the wallet — NOT a buy/sell, just a movement.
-  // We tag with kind="transfer" so aggregates and the UI can distinguish
-  // "first acquisition via transfer from X" from "first DEX buy".
+  // Some DEXes (notably Pump AMM, and occasionally Raydium / Meteora) don't
+  // surface an `events.swap` payload — the activity only shows up as raw
+  // SPL `tokenTransfers`. Detect those cases via the tx-level `type` /
+  // `source` fields so we don't misclassify real DEX activity as a plain
+  // wallet-to-wallet transfer.
+  const isDexTx =
+    String(tx.type ?? "").toUpperCase() === "SWAP" ||
+    isKnownDexSource(tx.source);
+
+  // SPL token transfer touching the wallet.
   if (Array.isArray(tx.tokenTransfers)) {
+    // Find the leg that involves the target mint and the wallet.
+    let walletLeg: TokenTransfer | undefined;
+    let walletLegSide: "in" | "out" | undefined;
     for (const tt of tx.tokenTransfers) {
       if (tt?.mint !== mint) continue;
       const amt = Number(tt.tokenAmount ?? 0);
       if (!amt) continue;
       if (tt.toUserAccount === wallet) {
-        return {
-          signature: tx.signature,
-          timestamp: tx.timestamp,
-          side: "buy",
-          kind: "transfer",
-          tokenAmount: amt,
-          pairMint: null,
-          pairSymbol: null,
-          pairAmount: null,
-          valueUsd: null,
-          source: tx.source ?? null,
-          counterparty: tt.fromUserAccount ?? null,
-        };
+        walletLeg = tt;
+        walletLegSide = "in";
+        break;
       }
       if (tt.fromUserAccount === wallet) {
+        walletLeg = tt;
+        walletLegSide = "out";
+        break;
+      }
+    }
+
+    if (walletLeg && walletLegSide) {
+      const amt = Number(walletLeg.tokenAmount ?? 0);
+      const side = walletLegSide === "in" ? "buy" : "sell";
+
+      if (isDexTx) {
+        // Real DEX swap — find the counter-token (any other tokenTransfer
+        // touching the wallet with a different mint, or a SOL leg).
+        const pair = findCounterLeg(tx, wallet, mint, walletLegSide);
         return {
           signature: tx.signature,
           timestamp: tx.timestamp,
-          side: "sell",
-          kind: "transfer",
+          side,
+          kind: "swap",
           tokenAmount: amt,
-          pairMint: null,
-          pairSymbol: null,
-          pairAmount: null,
-          valueUsd: null,
+          pairMint: pair?.mint ?? null,
+          pairSymbol: pair ? shortMint(pair.mint) : null,
+          pairAmount: pair?.amount ?? null,
+          valueUsd: pair ? stableUsdForLeg(pair) : null,
           source: tx.source ?? null,
-          counterparty: tt.toUserAccount ?? null,
+          counterparty: null,
         };
       }
+
+      // Plain wallet-to-wallet transfer.
+      return {
+        signature: tx.signature,
+        timestamp: tx.timestamp,
+        side,
+        kind: "transfer",
+        tokenAmount: amt,
+        pairMint: null,
+        pairSymbol: null,
+        pairAmount: null,
+        valueUsd: null,
+        source: tx.source ?? null,
+        counterparty:
+          walletLegSide === "in"
+            ? walletLeg.fromUserAccount ?? null
+            : walletLeg.toUserAccount ?? null,
+      };
     }
   }
 
