@@ -410,8 +410,22 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
   };
 
   const handleNewSolana = () => {
-    onOpenChange(false);
-    setSolModalVisible(true);
+    setShowSolanaOptions((v) => !v);
+  };
+
+  const handleSelectNewSolanaWallet = async (walletName: string) => {
+    setPendingSolanaWalletName(walletName);
+    setShowSolanaOptions(false);
+
+    if (solConnected) {
+      try {
+        await disconnectSolWallet();
+      } catch {
+        /* ignore */
+      }
+    }
+
+    selectSolWallet(walletName);
   };
 
   const handleNewEvm = async () => {
@@ -544,6 +558,35 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
             <span className="text-[10px] text-muted-foreground">MetaMask, Rabby…</span>
           </button>
         </div>
+
+        {showSolanaOptions && (
+          <div className="mt-2 space-y-1.5 rounded-xl border border-border/70 bg-secondary/35 p-2">
+            {solWallets.map((walletOption) => {
+              const isPending = pendingSolanaWalletName === walletOption.adapter.name;
+              const isSelected = selectedSolWallet?.adapter.name === walletOption.adapter.name;
+
+              return (
+                <button
+                  key={walletOption.adapter.name}
+                  type="button"
+                  disabled={!!pendingSolanaWalletName}
+                  onClick={() => handleSelectNewSolanaWallet(walletOption.adapter.name)}
+                  className={cn(
+                    "flex w-full items-center justify-between rounded-lg border border-border/60 bg-background/40 px-3 py-2 text-left text-xs transition-all ease-vision hover:border-primary/40 hover:bg-background/70 disabled:opacity-60",
+                    isSelected && "border-primary/50 bg-primary/10",
+                  )}
+                >
+                  <span className="truncate font-medium text-foreground">
+                    {walletOption.adapter.name}
+                  </span>
+                  {isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         <p className="mt-3 text-center text-[10px] uppercase tracking-widest text-muted-foreground/60">
           We never auto-reconnect — you stay in control.
