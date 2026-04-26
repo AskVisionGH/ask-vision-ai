@@ -6,57 +6,59 @@
 //  - actionable (start with a verb where possible)
 //  - short (fits on two lines on mobile)
 //  - varied across the product surface (swap, bridge, research, alerts, etc.)
+// Every prompt here MUST be answerable in a single shot — no follow-up
+// questions required. That means: no ambiguous "this wallet" / "this token"
+// references, no features we don't support yet (e.g. portfolio-% alerts),
+// and no actions that need a missing input (recipient, amount, etc.).
 const SUGGESTION_POOL: string[] = [
-  // Trading
+  // Trading — concrete amounts + tokens, instantly executable
   "Swap 1 SOL into USDC",
   "Swap 50 USDC into JUP",
+  "Swap 0.1 SOL into BONK",
   "Set a limit order to buy SOL at $140",
+  "Set a limit order to sell JUP at $1.20",
   "DCA $100 into SOL every week",
-  "Set a take-profit on my biggest position",
+  "DCA $50 into JUP every day for a month",
 
-  // Bridging
+  // Bridging — concrete chains + amounts
   "Bridge 0.5 SOL to ETH on Ethereum",
   "Bridge 100 USDC from Solana to Base",
+  "Bridge 50 USDC from Solana to Arbitrum",
   "What's the cheapest way to get USDC onto Arbitrum?",
 
-  // Discovery / research
+  // Discovery / research — no required context
   "Find smart money buying memecoins right now",
   "Show me the hottest tokens trending on Solana",
   "Which wallets are accumulating BONK this week?",
   "What are the top movers in the last 24 hours?",
   "Show me new tokens with strong early buyers",
+  "Who are the early buyers of WIF?",
 
-  // Historical wallet × token deep-dives
-  "When did this wallet first buy BONK?",
-  "Find the earliest entry of a wallet into a token",
-  "Show every historical buy and sell of WIF by a wallet",
-  "How long has this wallet held JUP?",
-
-  // Portfolio / wallet
+  // Portfolio / wallet — answered from the connected wallet
   "What's in my wallet right now?",
   "How is my portfolio performing this week?",
   "What's my biggest unrealized gain?",
   "Show my recent swaps",
+  "Show my PnL for the last 30 days",
 
-  // Token deep-dives
+  // Token deep-dives — concrete tokens
   "Give me a risk report on JUP",
   "Pull up the chart for WIF",
   "What's the social sentiment around SOL today?",
-  "Analyze this token for me",
+  "Risk report on BONK",
+  "Show me the chart for JUP",
 
-  // Alerts / automation
+  // Alerts — only price alerts (the only kind we actually support)
   "Alert me if SOL drops below $130",
-  "Notify me when my portfolio is up 10%",
-  "Watch this wallet and ping me on big buys",
+  "Alert me if JUP rises above $1",
+  "Alert me if BONK pumps 20% in 24h",
 
-  // Transfers / contacts
-  "Send 5 USDC to a contact",
-  "How do I save a wallet as a contact?",
-
-  // Solana basics / how-to
+  // Solana basics / how-to — pure Q&A
   "Explain what Jupiter actually does",
   "What's a good wallet for beginners?",
   "How do priority fees work on Solana?",
+  "How do I save a wallet as a contact?",
+  "What's the difference between a limit order and DCA?",
 ];
 
 /**
