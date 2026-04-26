@@ -1413,7 +1413,9 @@ const BridgeTokenPickerDialog = ({
   }, [tokens, isSolanaChain]);
 
   const visibleHoldings = useMemo(() => {
-    if (!isSolanaChain) return [] as Array<BridgeToken & { amount: number; valueUsd: number | null }>;
+    if (!isSolanaChain && !isEvmChain) {
+      return [] as Array<BridgeToken & { amount: number; valueUsd: number | null }>;
+    }
     return holdings
       .map((h) => {
         const t = tokensByAddress.get(h.address.toLowerCase());
@@ -1422,7 +1424,7 @@ const BridgeTokenPickerDialog = ({
       })
       .filter((x): x is BridgeToken & { amount: number; valueUsd: number | null } => !!x)
       .sort((a, b) => (b.valueUsd ?? 0) - (a.valueUsd ?? 0));
-  }, [holdings, tokensByAddress, isSolanaChain]);
+  }, [holdings, tokensByAddress, isSolanaChain, isEvmChain]);
 
   const holdingMints = useMemo(
     () => new Set(visibleHoldings.map((t) => t.address.toLowerCase())),
