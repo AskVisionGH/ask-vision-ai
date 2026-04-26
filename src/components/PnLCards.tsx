@@ -339,76 +339,85 @@ export const TokenPnLCard = ({ data }: { data: TokenPnLData }) => {
 // ---------------- Wallet PnL Dashboard Card ----------------
 
 export const WalletPnLCard = ({ data }: { data: WalletPnLData }) => {
+  const { nodeRef, share, busy } = usePnLShare(`vision-wallet-pnl-${data.windowDays}d`);
   if (data.error) return <ErrorCard message={data.error} />;
   const { totals, tokens, recentTxs } = data;
   const totalPnl = totals.totalRealizedUsd + totals.totalUnrealizedUsd;
 
   return (
-    <CardShell>
-      <div className="border-b border-border/60 bg-gradient-to-br from-primary/[0.04] to-transparent px-5 py-4">
-        <div className="flex items-baseline justify-between gap-3">
-          <div>
-            <p className="font-mono text-[10px] tracking-widest uppercase text-muted-foreground/70">
-              Wallet P/L · {data.windowDays}d
-            </p>
-            <p className={cn("mt-1 font-mono text-3xl font-light tracking-tight", pnlTone(totalPnl))}>
-              {fmtUsd(totalPnl, { signed: true })}
-            </p>
-            <div className="mt-1 flex items-center gap-1 text-[11px]">
-              {totalPnl >= 0 ? (
-                <TrendingUp className="h-3 w-3 text-emerald-400" />
-              ) : (
-                <TrendingDown className="h-3 w-3 text-rose-400" />
-              )}
-              <span className="text-muted-foreground">
-                {fmtUsd(totals.totalRealizedUsd, { signed: true })} realized ·{" "}
-                {fmtUsd(totals.totalUnrealizedUsd, { signed: true })} unrealized
-              </span>
+    <>
+      <CardShell>
+        <div className="border-b border-border/60 bg-gradient-to-br from-primary/[0.04] to-transparent px-5 py-4">
+          <div className="flex items-baseline justify-between gap-3">
+            <div>
+              <p className="font-mono text-[10px] tracking-widest uppercase text-muted-foreground/70">
+                Wallet P/L · {data.windowDays}d
+              </p>
+              <p className={cn("mt-1 font-mono text-3xl font-light tracking-tight", pnlTone(totalPnl))}>
+                {fmtUsd(totalPnl, { signed: true })}
+              </p>
+              <div className="mt-1 flex items-center gap-1 text-[11px]">
+                {totalPnl >= 0 ? (
+                  <TrendingUp className="h-3 w-3 text-emerald-400" />
+                ) : (
+                  <TrendingDown className="h-3 w-3 text-rose-400" />
+                )}
+                <span className="text-muted-foreground">
+                  {fmtUsd(totals.totalRealizedUsd, { signed: true })} realized ·{" "}
+                  {fmtUsd(totals.totalUnrealizedUsd, { signed: true })} unrealized
+                </span>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="font-mono text-[10px] tracking-widest uppercase text-muted-foreground/70">
+                Wallet
+              </p>
+              <p className="mt-1 font-mono text-xs text-muted-foreground">{truncate(data.address)}</p>
+              <p className="mt-2 font-mono text-[10px] tracking-widest uppercase text-muted-foreground/70">
+                Now
+              </p>
+              <p className="mt-1 font-mono text-xs text-foreground">
+                {fmtUsd(totals.currentPortfolioUsd)}
+              </p>
             </div>
           </div>
-          <div className="text-right">
-            <p className="font-mono text-[10px] tracking-widest uppercase text-muted-foreground/70">
-              Wallet
-            </p>
-            <p className="mt-1 font-mono text-xs text-muted-foreground">{truncate(data.address)}</p>
-            <p className="mt-2 font-mono text-[10px] tracking-widest uppercase text-muted-foreground/70">
-              Now
-            </p>
-            <p className="mt-1 font-mono text-xs text-foreground">
-              {fmtUsd(totals.currentPortfolioUsd)}
-            </p>
+          <div className="mt-3 flex justify-end">
+            <ShareButton onClick={share} busy={busy} />
           </div>
         </div>
-      </div>
 
-      {tokens.length > 0 && (
-        <div>
-          <p className="px-5 pt-3 font-mono text-[10px] tracking-wider uppercase text-muted-foreground/70">
-            By token
-          </p>
-          <ExpandableList
-            items={tokens}
-            renderItem={(t) => <TokenRow token={t} />}
-          />
+        {tokens.length > 0 && (
+          <div>
+            <p className="px-5 pt-3 font-mono text-[10px] tracking-wider uppercase text-muted-foreground/70">
+              By token
+            </p>
+            <ExpandableList
+              items={tokens}
+              renderItem={(t) => <TokenRow token={t} />}
+            />
+          </div>
+        )}
+
+        {recentTxs && recentTxs.length > 0 && (
+          <div className="border-t border-border/40">
+            <p className="px-5 pt-3 font-mono text-[10px] tracking-wider uppercase text-muted-foreground/70">
+              Recent activity
+            </p>
+            <ExpandableList
+              items={recentTxs}
+              renderItem={(tx) => <TxRow tx={tx} />}
+            />
+          </div>
+        )}
+
+        <div className="border-t border-border/40 px-5 py-3 text-center font-mono text-[10px] tracking-wider uppercase text-muted-foreground/60">
+          {totals.txCount} txs analyzed · cost basis: average price
         </div>
-      )}
-
-      {recentTxs && recentTxs.length > 0 && (
-        <div className="border-t border-border/40">
-          <p className="px-5 pt-3 font-mono text-[10px] tracking-wider uppercase text-muted-foreground/70">
-            Recent activity
-          </p>
-          <ExpandableList
-            items={recentTxs}
-            renderItem={(tx) => <TxRow tx={tx} />}
-          />
-        </div>
-      )}
-
-      <div className="border-t border-border/40 px-5 py-3 text-center font-mono text-[10px] tracking-wider uppercase text-muted-foreground/60">
-        {totals.txCount} txs analyzed · cost basis: average price
-      </div>
-    </CardShell>
+      </CardShell>
+      <OffscreenShare>
+        <PnLShareCard ref={nodeRef} kind="wallet" data={data} />
+      </OffscreenShare>
+    </>
   );
 };
 
