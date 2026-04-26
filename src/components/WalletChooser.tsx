@@ -274,13 +274,21 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
               }
             }
 
-            // Explicit connect — Phantom will surface its account picker so
-            // the user can switch to the registered address. We close the
-            // chooser optimistically so its overlay doesn't block the popup.
+            // Explicit connect — most Solana adapters (incl. Phantom) just
+            // reconnect to whichever account is currently active in the
+            // extension; they don't show an account picker. So if we end up
+            // on the wrong address, tell the user to switch accounts inside
+            // the wallet itself.
             onOpenChange(false);
             await adapter.connect();
+            const finalAddress = adapter.publicKey?.toBase58();
+            if (finalAddress && finalAddress !== row.address) {
+              toast.info(`Connected to ${shortAddress(finalAddress)}`, {
+                description: `${adapter.name} doesn't let dapps pick accounts — switch to ${shortAddress(row.address)} inside ${adapter.name}, then click that address again.`,
+              });
+            }
             recordLastUsedWallet({
-              address: adapter.publicKey?.toBase58() ?? row.address,
+              address: finalAddress ?? row.address,
               chain: "solana",
               walletName: adapter.name,
             });
