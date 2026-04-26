@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Keypair } from "@solana/web3.js";
 import bs58 from "bs58";
-import { AlertTriangle, Check, Copy, Eye, EyeOff, ShieldAlert } from "lucide-react";
+import { AlertTriangle, Check, Copy, Eye, EyeOff, Import, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
