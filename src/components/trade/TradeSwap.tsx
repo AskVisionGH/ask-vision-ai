@@ -266,7 +266,7 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
       }
     }, QUOTE_REFRESH_MS);
     return () => window.clearInterval(timer);
-  }, [quote, phase.name, inputToken.address, outputToken?.address, numericAmount, slippageBps]);
+  }, [quote, phase.name, inputToken.address, outputToken?.address, numericAmount, slippageBps, dynamicSlippage]);
 
   const flip = () => {
     if (!outputToken) return;
