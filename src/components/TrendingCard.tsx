@@ -61,18 +61,22 @@ export const TrendingCard = ({ data }: Props) => {
     );
   }
 
+  const tfLabel = ({ "5m": "5m", "1h": "1h", "6h": "6h", "24h": "24h" } as const)[
+    data.timeframe ?? "24h"
+  ];
+
   return (
     <div className="ease-vision animate-fade-up overflow-hidden rounded-2xl border border-border bg-card/60 backdrop-blur-sm">
       <div className="flex items-center gap-2 border-b border-border/60 bg-gradient-to-br from-primary/[0.04] to-transparent px-5 py-3.5">
         <Flame className="h-3.5 w-3.5 text-primary" />
         <p className="font-mono text-[10px] tracking-widest uppercase text-muted-foreground/80">
-          Trending on Solana · 24h
+          Trending on Solana · {tfLabel}
         </p>
       </div>
 
       <ul className="divide-y divide-border/40">
         {tokens.map((t, i) => {
-          const isUp = (t.priceChange24h ?? 0) >= 0;
+          const isUp = (t.priceChange ?? 0) >= 0;
           return (
             <li key={t.address}>
               <a
@@ -98,7 +102,7 @@ export const TrendingCard = ({ data }: Props) => {
                     </span>
                   </div>
                   <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
-                    Vol {fmtCompact(t.volume24hUsd)}
+                    Vol {fmtCompact(t.volumeUsd)}
                   </p>
                 </div>
                 <div className="text-right">
@@ -111,7 +115,7 @@ export const TrendingCard = ({ data }: Props) => {
                       isUp ? "text-up" : "text-down",
                     )}
                   >
-                    {fmtPct(t.priceChange24h)}
+                    {fmtPct(t.priceChange)}
                   </p>
                 </div>
                 <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40" />
