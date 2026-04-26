@@ -90,13 +90,13 @@ const Onboarding = () => {
   // Step list is dynamic: only show the email step when we actually need one.
   const steps = useMemo<Step[]>(() => {
     const base: Step[] = isRerun
-      ? ["experience", "interests", "risk"]
-      : ["welcome", "experience", "interests", "risk"];
+      ? ["experience", "interests", "risk", "language"]
+      : ["welcome", "experience", "interests", "risk", "language"];
     // Inject the email step right after welcome (or at the start on rerun)
     // for wallet-only users who still need to attach a real inbox.
     if (!needsRealEmail) return base;
     if (isRerun) return ["email", ...base];
-    return ["welcome", "email", "experience", "interests", "risk"];
+    return ["welcome", "email", "experience", "interests", "risk", "language"];
   }, [needsRealEmail, isRerun]);
   const stepIndex = steps.indexOf(step);
   const isLast = stepIndex === steps.length - 1;
