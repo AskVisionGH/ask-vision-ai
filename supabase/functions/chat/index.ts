@@ -943,6 +943,12 @@ serve(async (req) => {
               const target = (args.address ?? "").trim() || walletAddress;
               if (!target) {
                 result = { error: "No wallet connected and no address provided." };
+              } else if (/^0x[a-fA-F0-9]{40}$/.test(target)) {
+                result = await invokeFn(
+                  "evm-wallet-pnl",
+                  { address: target, chainId: Number(args.chainId ?? 1), slice: "wallet_pnl" },
+                  req,
+                );
               } else {
                 result = await invokeFn(
                   "wallet-pnl",
@@ -956,6 +962,12 @@ serve(async (req) => {
               const target = (args.address ?? "").trim() || walletAddress;
               if (!target) {
                 result = { error: "No wallet connected and no address provided." };
+              } else if (/^0x[a-fA-F0-9]{40}$/.test(target)) {
+                result = await invokeFn(
+                  "evm-wallet-pnl",
+                  { address: target, chainId: Number(args.chainId ?? 1), slice: "recent_txs", limit: args.limit ?? 25 },
+                  req,
+                );
               } else {
                 result = await invokeFn(
                   "wallet-pnl",
@@ -971,6 +983,12 @@ serve(async (req) => {
                 result = { error: "No wallet connected and no address provided." };
               } else if (!args.token) {
                 result = { error: "Token ticker or mint required." };
+              } else if (/^0x[a-fA-F0-9]{40}$/.test(target)) {
+                result = await invokeFn(
+                  "evm-wallet-pnl",
+                  { address: target, chainId: Number(args.chainId ?? 1), slice: "token_pnl", tokenFilter: args.token },
+                  req,
+                );
               } else {
                 result = await invokeFn(
                   "wallet-pnl",
@@ -986,6 +1004,17 @@ serve(async (req) => {
                 result = { error: "No wallet provided." };
               } else if (!args.mint) {
                 result = { error: "Token mint address required." };
+              } else if (/^0x[a-fA-F0-9]{40}$/.test(target)) {
+                result = await invokeFn(
+                  "evm-wallet-token-history",
+                  {
+                    wallet: target,
+                    contract: args.mint,
+                    chainId: Number(args.chainId ?? 1),
+                    maxTxs: args.maxSignatures ?? 3000,
+                  },
+                  req,
+                );
               } else {
                 result = await invokeFn(
                   "wallet-token-history",
