@@ -189,23 +189,26 @@ serve(async (req) => {
       }
     }
 
-    const swapResp = await fetch("https://lite-api.jup.ag/swap/v1/swap", {
+    const buildSwapPayload = (useDynamicSlippage: boolean) => ({
+      quoteResponse,
+      userPublicKey,
+      wrapAndUnwrapSol: true,
+      dynamicComputeUnitLimit: true,
+      ...(useDynamicSlippage ? { dynamicSlippage: true } : {}),
+      ...(feeAccount ? { feeAccount } : {}),
+      prioritizationFeeLamports: {
+        priorityLevelWithMaxLamports: {
+          maxLamports: 1_000_000, // cap at 0.001 SOL
+          priorityLevel: "high",
+        },
+      },
+    });
+
+    let usedDynamicSlippage = dynamicSlippage;
+    let swapResp = await fetch("https://lite-api.jup.ag/swap/v1/swap", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        quoteResponse,
-        userPublicKey,
-        wrapAndUnwrapSol: true,
-        dynamicComputeUnitLimit: true,
-        ...(dynamicSlippage ? { dynamicSlippage: true } : {}),
-        ...(feeAccount ? { feeAccount } : {}),
-        prioritizationFeeLamports: {
-          priorityLevelWithMaxLamports: {
-            maxLamports: 1_000_000, // cap at 0.001 SOL
-            priorityLevel: "high",
-          },
-        },
-      }),
+      body: JSON.stringify(buildSwapPayload(dynamicSlippage)),
     });
 
     if (!swapResp.ok) {
@@ -214,13 +217,43 @@ serve(async (req) => {
       return json({ error: "Couldn't build swap transaction. Try again." }, 502);
     }
 
-    const swapData = await swapResp.json();
+    let swapData = await swapResp.json();
+
+    const report = swapData.dynamicSlippageReport ?? null;
+    const builtSlippageBps = Number(report?.slippageBps ?? 0);
+    const heuristicMaxSlippageBps = Number(report?.heuristicMaxSlippageBps ?? 0);
+    const dynamicTooTight = dynamicSlippage && (
+      !Number.isFinite(builtSlippageBps) ||
+      builtSlippageBps <= 0 ||
+      builtSlippageBps < Math.min(slippageBps, 500) ||
+      (Number.isFinite(heuristicMaxSlippageBps) && heuristicMaxSlippageBps > 0 && heuristicMaxSlippageBps < Math.min(slippageBps, 500))
+    );
+
+    if (dynamicTooTight) {
+      console.warn("Dynamic slippage came back too tight; retrying with fixed slippage", {
+        requestedMaxBps: slippageBps,
+        builtSlippageBps,
+        heuristicMaxSlippageBps,
+      });
+      usedDynamicSlippage = false;
+      swapResp = await fetch("https://lite-api.jup.ag/swap/v1/swap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildSwapPayload(false)),
+      });
+      if (!swapResp.ok) {
+        const t = await swapResp.text();
+        console.error("Jupiter fixed-slippage fallback error:", swapResp.status, t);
+        return json({ error: "Couldn't build swap transaction. Try again." }, 502);
+      }
+      swapData = await swapResp.json();
+    }
 
     return json({
       swapTransaction: swapData.swapTransaction,
       lastValidBlockHeight: swapData.lastValidBlockHeight,
       prioritizationFeeLamports: swapData.prioritizationFeeLamports ?? null,
-      dynamicSlippage: dynamicSlippage,
+      dynamicSlippage: usedDynamicSlippage,
       dynamicSlippageReport: swapData.dynamicSlippageReport ?? null,
     });
   } catch (e) {
