@@ -92,6 +92,9 @@ export const TokenPickerDialog = ({ open, onOpenChange, onSelect, excludeAddress
   const [holdings, setHoldings] = useState<HoldingMeta[]>([]);
   const [holdingsLoading, setHoldingsLoading] = useState(false);
   const recent = useMemo(() => (open ? getRecent() : []), [open]);
+  // Live prices for POPULAR + recent tokens (those rows are hardcoded without
+  // a price, so we hydrate via Jupiter's price API on open).
+  const [livePrices, setLivePrices] = useState<Record<string, number>>({});
   const debounceRef = useRef<number | null>(null);
 
   // Reset query/results when dialog closes.
@@ -101,6 +104,41 @@ export const TokenPickerDialog = ({ open, onOpenChange, onSelect, excludeAddress
       setResults([]);
     }
   }, [open]);
+
+  // Hydrate prices for tokens we ship with priceUsd=null (POPULAR + recent).
+  useEffect(() => {
+    if (!open) return;
+    const mints = Array.from(
+      new Set(
+        [...POPULAR, ...recent]
+          .filter((t) => t.priceUsd == null)
+          .map((t) => t.address)
+          .filter(Boolean),
+      ),
+    );
+    if (mints.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(
+          `https://lite-api.jup.ag/price/v3?ids=${mints.join(",")}`,
+        );
+        if (!r.ok) return;
+        const data = (await r.json()) as Record<string, { usdPrice?: number }>;
+        if (cancelled) return;
+        const next: Record<string, number> = {};
+        for (const [mint, info] of Object.entries(data)) {
+          if (typeof info?.usdPrice === "number") next[mint] = info.usdPrice;
+        }
+        setLivePrices((prev) => ({ ...prev, ...next }));
+      } catch {
+        /* ignore — fall back to no price */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, recent]);
 
   // Fetch wallet holdings when the dialog opens. Cached per session by Supabase
   // edge runtime, so re-opens are cheap.
