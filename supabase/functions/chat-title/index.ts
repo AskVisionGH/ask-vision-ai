@@ -91,6 +91,11 @@ function sanitize(raw: unknown): string {
   s = s.replace(/[.!?,;:\-]+$/g, "").trim();
   // Collapse whitespace.
   s = s.replace(/\s+/g, " ");
+  // Safety net: if the model leaked a long base58 contract address into the
+  // title, swap it for the friendlier word "Token" so titles stay readable.
+  s = s.replace(/\b[1-9A-HJ-NP-Za-km-z]{20,}\b/g, "Token");
+  // Collapse any duplicate "Token Token" that the swap may produce.
+  s = s.replace(/\bToken(\s+Token)+\b/gi, "Token").replace(/\s+/g, " ").trim();
   if (s.length > 40) s = s.slice(0, 40).trim();
   return s;
 }
