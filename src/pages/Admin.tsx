@@ -1316,7 +1316,7 @@ const TreasuryTab = () => {
                 <TableHead>Chain</TableHead>
                 <TableHead>Source</TableHead>
                 <TableHead>Asset</TableHead>
-                <TableHead className="text-right">Fee</TableHead>
+                <TableHead>Fee</TableHead>
                 <TableHead>Tx</TableHead>
               </TableRow>
             </TableHeader>
@@ -1353,7 +1353,7 @@ const TreasuryTab = () => {
                       <Badge variant="secondary" className="text-xs">{SOURCE_LABELS[f.source_kind]}</Badge>
                     </TableCell>
                     <TableCell className="text-xs font-medium">{f.asset_symbol ?? (f.chain === "solana" ? "SOL" : "ETH")}</TableCell>
-                    <TableCell className="text-right text-xs tabular-nums">{formatUsd(f.amount_usd)}</TableCell>
+                    <TableCell className="text-xs tabular-nums">{formatUsd(f.amount_usd)}</TableCell>
                     <TableCell className="text-xs">
                       <a href={explorer} target="_blank" rel="noreferrer" className="text-primary hover:underline">
                         {f.signature.slice(0, 6)}…
