@@ -334,13 +334,11 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
     setBusyId(busyKey);
     try {
       const isSameAdapter = selectedSolWallet?.adapter.name === walletName;
-      if (solConnected) {
-        try { await disconnectSolWallet(); } catch { /* ignore */ }
-      }
-      // Multi-chain: do NOT disconnect EVM when bringing up a Solana wallet.
-      // The user can have both live so they can swap on SOL and bridge on EVM
-      // in the same session.
-      if (isSameAdapter) {
+
+      // Only short-circuit if we're ACTUALLY connected to this adapter — not
+      // just if the adapter is sticky-selected from a previous session.
+      // Otherwise users who disconnected can never reconnect to the same wallet.
+      if (isSameAdapter && solConnected) {
         // Hard browser security limit: dApps cannot open another wallet
         // extension's account picker, and Phantom auto-trusts the previous
         // account on `connect()`. The only way to switch accounts is for
@@ -353,6 +351,29 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
         setBusyId(null);
         return;
       }
+
+      if (solConnected) {
+        try { await disconnectSolWallet(); } catch { /* ignore */ }
+      }
+      // Multi-chain: do NOT disconnect EVM when bringing up a Solana wallet.
+      // The user can have both live so they can swap on SOL and bridge on EVM
+      // in the same session.
+
+      // If the adapter is already selected but not connected, calling select()
+      // again won't trigger the handoff effect (state doesn't change). Trigger
+      // connect directly in that case.
+      if (isSameAdapter) {
+        setPendingSolanaWalletName(walletName);
+        try {
+          await connectSolWallet();
+          onOpenChange(false);
+        } finally {
+          setPendingSolanaWalletName(null);
+          setBusyId(null);
+        }
+        return;
+      }
+
       setPendingSolanaWalletName(walletName);
       selectSolWallet(walletName);
     } catch (e) {
