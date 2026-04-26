@@ -416,19 +416,22 @@ function computeTokenPnL(parsed: ParsedTx[], balance: BalanceSnapshot): TokenPnL
     return row;
   };
 
-  // First pass: aggregate buys/sells from swaps with known USD value
+  // First pass: aggregate buys/sells from swaps with known USD value.
+  // We treat anything in QUOTES (USDC/USDT/SOL) as the "money side". This
+  // keeps SOL-funded buys (the most common path on Solana) from being
+  // silently dropped — backfillSolValueUsd() has already filled valueUsd.
   for (const tx of parsed) {
     if (tx.type !== "swap" || tx.valueUsd == null) continue;
 
-    // BUY: wallet RECEIVED a non-stable token, paid in stable
-    if (tx.outToken && !STABLES.has(tx.outToken.mint) && tx.inToken && STABLES.has(tx.inToken.mint)) {
+    // BUY: wallet RECEIVED a non-quote token, paid in a quote (stable or SOL)
+    if (tx.outToken && !QUOTES.has(tx.outToken.mint) && tx.inToken && QUOTES.has(tx.inToken.mint)) {
       const row = ensure(tx.outToken.mint, tx.outToken.symbol);
       row.buys += 1;
       row.costUsd += tx.valueUsd;
       row.unitsBought += tx.outToken.amount;
     }
-    // SELL: wallet SENT a non-stable token, received stable
-    if (tx.inToken && !STABLES.has(tx.inToken.mint) && tx.outToken && STABLES.has(tx.outToken.mint)) {
+    // SELL: wallet SENT a non-quote token, received a quote (stable or SOL)
+    if (tx.inToken && !QUOTES.has(tx.inToken.mint) && tx.outToken && QUOTES.has(tx.outToken.mint)) {
       const row = ensure(tx.inToken.mint, tx.inToken.symbol);
       row.sells += 1;
       row.proceedsUsd += tx.valueUsd;
