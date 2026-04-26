@@ -193,25 +193,29 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
     setBusyAddress(row.address);
     try {
       if (row.chain === "solana") {
-        // Try the adapter the user used last time. If that wallet isn't
-        // installed (no readyState), fall back to the standard modal so the
-        // user can pick something installed without losing the flow.
-        const target = row.walletName
+        const preferredTarget = row.walletName
           ? solWallets.find(
               (w) =>
                 w.adapter.name.toLowerCase() === row.walletName!.toLowerCase(),
             )
           : null;
-        if (target) {
-          // Select via the React hook so context state stays consistent…
-          selectSolWallet(target.adapter.name);
-          // …but call the adapter directly to avoid the React state race
-          // where `connectSol()` reads a stale `wallet` ref. If the wallet
-          // is already trusted by Phantom (likely for a "registered" row),
-          // this resolves silently with no popup.
+
+        const candidates = preferredTarget
+          ? [preferredTarget]
+          : solWallets.filter(
+              (w) => typeof (w.adapter as { autoConnect?: () => Promise<void> }).autoConnect === "function",
+            );
+
+        for (const candidate of candidates) {
           try {
-            const adapter = target.adapter;
-            // If somehow already connected to the same address, we're done.
+            const adapter = candidate.adapter;
+            const silentReconnect =
+              typeof (adapter as { autoConnect?: () => Promise<void> }).autoConnect === "function"
+                ? (adapter as { autoConnect: () => Promise<void> }).autoConnect.bind(adapter)
+                : adapter.connect.bind(adapter);
+
+            selectSolWallet(adapter.name);
+
             if (adapter.publicKey?.toBase58() === row.address) {
               recordLastUsedWallet({
                 address: row.address,
@@ -221,30 +225,40 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
               onOpenChange(false);
               return;
             }
-            await adapter.connect();
-            recordLastUsedWallet({
-              address: row.address,
-              chain: "solana",
-              walletName: adapter.name,
-            });
-            onOpenChange(false);
-            return;
+
+            await silentReconnect();
+
+            const connectedAddress = adapter.publicKey?.toBase58();
+            if (connectedAddress === row.address) {
+              recordLastUsedWallet({
+                address: row.address,
+                chain: "solana",
+                walletName: adapter.name,
+              });
+              onOpenChange(false);
+              return;
+            }
+
+            if (connectedAddress && connectedAddress !== row.address) {
+              try {
+                await adapter.disconnect();
+              } catch {
+                /* ignore */
+              }
+            }
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             if (/user rejected|user cancel|user closed/i.test(msg)) {
-              // User cancelled — keep chooser open, no toast.
               return;
             }
-            // Adapter failed (extension locked, uninstalled, etc.) — surface
-            // the modal so the user can pick something else.
-            setSolModalVisible(true);
-            onOpenChange(false);
-            return;
           }
         }
-        // No remembered adapter or it isn't loaded — open the generic modal.
-        setSolModalVisible(true);
-        onOpenChange(false);
+
+        toast.error("Couldn't reconnect that wallet", {
+          description: row.walletName
+            ? `${row.walletName} didn't silently reconnect to ${shortAddress(row.address)}.`
+            : `No installed Solana wallet silently reconnected to ${shortAddress(row.address)}.`,
+        });
         return;
       }
 
