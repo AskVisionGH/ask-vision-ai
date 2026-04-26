@@ -181,7 +181,7 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
     // a stale spinner.
     if (solConnected) {
       onOpenChange(false);
-      setPendingSolanaWalletName(null);
+      setPendingSolanaSelection(null);
       setBusyId(null);
       return;
     }
@@ -429,7 +429,7 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
       // or detected, fall back to the EVM connector — the user can switch
       // chains inside the wallet.
       if (adapter) {
-        await openSolanaAdapter(adapter.adapter.name, busyKey);
+        await openSolanaAdapter(adapter, busyKey);
         return;
       }
       const evmFallback = evmConnectors.find((c) =>
@@ -493,7 +493,7 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
     if (row.chain === "solana") {
       const adapter = solWallets[0];
       if (adapter) {
-        await openSolanaAdapter(adapter.adapter.name, busyKey);
+        await openSolanaAdapter(adapter, busyKey);
         return;
       }
     } else {
