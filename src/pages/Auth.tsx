@@ -191,21 +191,51 @@ const Auth = () => {
   };
 
   // Once a wallet finishes connecting after the user clicked the pill,
-  // immediately ask for a signature so it's a single-click flow end-to-end.
-  // We watch BOTH chains and let `walletChain` decide which one to drive.
+  // try to ask for a signature so it's a single-click flow end-to-end.
+  //
+  // Caveat: Brave (and Safari with strict popup blocking) treat a wallet
+  // signature popup triggered from a useEffect as "not from a user gesture"
+  // and silently swallow it. So we only auto-fire once, and if the wallet
+  // already exposed `signMessage` synchronously after connect we let it run;
+  // otherwise we leave the button in its "Sign in as 0x…" state and the
+  // user clicks it (which IS a gesture Brave honors).
   useEffect(() => {
     if (!pendingSign) return;
     if (walletChain === "solana" && connected && publicKey && signMessage) {
       setPendingSign(false);
-      void runWalletSignature();
-      return;
+      // Defer one tick so the wallet adapter finishes its own state updates
+      // before we ask for the signature, otherwise Phantom occasionally
+      // returns null from signMessage on the very first call.
+      const id = window.setTimeout(() => void runWalletSignature(), 50);
+      return () => window.clearTimeout(id);
     }
     if (walletChain === "evm" && evmConnected && evmAddress) {
       setPendingSign(false);
-      void runWalletSignature();
+      const id = window.setTimeout(() => void runWalletSignature(), 50);
+      return () => window.clearTimeout(id);
     }
+    // Safety net: if the wallet stays connected for a while without
+    // signMessage ever showing up (Brave + Phantom edge case), drop the
+    // pending flag so the button becomes clickable again.
+    const safety = window.setTimeout(() => setPendingSign(false), 4000);
+    return () => window.clearTimeout(safety);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingSign, walletChain, connected, publicKey, signMessage, evmConnected, evmAddress]);
+
+  // If the user closes the wallet modal without picking a wallet, drop the
+  // pending flag after a moment so the CTA recovers from "Choose a wallet…".
+  useEffect(() => {
+    if (!pendingSign) return;
+    const id = window.setTimeout(() => setPendingSign(false), 30_000);
+    return () => window.clearTimeout(id);
+  }, [pendingSign]);
+
+  // Removed duplicate effect (merged into the one above).
+  const _noop = () => {
+    if (false) {
+      return;
+    }
+  };
 
   // If the user toggles the chain selector to one where they're not connected,
   // clear stale signing state. Doesn't disconnect the other chain — multi-chain.
