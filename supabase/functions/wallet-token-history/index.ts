@@ -49,6 +49,14 @@ interface HistoryEvent {
   signature: string;
   timestamp: number; // unix seconds
   side: "buy" | "sell";
+  /**
+   * Differentiates real DEX activity from plain SPL/native transfers.
+   *  - "swap": came from a Helius `events.swap` payload (real buy/sell against
+   *    a counterparty token). Counts toward buys/sells.
+   *  - "transfer": plain SPL or native transfer touching the wallet. Does
+   *    NOT count as a buy/sell — the tokens were simply moved in/out.
+   */
+  kind: "swap" | "transfer";
   /** Amount of the *target* token moved on the wallet. Always positive. */
   tokenAmount: number;
   /** Counterparty token mint (what was paid / received in exchange). */
@@ -58,6 +66,12 @@ interface HistoryEvent {
   /** Stable-equivalent USD value when one leg is USDC/USDT, else null. */
   valueUsd: number | null;
   source: string | null;
+  /**
+   * For `kind === "transfer"`: the wallet that sent us the tokens (when
+   * `side === "buy"`) or that we sent to (when `side === "sell"`). Lets the
+   * UI / LLM say "received from <addr>" instead of guessing.
+   */
+  counterparty: string | null;
 }
 
 interface CachedRow {
@@ -259,15 +273,20 @@ serve(async (req) => {
       (cached?.fully_scanned ?? false) ||
       (mode === "older" && reachedEnd);
 
+    // The `first_buy_*` columns are populated from `firstAcquisition`
+    // (any inbound, swap or transfer) because they need to remain stable
+    // across re-scans and the DB column was used historically as
+    // "first time we saw the token enter this wallet". The richer
+    // swap-only `firstBuy` is returned in the API response only.
     const upsertRow = {
       wallet_address: wallet,
       token_mint: mint,
-      first_buy_at: aggregates.firstBuy?.timestamp
-        ? new Date(aggregates.firstBuy.timestamp * 1000).toISOString()
+      first_buy_at: aggregates.firstAcquisition?.timestamp
+        ? new Date(aggregates.firstAcquisition.timestamp * 1000).toISOString()
         : null,
-      first_buy_signature: aggregates.firstBuy?.signature ?? null,
-      first_buy_amount: aggregates.firstBuy?.tokenAmount ?? null,
-      first_buy_usd: aggregates.firstBuy?.valueUsd ?? null,
+      first_buy_signature: aggregates.firstAcquisition?.signature ?? null,
+      first_buy_amount: aggregates.firstAcquisition?.tokenAmount ?? null,
+      first_buy_usd: aggregates.firstAcquisition?.valueUsd ?? null,
       total_buys: aggregates.totalBuys,
       total_sells: aggregates.totalSells,
       net_amount: aggregates.netAmount,
@@ -299,9 +318,17 @@ serve(async (req) => {
       wallet,
       mint,
       tokenSymbol,
+      // First DEX buy (swap-only). May be null if the wallet only ever
+      // received tokens via transfer.
       firstBuy: aggregates.firstBuy,
+      // First time the wallet acquired this mint at all — buy OR transfer-in.
+      // The card / LLM should prefer this when explaining how a wallet got
+      // its initial position.
+      firstAcquisition: aggregates.firstAcquisition,
       totalBuys: aggregates.totalBuys,
       totalSells: aggregates.totalSells,
+      transfersIn: aggregates.transfersIn,
+      transfersOut: aggregates.transfersOut,
       netAmount: aggregates.netAmount,
       realizedUsd: aggregates.realizedUsd,
       events: allEvents
@@ -364,12 +391,14 @@ function parseTxForToken(
         signature: tx.signature,
         timestamp: tx.timestamp,
         side: "buy",
+        kind: "swap",
         tokenAmount: outSide.amount,
         pairMint: inSide?.mint ?? null,
         pairSymbol: inSide ? shortMint(inSide.mint) : null,
         pairAmount: inSide?.amount ?? null,
         valueUsd: stableUsd(inSide, outSide),
         source: tx.source ?? null,
+        counterparty: null,
       };
     }
     // Wallet SPENT the target mint => sell
@@ -378,17 +407,21 @@ function parseTxForToken(
         signature: tx.signature,
         timestamp: tx.timestamp,
         side: "sell",
+        kind: "swap",
         tokenAmount: inSide.amount,
         pairMint: outSide?.mint ?? null,
         pairSymbol: outSide ? shortMint(outSide.mint) : null,
         pairAmount: outSide?.amount ?? null,
         valueUsd: stableUsd(inSide, outSide),
         source: tx.source ?? null,
+        counterparty: null,
       };
     }
   }
 
-  // SPL token transfer touching the wallet
+  // SPL token transfer touching the wallet — NOT a buy/sell, just a movement.
+  // We tag with kind="transfer" so aggregates and the UI can distinguish
+  // "first acquisition via transfer from X" from "first DEX buy".
   if (Array.isArray(tx.tokenTransfers)) {
     for (const tt of tx.tokenTransfers) {
       if (tt?.mint !== mint) continue;
@@ -399,12 +432,14 @@ function parseTxForToken(
           signature: tx.signature,
           timestamp: tx.timestamp,
           side: "buy",
+          kind: "transfer",
           tokenAmount: amt,
           pairMint: null,
           pairSymbol: null,
           pairAmount: null,
           valueUsd: null,
           source: tx.source ?? null,
+          counterparty: tt.fromUserAccount ?? null,
         };
       }
       if (tt.fromUserAccount === wallet) {
@@ -412,12 +447,14 @@ function parseTxForToken(
           signature: tx.signature,
           timestamp: tx.timestamp,
           side: "sell",
+          kind: "transfer",
           tokenAmount: amt,
           pairMint: null,
           pairSymbol: null,
           pairAmount: null,
           valueUsd: null,
           source: tx.source ?? null,
+          counterparty: tt.toUserAccount ?? null,
         };
       }
     }
@@ -426,22 +463,30 @@ function parseTxForToken(
   // Native SOL flow only matters if the user asked about SOL
   if (mint === SOL_MINT && Array.isArray(tx.nativeTransfers)) {
     let net = 0;
+    let counterparty: string | null = null;
     for (const nt of tx.nativeTransfers) {
       const amt = Number(nt.amount ?? 0) / 1e9;
-      if (nt.toUserAccount === wallet) net += amt;
-      else if (nt.fromUserAccount === wallet) net -= amt;
+      if (nt.toUserAccount === wallet) {
+        net += amt;
+        if (!counterparty && nt.fromUserAccount) counterparty = nt.fromUserAccount;
+      } else if (nt.fromUserAccount === wallet) {
+        net -= amt;
+        if (!counterparty && nt.toUserAccount) counterparty = nt.toUserAccount;
+      }
     }
     if (Math.abs(net) > 0.000001) {
       return {
         signature: tx.signature,
         timestamp: tx.timestamp,
         side: net > 0 ? "buy" : "sell",
+        kind: "transfer",
         tokenAmount: Math.abs(net),
         pairMint: null,
         pairSymbol: null,
         pairAmount: null,
         valueUsd: null,
         source: tx.source ?? null,
+        counterparty,
       };
     }
   }
@@ -522,29 +567,58 @@ function mergeEvents(a: HistoryEvent[], b: HistoryEvent[]): HistoryEvent[] {
 
 function computeAggregates(events: HistoryEvent[]): {
   firstBuy: HistoryEvent | null;
+  firstAcquisition: HistoryEvent | null;
   totalBuys: number;
   totalSells: number;
+  transfersIn: number;
+  transfersOut: number;
   netAmount: number;
   realizedUsd: number;
 } {
   let totalBuys = 0;
   let totalSells = 0;
+  let transfersIn = 0;
+  let transfersOut = 0;
   let netAmount = 0;
   let realizedUsd = 0;
   let firstBuy: HistoryEvent | null = null;
+  let firstAcquisition: HistoryEvent | null = null;
   for (const e of events) {
+    // Treat undefined `kind` as "swap" so cached events from before the
+    // schema change keep their old behaviour.
+    const kind = e.kind ?? "swap";
     if (e.side === "buy") {
-      totalBuys += 1;
       netAmount += e.tokenAmount;
-      if (e.valueUsd) realizedUsd -= e.valueUsd;
-      if (!firstBuy || e.timestamp < firstBuy.timestamp) firstBuy = e;
+      if (kind === "swap") {
+        totalBuys += 1;
+        if (e.valueUsd) realizedUsd -= e.valueUsd;
+        if (!firstBuy || e.timestamp < firstBuy.timestamp) firstBuy = e;
+      } else {
+        transfersIn += 1;
+      }
+      if (!firstAcquisition || e.timestamp < firstAcquisition.timestamp) {
+        firstAcquisition = e;
+      }
     } else {
-      totalSells += 1;
       netAmount -= e.tokenAmount;
-      if (e.valueUsd) realizedUsd += e.valueUsd;
+      if (kind === "swap") {
+        totalSells += 1;
+        if (e.valueUsd) realizedUsd += e.valueUsd;
+      } else {
+        transfersOut += 1;
+      }
     }
   }
-  return { firstBuy, totalBuys, totalSells, netAmount, realizedUsd };
+  return {
+    firstBuy,
+    firstAcquisition,
+    totalBuys,
+    totalSells,
+    transfersIn,
+    transfersOut,
+    netAmount,
+    realizedUsd,
+  };
 }
 
 // ------------------------------ Misc ------------------------------

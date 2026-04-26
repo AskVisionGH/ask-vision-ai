@@ -1,4 +1,4 @@
-import { ExternalLink, History } from "lucide-react";
+import { ArrowDownLeft, ExternalLink, History } from "lucide-react";
 
 /**
  * Renders the result of a deep historical wallet × token scan.
@@ -12,6 +12,20 @@ interface Props {
   data: any;
 }
 
+interface AcquisitionEvent {
+  signature: string;
+  timestamp: number;
+  tokenAmount: number;
+  valueUsd: number | null;
+  pairSymbol: string | null;
+  /** Present on transfers — the wallet that sent us the tokens. */
+  counterparty?: string | null;
+  /** "swap" (real DEX buy) vs "transfer" (plain SPL transfer in). */
+  kind?: "swap" | "transfer";
+}
+
+const shortAddr = (a: string) => `${a.slice(0, 4)}…${a.slice(-4)}`;
+
 export const WalletTokenHistoryCard = ({ data }: Props) => {
   if (!data || data.error) {
     return (
@@ -23,11 +37,14 @@ export const WalletTokenHistoryCard = ({ data }: Props) => {
 
   const symbol: string = (data.tokenSymbol && String(data.tokenSymbol)) || "tokens";
 
-  const firstBuy = data.firstBuy as
-    | { signature: string; timestamp: number; tokenAmount: number; valueUsd: number | null; pairSymbol: string | null }
+  // Prefer the explicit firstAcquisition (handles transfer-in tokens).
+  // Fall back to firstBuy for backwards compatibility with cached responses.
+  const firstAcquisition = (data.firstAcquisition ?? data.firstBuy) as
+    | AcquisitionEvent
     | null;
-  const firstBuyDate = firstBuy
-    ? new Date(firstBuy.timestamp * 1000).toLocaleString(undefined, {
+  const isTransfer = firstAcquisition?.kind === "transfer";
+  const firstDate = firstAcquisition
+    ? new Date(firstAcquisition.timestamp * 1000).toLocaleString(undefined, {
         dateStyle: "medium",
         timeStyle: "short",
       })
@@ -35,6 +52,10 @@ export const WalletTokenHistoryCard = ({ data }: Props) => {
 
   const netAmount = Number(data.netAmount ?? 0);
   const netFormatted = netAmount.toLocaleString(undefined, { maximumFractionDigits: 2 });
+
+  const transfersIn = Number(data.transfersIn ?? 0);
+  const transfersOut = Number(data.transfersOut ?? 0);
+  const showTransferStats = transfersIn > 0 || transfersOut > 0;
 
   return (
     <div className="overflow-hidden rounded-xl border border-border/60 bg-card/40">
@@ -50,23 +71,39 @@ export const WalletTokenHistoryCard = ({ data }: Props) => {
       </div>
 
       <div className="px-4 py-3">
-        {firstBuy ? (
+        {firstAcquisition ? (
           <div className="space-y-1.5">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">First buy</p>
+            <p className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+              {isTransfer ? (
+                <>
+                  <ArrowDownLeft className="h-3 w-3" />
+                  First acquisition (transfer in)
+                </>
+              ) : (
+                "First buy"
+              )}
+            </p>
             <p className="text-sm text-foreground">
-              {firstBuyDate}
-              {firstBuy.pairSymbol ? (
-                <span className="text-muted-foreground"> • paid in {firstBuy.pairSymbol}</span>
+              {firstDate}
+              {isTransfer && firstAcquisition.counterparty ? (
+                <span className="text-muted-foreground">
+                  {" "}• received from{" "}
+                  <code className="rounded bg-secondary/60 px-1 py-0.5 font-mono text-[11px]">
+                    {shortAddr(firstAcquisition.counterparty)}
+                  </code>
+                </span>
+              ) : firstAcquisition.pairSymbol ? (
+                <span className="text-muted-foreground"> • paid in {firstAcquisition.pairSymbol}</span>
               ) : null}
             </p>
             <p className="font-mono text-xs text-muted-foreground">
-              +{firstBuy.tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })} {symbol}
-              {firstBuy.valueUsd
-                ? ` • ~$${firstBuy.valueUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+              +{firstAcquisition.tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })} {symbol}
+              {firstAcquisition.valueUsd
+                ? ` • ~$${firstAcquisition.valueUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
                 : ""}
             </p>
             <a
-              href={`https://solscan.io/tx/${firstBuy.signature}`}
+              href={`https://solscan.io/tx/${firstAcquisition.signature}`}
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline"
@@ -77,20 +114,24 @@ export const WalletTokenHistoryCard = ({ data }: Props) => {
           </div>
         ) : (
           <p className="text-xs text-muted-foreground">
-            No buy of {symbol === "tokens" ? "this token" : `$${symbol}`} found in the last{" "}
+            No acquisition of {symbol === "tokens" ? "this token" : `$${symbol}`} found in the last{" "}
             {data.signaturesScannedTotal?.toLocaleString() ?? 0} signatures.
             {!data.fullyScanned && " The wallet may have acquired it earlier — ask to dig deeper."}
           </p>
         )}
       </div>
 
-      <div className="grid grid-cols-3 gap-px border-t border-border/60 bg-border/40 text-center">
+      <div
+        className={`grid gap-px border-t border-border/60 bg-border/40 text-center ${
+          showTransferStats ? "grid-cols-4" : "grid-cols-3"
+        }`}
+      >
         <Stat label="Buys" value={data.totalBuys ?? 0} />
         <Stat label="Sells" value={data.totalSells ?? 0} />
-        <Stat
-          label={`Net (${symbol})`}
-          value={netFormatted}
-        />
+        {showTransferStats && (
+          <Stat label="Transfers" value={`${transfersIn}↓ / ${transfersOut}↑`} />
+        )}
+        <Stat label={`Net (${symbol})`} value={netFormatted} />
       </div>
 
       {data.stoppedReason === "cap" && !data.fullyScanned && (
