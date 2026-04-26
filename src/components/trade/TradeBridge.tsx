@@ -1134,13 +1134,14 @@ const PanelRow = ({
 // ---------- Chain picker dialog ----------
 
 const ChainPickerDialog = ({
-  open, onClose, chains, loading, onPick,
+  open, onClose, chains, loading, onPick, title,
 }: {
   open: boolean;
   onClose: () => void;
   chains: Chain[];
   loading: boolean;
   onPick: (c: Chain) => void;
+  title?: string;
 }) => {
   const [q, setQ] = useState("");
   useEffect(() => { if (!open) setQ(""); }, [open]);
@@ -1157,7 +1158,7 @@ const ChainPickerDialog = ({
       <DialogContent className="max-w-md p-0">
         <DialogHeader className="border-b border-border/60 px-4 py-3">
           <DialogTitle className="font-mono text-xs uppercase tracking-wider">
-            Select destination chain
+            {title ?? "Select chain"}
           </DialogTitle>
         </DialogHeader>
         <div className="px-4 py-3">
