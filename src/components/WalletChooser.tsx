@@ -359,22 +359,19 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
       // The user can have both live so they can swap on SOL and bridge on EVM
       // in the same session.
 
-      // If the adapter is already selected but not connected, calling select()
-      // again won't trigger the handoff effect (state doesn't change). Trigger
-      // connect directly in that case.
-      if (isSameAdapter) {
-        setPendingSolanaWalletName(walletName);
-        try {
-          await connectSolWallet();
-          onOpenChange(false);
-        } finally {
-          setPendingSolanaWalletName(null);
-          setBusyId(null);
-        }
-        return;
-      }
-
+      // If the adapter is already sticky-selected from a prior session,
+      // selectSolWallet(walletName) is a no-op (state doesn't change), so the
+      // handoff effect never fires. Force a clean re-select by clearing first,
+      // then selecting on the next tick so the effect picks it up.
       setPendingSolanaWalletName(walletName);
+      if (isSameAdapter) {
+        // selectSolWallet accepts null to clear the active adapter, but the
+        // typings only expose WalletName. Cast through unknown so we can
+        // force-clear and re-trigger the handoff effect on the next tick.
+        (selectSolWallet as unknown as (name: WalletName | null) => void)(null);
+        // Defer to next tick so React batches the clear before the new pick.
+        await new Promise((r) => setTimeout(r, 0));
+      }
       selectSolWallet(walletName);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
