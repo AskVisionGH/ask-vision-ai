@@ -103,11 +103,13 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
   const [busyAddress, setBusyAddress] = useState<string | null>(null);
   const [showSolanaOptions, setShowSolanaOptions] = useState(false);
   const [pendingSolanaWalletName, setPendingSolanaWalletName] = useState<WalletName | null>(null);
+  const [solanaTargetAddress, setSolanaTargetAddress] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) {
       setShowSolanaOptions(false);
       setPendingSolanaWalletName(null);
+      setSolanaTargetAddress(null);
     }
   }, [open]);
 
@@ -253,109 +255,8 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
     setBusyAddress(row.address);
     try {
       if (row.chain === "solana") {
-        const preferredTarget = row.walletName
-          ? solWallets.find(
-              (w) =>
-                w.adapter.name.toLowerCase() === row.walletName!.toLowerCase(),
-            )
-          : null;
-
-        const candidates = preferredTarget
-          ? [preferredTarget]
-          : solWallets.filter(
-              (w) => typeof (w.adapter as { autoConnect?: () => Promise<void> }).autoConnect === "function",
-            );
-
-        for (const candidate of candidates) {
-          try {
-            const adapter = candidate.adapter;
-            selectSolWallet(adapter.name);
-
-            // Already on the right address — nothing to do.
-            if (adapter.publicKey?.toBase58() === row.address) {
-              recordLastUsedWallet({
-                address: row.address,
-                chain: "solana",
-                walletName: adapter.name,
-              });
-              onOpenChange(false);
-              return;
-            }
-
-            // If the adapter is currently connected to a *different* address
-            // (typical when "Switch wallet" is pressed), we have to disconnect
-            // first — Phantom won't show its account picker otherwise.
-            const wasConnected = !!adapter.publicKey;
-            if (wasConnected) {
-              try {
-                await adapter.disconnect();
-              } catch {
-                /* ignore */
-              }
-            }
-
-            // Try a silent reconnect first (works when the site is already
-            // trusted for the target address). If that lands on the wrong
-            // address, fall through to the explicit `connect()` which opens
-            // Phantom's account picker.
-            const tryAutoConnect =
-              !wasConnected &&
-              typeof (adapter as { autoConnect?: () => Promise<void> }).autoConnect === "function";
-            if (tryAutoConnect) {
-              try {
-                await (adapter as { autoConnect: () => Promise<void> }).autoConnect();
-                if (adapter.publicKey?.toBase58() === row.address) {
-                  recordLastUsedWallet({
-                    address: row.address,
-                    chain: "solana",
-                    walletName: adapter.name,
-                  });
-                  onOpenChange(false);
-                  return;
-                }
-                // Wrong address — disconnect so the explicit connect can prompt.
-                try {
-                  await adapter.disconnect();
-                } catch {
-                  /* ignore */
-                }
-              } catch {
-                /* fall through to explicit connect */
-              }
-            }
-
-            // Explicit connect — most Solana adapters (incl. Phantom) just
-            // reconnect to whichever account is currently active in the
-            // extension; they don't show an account picker. So if we end up
-            // on the wrong address, tell the user to switch accounts inside
-            // the wallet itself.
-            onOpenChange(false);
-            await adapter.connect();
-            const finalAddress = adapter.publicKey?.toBase58();
-            if (finalAddress && finalAddress !== row.address) {
-              toast.info(`Connected to ${shortAddress(finalAddress)}`, {
-                description: `${adapter.name} doesn't let dapps pick accounts — switch to ${shortAddress(row.address)} inside ${adapter.name}, then click that address again.`,
-              });
-            }
-            recordLastUsedWallet({
-              address: finalAddress ?? row.address,
-              chain: "solana",
-              walletName: adapter.name,
-            });
-            return;
-          } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e);
-            if (/user rejected|user cancel|user closed/i.test(msg)) {
-              return;
-            }
-          }
-        }
-
-        toast.error("Couldn't reconnect that wallet", {
-          description: row.walletName
-            ? `${row.walletName} didn't silently reconnect to ${shortAddress(row.address)}.`
-            : `No installed Solana wallet silently reconnected to ${shortAddress(row.address)}.`,
-        });
+        setSolanaTargetAddress(row.address);
+        setShowSolanaOptions(true);
         return;
       }
 
@@ -411,6 +312,7 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
   };
 
   const handleNewSolana = () => {
+    setSolanaTargetAddress(null);
     setShowSolanaOptions((v) => !v);
   };
 
@@ -562,6 +464,11 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
 
         {showSolanaOptions && (
           <div className="mt-2 space-y-1.5 rounded-xl border border-border/70 bg-secondary/35 p-2">
+            {solanaTargetAddress && (
+              <p className="px-1 pb-1 text-[10px] uppercase tracking-widest text-muted-foreground/70">
+                Choose a Solana wallet for {shortAddress(solanaTargetAddress)}
+              </p>
+            )}
             {solWallets.map((walletOption) => {
               const isPending = pendingSolanaWalletName === walletOption.adapter.name;
               const isSelected = selectedSolWallet?.adapter.name === walletOption.adapter.name;
