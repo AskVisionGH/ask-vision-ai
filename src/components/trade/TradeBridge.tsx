@@ -72,10 +72,12 @@ interface QuoteData {
 type Phase =
   | { name: "idle" }
   | { name: "building" }
+  | { name: "switching_chain" }
+  | { name: "approving" }
   | { name: "awaiting_signature" }
   | { name: "submitting" }
-  | { name: "bridging"; signature: string; startedAt: number; estimatedSec: number | null }
-  | { name: "success"; signature: string; durationMs: number; toAmountUi: number; toSymbol: string; destExplorer: string | null }
+  | { name: "bridging"; sourceTxHash: string; sourceExplorer: string; startedAt: number; estimatedSec: number | null }
+  | { name: "success"; sourceTxHash: string; sourceExplorer: string; durationMs: number; toAmountUi: number; toSymbol: string; destExplorer: string | null }
   | { name: "cancelled"; fromAmountUi: number; fromSymbol: string; toAmountUi: number; toSymbol: string }
   | { name: "error"; message: string };
 
