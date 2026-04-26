@@ -129,11 +129,23 @@ serve(async (req) => {
 
     if (slice === "token_pnl" && tokenFilter) {
       const target = tokenFilter.toLowerCase();
-      const match = tokenPnL.find(
+      let match = tokenPnL.find(
         (t) =>
           t.mint.toLowerCase() === target ||
           t.symbol.toLowerCase() === target.replace(/^\$/, ""),
       );
+
+      // If we matched by mint but Helius gave us a placeholder symbol (e.g.
+      // "CJUr…pump"), fetch the real ticker/logo via DAS so the PnL card
+      // doesn't render with a truncated mint as the headline.
+      if (match && (match.symbol === "?" || match.symbol.includes("…"))) {
+        const meta = await fetchAssetMetadata(match.mint, HELIUS_API_KEY);
+        if (meta) {
+          match = { ...match, symbol: meta.symbol, name: meta.name, logo: meta.logo };
+          if (match.currentPriceUsd == null) match.currentPriceUsd = meta.priceUsd;
+        }
+      }
+
       return json({
         address,
         windowDays: WINDOW_DAYS,
