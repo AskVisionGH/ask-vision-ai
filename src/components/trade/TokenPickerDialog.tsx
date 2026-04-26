@@ -62,10 +62,16 @@ export const pushRecentToken = (t: TokenMeta) => {
   } catch { /* ignore */ }
 };
 
+// Display rule: only show prices we can render meaningfully at 3 decimals.
+// Anything below $0.001 (sub-tenth-of-a-cent) is hidden so we don't print
+// "$0.000" or scientific notation noise. Bigger-cap tokens (BONK, etc.) often
+// fall below this; that's intentional — the unit price isn't useful at that
+// scale, the user cares about market cap / their holding value instead.
 const fmtPrice = (n: number | null) => {
-  if (n == null) return "";
-  if (n < 0.01 && n > 0) return `$${n.toExponential(2)}`;
-  return `$${n.toLocaleString("en-US", { maximumFractionDigits: n < 1 ? 6 : 2 })}`;
+  if (n == null || !Number.isFinite(n) || n <= 0) return "";
+  if (n < 0.001) return "";
+  if (n >= 1) return `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+  return `$${n.toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 })}`;
 };
 
 const fmtUsd = (n: number) => `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
@@ -86,6 +92,9 @@ export const TokenPickerDialog = ({ open, onOpenChange, onSelect, excludeAddress
   const [holdings, setHoldings] = useState<HoldingMeta[]>([]);
   const [holdingsLoading, setHoldingsLoading] = useState(false);
   const recent = useMemo(() => (open ? getRecent() : []), [open]);
+  // Live prices for POPULAR + recent tokens (those rows are hardcoded without
+  // a price, so we hydrate via Jupiter's price API on open).
+  const [livePrices, setLivePrices] = useState<Record<string, number>>({});
   const debounceRef = useRef<number | null>(null);
 
   // Reset query/results when dialog closes.
@@ -95,6 +104,41 @@ export const TokenPickerDialog = ({ open, onOpenChange, onSelect, excludeAddress
       setResults([]);
     }
   }, [open]);
+
+  // Hydrate prices for tokens we ship with priceUsd=null (POPULAR + recent).
+  useEffect(() => {
+    if (!open) return;
+    const mints = Array.from(
+      new Set(
+        [...POPULAR, ...recent]
+          .filter((t) => t.priceUsd == null)
+          .map((t) => t.address)
+          .filter(Boolean),
+      ),
+    );
+    if (mints.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(
+          `https://lite-api.jup.ag/price/v3?ids=${mints.join(",")}`,
+        );
+        if (!r.ok) return;
+        const data = (await r.json()) as Record<string, { usdPrice?: number }>;
+        if (cancelled) return;
+        const next: Record<string, number> = {};
+        for (const [mint, info] of Object.entries(data)) {
+          if (typeof info?.usdPrice === "number") next[mint] = info.usdPrice;
+        }
+        setLivePrices((prev) => ({ ...prev, ...next }));
+      } catch {
+        /* ignore — fall back to no price */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, recent]);
 
   // Fetch wallet holdings when the dialog opens. Cached per session by Supabase
   // edge runtime, so re-opens are cheap.
@@ -194,15 +238,21 @@ export const TokenPickerDialog = ({ open, onOpenChange, onSelect, excludeAddress
     onOpenChange(false);
   };
 
+  // Hydrate any token whose price is null with the live price we fetched.
+  const withLivePrice = <T extends TokenMeta>(t: T): T =>
+    t.priceUsd != null ? t : { ...t, priceUsd: livePrices[t.address] ?? null };
+
   // Section dedupe: holdings → recent → popular. A token only appears in its
   // first matching section so the picker doesn't repeat the same row.
   const visibleHoldings = filterExcluded(holdings);
   const holdingMints = new Set(visibleHoldings.map((h) => h.address));
-  const visibleRecent = filterExcluded(recent).filter((t) => !holdingMints.has(t.address));
+  const visibleRecent = filterExcluded(recent)
+    .filter((t) => !holdingMints.has(t.address))
+    .map(withLivePrice);
   const recentMints = new Set(visibleRecent.map((t) => t.address));
-  const visiblePopular = filterExcluded(POPULAR).filter(
-    (t) => !holdingMints.has(t.address) && !recentMints.has(t.address),
-  );
+  const visiblePopular = filterExcluded(POPULAR)
+    .filter((t) => !holdingMints.has(t.address) && !recentMints.has(t.address))
+    .map(withLivePrice);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
