@@ -962,6 +962,45 @@ const ChainPickerDialog = ({
 
 const tokenCache = new Map<string, BridgeToken[]>();
 
+/** Hide tokens worth less than this in the "Your wallet" section to suppress dust/airdrop spam. */
+const BRIDGE_HOLDINGS_MIN_USD = 1;
+/** Per-chain recent picks, keyed by chain id. */
+const BRIDGE_RECENT_KEY = "vision:bridge-recent-tokens";
+const BRIDGE_RECENT_MAX = 6;
+
+const getBridgeRecents = (chainId: number | string): BridgeToken[] => {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(BRIDGE_RECENT_KEY);
+    if (!raw) return [];
+    const all = JSON.parse(raw) as Record<string, BridgeToken[]>;
+    return all[String(chainId)] ?? [];
+  } catch {
+    return [];
+  }
+};
+
+const pushBridgeRecent = (t: BridgeToken) => {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = window.localStorage.getItem(BRIDGE_RECENT_KEY);
+    const all = (raw ? JSON.parse(raw) : {}) as Record<string, BridgeToken[]>;
+    const key = String(t.chainId);
+    const cur = all[key] ?? [];
+    all[key] = [t, ...cur.filter((c) => c.address !== t.address)].slice(0, BRIDGE_RECENT_MAX);
+    window.localStorage.setItem(BRIDGE_RECENT_KEY, JSON.stringify(all));
+  } catch { /* ignore */ }
+};
+
+/** Symbols to surface as "Popular" when no holdings/recents apply, matched against the chain token list. */
+const POPULAR_SYMBOLS = ["USDC", "USDT", "ETH", "WETH", "SOL", "WSOL", "DAI", "WBTC"];
+
+interface HoldingMeta {
+  address: string;
+  amount: number;
+  valueUsd: number | null;
+}
+
 const BridgeTokenPickerDialog = ({
   open, onClose, chain, onPick,
 }: {
@@ -970,10 +1009,17 @@ const BridgeTokenPickerDialog = ({
   chain: Chain | null;
   onPick: (t: BridgeToken) => void;
 }) => {
+  const { publicKey, connected } = useWallet();
+  const walletAddress = connected && publicKey ? publicKey.toBase58() : null;
+  const isSolanaChain = chain?.chainType === "SVM" || chain?.id === SOLANA_CHAIN_ID;
+
   const [tokens, setTokens] = useState<BridgeToken[]>([]);
   const [loading, setLoading] = useState(false);
   const [q, setQ] = useState("");
+  const [holdings, setHoldings] = useState<HoldingMeta[]>([]);
+  const [holdingsLoading, setHoldingsLoading] = useState(false);
 
+  // Fetch chain token list on open.
   useEffect(() => {
     if (!open || !chain) return;
     setQ("");
@@ -1001,11 +1047,113 @@ const BridgeTokenPickerDialog = ({
     return () => { cancelled = true; };
   }, [open, chain?.id]);
 
-  // Rank matches so an exact symbol hit (USDC) lands above tokens that just
-  // happen to contain the letters in their name (3Crv "DAI/USDC/USDT" pool).
+  // Fetch wallet holdings (Solana-only — no EVM balance source today).
+  useEffect(() => {
+    if (!open || !isSolanaChain || !walletAddress) {
+      setHoldings([]);
+      return;
+    }
+    let cancelled = false;
+    setHoldingsLoading(true);
+    (async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("wallet-balance", {
+          body: { address: walletAddress },
+        });
+        if (cancelled) return;
+        if (error || !data || data.error) {
+          setHoldings([]);
+          return;
+        }
+        const list = Array.isArray(data.holdings) ? data.holdings : [];
+        const mapped: HoldingMeta[] = list
+          .filter((h: any) => (h.valueUsd ?? 0) >= BRIDGE_HOLDINGS_MIN_USD && h.mint)
+          .map((h: any) => ({
+            address: h.mint as string,
+            amount: typeof h.amount === "number" ? h.amount : 0,
+            valueUsd: typeof h.valueUsd === "number" ? h.valueUsd : null,
+          }));
+        setHoldings(mapped);
+      } catch {
+        if (!cancelled) setHoldings([]);
+      } finally {
+        if (!cancelled) setHoldingsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [open, isSolanaChain, walletAddress]);
+
+  const recents = useMemo(
+    () => (open && chain ? getBridgeRecents(chain.id) : []),
+    [open, chain?.id],
+  );
+
+  // Hydrate holdings/recents/popular with the chain's canonical token metadata
+  // (logo, decimals, price). Holdings return WSOL mint; the bridge token list
+  // exposes SOL as the all-zeroes address, so alias both ways.
+  const tokensByAddress = useMemo(() => {
+    const m = new Map<string, BridgeToken>();
+    for (const t of tokens) m.set(t.address.toLowerCase(), t);
+    if (isSolanaChain) {
+      const sol = m.get(SOL_NATIVE_ADDRESS.toLowerCase());
+      if (sol) m.set(WSOL_MINT.toLowerCase(), sol);
+    }
+    return m;
+  }, [tokens, isSolanaChain]);
+
+  const visibleHoldings = useMemo(() => {
+    if (!isSolanaChain) return [] as Array<BridgeToken & { amount: number; valueUsd: number | null }>;
+    return holdings
+      .map((h) => {
+        const t = tokensByAddress.get(h.address.toLowerCase());
+        if (!t) return null;
+        return { ...t, amount: h.amount, valueUsd: h.valueUsd };
+      })
+      .filter((x): x is BridgeToken & { amount: number; valueUsd: number | null } => !!x)
+      .sort((a, b) => (b.valueUsd ?? 0) - (a.valueUsd ?? 0));
+  }, [holdings, tokensByAddress, isSolanaChain]);
+
+  const holdingMints = useMemo(
+    () => new Set(visibleHoldings.map((t) => t.address.toLowerCase())),
+    [visibleHoldings],
+  );
+
+  const visibleRecents = useMemo(
+    () =>
+      recents
+        .map((r) => tokensByAddress.get(r.address.toLowerCase()) ?? r)
+        .filter((t) => !holdingMints.has(t.address.toLowerCase())),
+    [recents, tokensByAddress, holdingMints],
+  );
+
+  const recentMints = useMemo(
+    () => new Set(visibleRecents.map((t) => t.address.toLowerCase())),
+    [visibleRecents],
+  );
+
+  const visiblePopular = useMemo(() => {
+    const seen = new Set<string>();
+    const out: BridgeToken[] = [];
+    for (const sym of POPULAR_SYMBOLS) {
+      const match = tokens.find(
+        (t) =>
+          t.symbol.toUpperCase() === sym &&
+          !holdingMints.has(t.address.toLowerCase()) &&
+          !recentMints.has(t.address.toLowerCase()) &&
+          !seen.has(t.address.toLowerCase()),
+      );
+      if (match) {
+        seen.add(match.address.toLowerCase());
+        out.push(match);
+      }
+    }
+    return out;
+  }, [tokens, holdingMints, recentMints]);
+
+  // Search uses the same scoring as before but only kicks in when typing.
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
-    if (!term) return tokens;
+    if (!term) return [];
     const scored = tokens
       .map((t) => {
         const sym = t.symbol.toLowerCase();
@@ -1024,6 +1172,18 @@ const BridgeTokenPickerDialog = ({
       .sort((a, b) => b.score - a.score);
     return scored.map((x) => x.t);
   }, [q, tokens]);
+
+  const handlePick = (t: BridgeToken) => {
+    pushBridgeRecent(t);
+    onPick(t);
+  };
+
+  const showSearch = q.trim().length > 0;
+  const fmtAmount = (n: number) => {
+    if (n >= 1000) return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+    if (n >= 1) return n.toLocaleString("en-US", { maximumFractionDigits: 4 });
+    return n.toLocaleString("en-US", { maximumFractionDigits: 6 });
+  };
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -1047,38 +1207,123 @@ const BridgeTokenPickerDialog = ({
             <div className="flex items-center justify-center py-8 text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
             </div>
-          ) : filtered.length === 0 ? (
-            <div className="py-8 text-center font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-              No tokens found
-            </div>
+          ) : showSearch ? (
+            filtered.length === 0 ? (
+              <div className="py-8 text-center font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                No tokens found
+              </div>
+            ) : (
+              filtered.map((t) => (
+                <BridgeTokenRow key={`s-${t.chainId}-${t.address}`} token={t} onPick={handlePick} />
+              ))
+            )
           ) : (
-            filtered.map((t) => (
-              <button
-                key={`${t.chainId}-${t.address}`}
-                type="button"
-                onClick={() => onPick(t)}
-                className="ease-vision flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left hover:bg-secondary"
-              >
-                <TokenLogo symbol={t.symbol} logo={t.logo} size={28} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm font-medium text-foreground">{t.symbol}</span>
-                    <span className="truncate font-mono text-[10px] text-muted-foreground">{t.name}</span>
-                  </div>
-                  <div className="font-mono text-[9px] text-muted-foreground/70">
-                    {t.address.slice(0, 6)}…{t.address.slice(-4)}
-                  </div>
+            <>
+              {isSolanaChain && walletAddress && (
+                <div className="px-1 py-1">
+                  <BridgeSectionLabel>Your wallet</BridgeSectionLabel>
+                  {holdingsLoading && visibleHoldings.length === 0 ? (
+                    <div className="flex items-center justify-center py-3 text-muted-foreground/60">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    </div>
+                  ) : visibleHoldings.length === 0 ? (
+                    <p className="px-3 py-2 text-[11px] text-muted-foreground/60">
+                      No tokens worth $1+ in this wallet.
+                    </p>
+                  ) : (
+                    visibleHoldings.map((t) => (
+                      <BridgeTokenRow
+                        key={`h-${t.chainId}-${t.address}`}
+                        token={t}
+                        onPick={handlePick}
+                        amount={t.amount}
+                        valueUsd={t.valueUsd}
+                        fmtAmount={fmtAmount}
+                      />
+                    ))
+                  )}
                 </div>
-                {t.priceUsd != null && (
-                  <span className="font-mono text-[10px] text-muted-foreground">
-                    {fmtUsd(t.priceUsd)}
-                  </span>
-                )}
-              </button>
-            ))
+              )}
+              {visibleRecents.length > 0 && (
+                <div className="px-1 py-1">
+                  <BridgeSectionLabel>Recent</BridgeSectionLabel>
+                  {visibleRecents.map((t) => (
+                    <BridgeTokenRow key={`r-${t.chainId}-${t.address}`} token={t} onPick={handlePick} />
+                  ))}
+                </div>
+              )}
+              {visiblePopular.length > 0 && (
+                <div className="px-1 py-1">
+                  <BridgeSectionLabel>Popular</BridgeSectionLabel>
+                  {visiblePopular.map((t) => (
+                    <BridgeTokenRow key={`p-${t.chainId}-${t.address}`} token={t} onPick={handlePick} />
+                  ))}
+                </div>
+              )}
+              {/* Fallback for chains with no popular matches and no wallet/recents
+                  yet — show a slice of the full list so the picker is never empty. */}
+              {!isSolanaChain && visibleRecents.length === 0 && visiblePopular.length === 0 &&
+                tokens.slice(0, 50).map((t) => (
+                  <BridgeTokenRow key={`a-${t.chainId}-${t.address}`} token={t} onPick={handlePick} />
+                ))}
+            </>
           )}
         </div>
       </DialogContent>
     </Dialog>
+  );
+};
+
+const BridgeSectionLabel = ({ children }: { children: React.ReactNode }) => (
+  <div className="px-2 pb-1 pt-1 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/60">
+    {children}
+  </div>
+);
+
+const BridgeTokenRow = ({
+  token,
+  onPick,
+  amount,
+  valueUsd,
+  fmtAmount,
+}: {
+  token: BridgeToken;
+  onPick: (t: BridgeToken) => void;
+  amount?: number;
+  valueUsd?: number | null;
+  fmtAmount?: (n: number) => string;
+}) => {
+  const showHolding = typeof amount === "number" && amount > 0 && !!fmtAmount;
+  return (
+    <button
+      type="button"
+      onClick={() => onPick(token)}
+      className="ease-vision flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left hover:bg-secondary"
+    >
+      <TokenLogo symbol={token.symbol} logo={token.logo} size={28} />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm font-medium text-foreground">{token.symbol}</span>
+          <span className="truncate font-mono text-[10px] text-muted-foreground">{token.name}</span>
+        </div>
+        <div className="font-mono text-[9px] text-muted-foreground/70">
+          {token.address.slice(0, 6)}…{token.address.slice(-4)}
+        </div>
+      </div>
+      <div className="flex flex-col items-end">
+        {showHolding ? (
+          <>
+            <span className="font-mono text-[11px] text-foreground">{fmtAmount!(amount!)}</span>
+            {valueUsd != null && (
+              <span className="font-mono text-[10px] text-muted-foreground">{fmtUsd(valueUsd)}</span>
+            )}
+          </>
+        ) : (
+          token.priceUsd != null && (
+            <span className="font-mono text-[10px] text-muted-foreground">{fmtUsd(token.priceUsd)}</span>
+          )
+        )}
+      </div>
+    </button>
   );
 };
