@@ -100,6 +100,72 @@ const fmtAmount = (n: number) => {
 const truncSig = (s: string) => `${s.slice(0, 4)}…${s.slice(-4)}`;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// Per-chain block explorer for source tx links. Falls back to Etherscan.
+const EVM_EXPLORERS: Record<number, string> = {
+  1: "https://etherscan.io/tx/",
+  10: "https://optimistic.etherscan.io/tx/",
+  56: "https://bscscan.com/tx/",
+  137: "https://polygonscan.com/tx/",
+  324: "https://explorer.zksync.io/tx/",
+  8453: "https://basescan.org/tx/",
+  42161: "https://arbiscan.io/tx/",
+  43114: "https://snowtrace.io/tx/",
+  59144: "https://lineascan.build/tx/",
+  534352: "https://scrollscan.com/tx/",
+};
+const buildExplorerUrl = (chainId: number, hash: string) =>
+  `${EVM_EXPLORERS[chainId] ?? "https://etherscan.io/tx/"}${hash}`;
+
+// Poll LI.FI's bridge-status until the receiving leg lands or we time out.
+// Shared between the EVM and Solana source paths.
+async function pollBridgeStatus(args: {
+  txHash: string;
+  quote: QuoteData;
+  toToken: BridgeToken;
+  startedAt: number;
+  sourceExplorer: string;
+  setPhase: (p: Phase) => void;
+  mounted: React.MutableRefObject<boolean>;
+}) {
+  const { txHash, quote, toToken, startedAt, sourceExplorer, setPhase, mounted } = args;
+  const deadline = Date.now() + POLL_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    if (!mounted.current) return;
+    await sleep(POLL_INTERVAL_MS);
+    try {
+      const status = await supaGet("bridge-status", {
+        txHash,
+        fromChain: String(quote.raw?.action?.fromChainId ?? ""),
+        toChain: String(quote.raw?.action?.toChainId ?? ""),
+        bridge: quote.tool ?? "",
+      });
+      if (status.status === "DONE") {
+        const recv = status.receiving;
+        const destAmountUi = recv?.amount && toToken.decimals != null
+          ? Number(recv.amount) / Math.pow(10, toToken.decimals)
+          : Number(quote.toAmountAtomic) / Math.pow(10, toToken.decimals);
+        if (!mounted.current) return;
+        setPhase({
+          name: "success",
+          sourceTxHash: txHash,
+          sourceExplorer,
+          durationMs: Date.now() - startedAt,
+          toAmountUi: destAmountUi,
+          toSymbol: toToken.symbol,
+          destExplorer: recv?.txLink ?? null,
+        });
+        return;
+      }
+      if (status.status === "FAILED" || status.status === "INVALID") {
+        throw new Error(status.substatus ?? "Bridge failed on-chain");
+      }
+    } catch {
+      continue;
+    }
+  }
+  throw new Error("Bridge is taking longer than expected. You can keep tracking it from the source transaction.");
+}
+
 const supaPost = async (fn: string, body: unknown, attempt = 0): Promise<any> => {
   const { data, error } = await supabase.functions.invoke(fn, { body });
   if (error) {
