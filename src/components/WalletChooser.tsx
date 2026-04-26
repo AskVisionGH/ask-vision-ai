@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import type { WalletName } from "@solana/wallet-adapter-base";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useAccount, useConnect, useConnectors, useDisconnect as useEvmDisconnect } from "wagmi";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
@@ -101,7 +102,7 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
   const [loadingLinked, setLoadingLinked] = useState(false);
   const [busyAddress, setBusyAddress] = useState<string | null>(null);
   const [showSolanaOptions, setShowSolanaOptions] = useState(false);
-  const [pendingSolanaWalletName, setPendingSolanaWalletName] = useState<string | null>(null);
+  const [pendingSolanaWalletName, setPendingSolanaWalletName] = useState<WalletName | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -413,7 +414,7 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
     setShowSolanaOptions((v) => !v);
   };
 
-  const handleSelectNewSolanaWallet = async (walletName: string) => {
+  const handleSelectNewSolanaWallet = async (walletName: WalletName) => {
     setPendingSolanaWalletName(walletName);
     setShowSolanaOptions(false);
 
