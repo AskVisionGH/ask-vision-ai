@@ -277,3 +277,27 @@ function json(body: unknown, status = 200) {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
+
+async function detectToken2022Mint(mint: string): Promise<boolean> {
+  const heliusKey = Deno.env.get("HELIUS_API_KEY");
+  const rpcUrl = heliusKey
+    ? `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`
+    : "https://api.mainnet-beta.solana.com";
+  try {
+    const resp = await fetch(rpcUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "mint-owner",
+        method: "getAccountInfo",
+        params: [mint, { encoding: "jsonParsed", commitment: "confirmed" }],
+      }),
+    });
+    if (!resp.ok) return false;
+    const data = await resp.json();
+    return data?.result?.value?.owner === "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+  } catch {
+    return false;
+  }
+}
