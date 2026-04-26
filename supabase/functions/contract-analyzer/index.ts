@@ -51,6 +51,12 @@ interface RiskReport {
     mintAuthorityRevoked: boolean | null;
     freezeAuthorityRevoked: boolean | null;
   };
+  topHolders?: Array<{
+    address: string;
+    pct: number | null;
+    amount: number | null;
+    insider: boolean | null;
+  }>;
   error?: string;
 }
 
@@ -226,13 +232,19 @@ function buildReport(args: {
     helius?.token_info?.freeze_authority,
   );
 
-  const topHolderPct = numOrNull(
-    rug?.topHolders?.[0]?.pct,
-    rug?.holders?.[0]?.pct,
-  );
-  const top10HolderPct = sumPct(
-    (rug?.topHolders ?? rug?.holders ?? []).slice(0, 10).map((h: any) => h?.pct),
-  );
+  const topHoldersRaw: any[] = Array.isArray(rug?.topHolders)
+    ? rug.topHolders
+    : Array.isArray(rug?.holders)
+      ? rug.holders
+      : [];
+  const topHolders = topHoldersRaw.slice(0, 10).map((h: any) => ({
+    address: String(h?.address ?? h?.owner ?? h?.wallet ?? ""),
+    pct: typeof h?.pct === "number" ? h.pct : null,
+    amount: typeof h?.amount === "number" ? h.amount : null,
+    insider: typeof h?.insider === "boolean" ? h.insider : null,
+  })).filter((h) => h.address);
+  const topHolderPct = numOrNull(topHoldersRaw[0]?.pct);
+  const top10HolderPct = sumPct(topHoldersRaw.slice(0, 10).map((h: any) => h?.pct));
   const holderCount = numOrNull(rug?.totalHolders, rug?.holders?.length);
 
   // LP locked %: full report has it per-market under markets[].lp.lpLockedPct;
@@ -428,6 +440,7 @@ function buildReport(args: {
       mintAuthorityRevoked,
       freezeAuthorityRevoked,
     },
+    topHolders,
   };
 }
 
