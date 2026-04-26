@@ -21,6 +21,8 @@ export const WalletTokenHistoryCard = ({ data }: Props) => {
     );
   }
 
+  const symbol: string = (data.tokenSymbol && String(data.tokenSymbol)) || "tokens";
+
   const firstBuy = data.firstBuy as
     | { signature: string; timestamp: number; tokenAmount: number; valueUsd: number | null; pairSymbol: string | null }
     | null;
@@ -30,6 +32,9 @@ export const WalletTokenHistoryCard = ({ data }: Props) => {
         timeStyle: "short",
       })
     : null;
+
+  const netAmount = Number(data.netAmount ?? 0);
+  const netFormatted = netAmount.toLocaleString(undefined, { maximumFractionDigits: 2 });
 
   return (
     <div className="overflow-hidden rounded-xl border border-border/60 bg-card/40">
@@ -55,7 +60,7 @@ export const WalletTokenHistoryCard = ({ data }: Props) => {
               ) : null}
             </p>
             <p className="font-mono text-xs text-muted-foreground">
-              +{firstBuy.tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })} tokens
+              +{firstBuy.tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })} {symbol}
               {firstBuy.valueUsd
                 ? ` • ~$${firstBuy.valueUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
                 : ""}
@@ -72,8 +77,8 @@ export const WalletTokenHistoryCard = ({ data }: Props) => {
           </div>
         ) : (
           <p className="text-xs text-muted-foreground">
-            No buy of this token found in the last {data.signaturesScannedTotal?.toLocaleString() ?? 0}{" "}
-            signatures.
+            No buy of {symbol === "tokens" ? "this token" : `$${symbol}`} found in the last{" "}
+            {data.signaturesScannedTotal?.toLocaleString() ?? 0} signatures.
             {!data.fullyScanned && " The wallet may have acquired it earlier — ask to dig deeper."}
           </p>
         )}
@@ -83,8 +88,8 @@ export const WalletTokenHistoryCard = ({ data }: Props) => {
         <Stat label="Buys" value={data.totalBuys ?? 0} />
         <Stat label="Sells" value={data.totalSells ?? 0} />
         <Stat
-          label="Net"
-          value={(data.netAmount ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+          label={`Net (${symbol})`}
+          value={netFormatted}
         />
       </div>
 
