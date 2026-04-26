@@ -1,7 +1,6 @@
 import { ReactNode, useMemo } from "react";
 import { ConnectionProvider, WalletProvider } from "@solana/wallet-adapter-react";
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
-import { PhantomWalletAdapter } from "@solana/wallet-adapter-phantom";
 import { SolflareWalletAdapter } from "@solana/wallet-adapter-solflare";
 import { BackpackWalletAdapter } from "@solana/wallet-adapter-backpack";
 import { CoinbaseWalletAdapter } from "@solana/wallet-adapter-coinbase";
@@ -115,7 +114,6 @@ export const WalletContextProvider = ({ children }: Props) => {
           },
         },
       }),
-      new PhantomWalletAdapter(),
       new SolflareWalletAdapter(),
       new BackpackWalletAdapter(),
       new CoinbaseWalletAdapter(),
