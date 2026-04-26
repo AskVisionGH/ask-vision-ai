@@ -15,6 +15,7 @@ export interface NotificationPreferences {
   quiet_end: string | null;
   quiet_timezone: string;
   post_order_prompt_seen: boolean;
+  chat_push_prompt_seen: boolean;
 }
 
 const DEFAULTS: NotificationPreferences = {
@@ -33,6 +34,7 @@ const DEFAULTS: NotificationPreferences = {
       ? Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
       : "UTC",
   post_order_prompt_seen: false,
+  chat_push_prompt_seen: false,
 };
 
 /**
@@ -70,6 +72,7 @@ export const useNotificationPreferences = () => {
         quiet_end: data.quiet_end,
         quiet_timezone: data.quiet_timezone,
         post_order_prompt_seen: data.post_order_prompt_seen,
+        chat_push_prompt_seen: (data as { chat_push_prompt_seen?: boolean }).chat_push_prompt_seen ?? false,
       });
     } else {
       setPrefs(DEFAULTS);

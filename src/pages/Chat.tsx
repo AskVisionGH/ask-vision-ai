@@ -12,6 +12,7 @@ import { VisionLogo } from "@/components/VisionLogo";
 import { VisionLoader } from "@/components/VisionLoader";
 import { SEO } from "@/components/SEO";
 import { WalletOnboardingPrompt } from "@/components/WalletOnboardingPrompt";
+import { ChatPushPrompt } from "@/components/ChatPushPrompt";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Menu } from "lucide-react";
@@ -471,6 +472,8 @@ const Chat = () => {
       <SEO title="Chat — Vision" description="Vision chat — your AI crypto assistant." noindex />
       {/* One-time wallet prompt for email signups with no linked wallet. */}
       <WalletOnboardingPrompt needsWallet={hasNoWallet === true} />
+      {/* One-time browser-notifications pre-prompt. */}
+      <ChatPushPrompt />
       <ShareConversationDialog
         conversation={shareTarget}
         open={!!shareTarget}

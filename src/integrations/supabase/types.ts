@@ -300,6 +300,7 @@ export type Database = {
           cat_wallet_activity: boolean
           channel_in_app: boolean
           channel_web_push: boolean
+          chat_push_prompt_seen: boolean
           created_at: string
           master_enabled: boolean
           post_order_prompt_seen: boolean
@@ -317,6 +318,7 @@ export type Database = {
           cat_wallet_activity?: boolean
           channel_in_app?: boolean
           channel_web_push?: boolean
+          chat_push_prompt_seen?: boolean
           created_at?: string
           master_enabled?: boolean
           post_order_prompt_seen?: boolean
@@ -334,6 +336,7 @@ export type Database = {
           cat_wallet_activity?: boolean
           channel_in_app?: boolean
           channel_web_push?: boolean
+          chat_push_prompt_seen?: boolean
           created_at?: string
           master_enabled?: boolean
           post_order_prompt_seen?: boolean
