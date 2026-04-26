@@ -57,6 +57,16 @@ export const WalletTokenHistoryCard = ({ data }: Props) => {
   const transfersOut = Number(data.transfersOut ?? 0);
   const showTransferStats = transfersIn > 0 || transfersOut > 0;
 
+  // Realized USD = (proceeds from sells) − (cost of buys), summed across
+  // events that had a stable / SOL pair we could price. Negative means the
+  // wallet is still net long in dollar terms; positive means they've taken
+  // money off the table.
+  const realizedUsd = Number(data.realizedUsd ?? 0);
+  const showRealized = Math.abs(realizedUsd) > 0.01;
+  const realizedFormatted = formatUsd(realizedUsd);
+  const realizedTone =
+    realizedUsd > 0 ? "text-emerald-400" : realizedUsd < 0 ? "text-rose-400" : "text-foreground";
+
   return (
     <div className="overflow-hidden rounded-xl border border-border/60 bg-card/40">
       <div className="flex items-center gap-2 border-b border-border/60 px-4 py-2.5">
