@@ -108,7 +108,7 @@ export const TokenPickerDialog = ({ open, onOpenChange, onSelect, excludeAddress
     (async () => {
       try {
         const { data, error } = await supabase.functions.invoke("wallet-balance", {
-          body: { walletAddress },
+          body: { address: walletAddress },
         });
         if (cancelled) return;
         if (error || !data || data.error) {
