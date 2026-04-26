@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
-import { useAccount, useConnect, useConnectors } from "wagmi";
+import { useAccount, useConnect, useConnectors, useDisconnect as useEvmDisconnect } from "wagmi";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { Loader2, Plus, Wallet, History as HistoryIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -82,7 +82,17 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
   const evmConnectors = useConnectors();
   const { connectAsync: connectEvm } = useConnect();
   const { address: evmAddress, isConnected: evmConnected } = useAccount();
+  const { disconnectAsync: disconnectEvm } = useEvmDisconnect();
   const { openConnectModal: openRainbowKit } = useConnectModal();
+  // Defer opening the RainbowKit modal until after a disconnect lands —
+  // useConnectModal returns `undefined` while a wallet is still connected.
+  const [pendingEvmModal, setPendingEvmModal] = useState(false);
+  useEffect(() => {
+    if (pendingEvmModal && !evmConnected && openRainbowKit) {
+      setPendingEvmModal(false);
+      openRainbowKit();
+    }
+  }, [pendingEvmModal, evmConnected, openRainbowKit]);
 
   const [linked, setLinked] = useState<LinkedWallet[]>([]);
   const [recent, setRecent] = useState<LastUsedWallet[]>([]);
@@ -264,13 +274,21 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
               }
             }
 
-            // Explicit connect — Phantom will surface its account picker so
-            // the user can switch to the registered address. We close the
-            // chooser optimistically so its overlay doesn't block the popup.
+            // Explicit connect — most Solana adapters (incl. Phantom) just
+            // reconnect to whichever account is currently active in the
+            // extension; they don't show an account picker. So if we end up
+            // on the wrong address, tell the user to switch accounts inside
+            // the wallet itself.
             onOpenChange(false);
             await adapter.connect();
+            const finalAddress = adapter.publicKey?.toBase58();
+            if (finalAddress && finalAddress !== row.address) {
+              toast.info(`Connected to ${shortAddress(finalAddress)}`, {
+                description: `${adapter.name} doesn't let dapps pick accounts — switch to ${shortAddress(row.address)} inside ${adapter.name}, then click that address again.`,
+              });
+            }
             recordLastUsedWallet({
-              address: adapter.publicKey?.toBase58() ?? row.address,
+              address: finalAddress ?? row.address,
               chain: "solana",
               walletName: adapter.name,
             });
@@ -297,28 +315,41 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
             (c) => c.name.toLowerCase() === row.walletName!.toLowerCase(),
           )
         : null;
+
+      // If a different EVM wallet is already connected, disconnect it first —
+      // wagmi's connect() refuses to swap connectors silently and RainbowKit
+      // hides its modal entirely while a wallet is connected.
+      if (evmConnected) {
+        try {
+          await disconnectEvm();
+        } catch {
+          /* ignore */
+        }
+      }
+
       if (target) {
         try {
+          // Closing the chooser before the wallet popup avoids the dialog
+          // overlay swallowing the wallet's account picker.
+          onOpenChange(false);
           await connectEvm({ connector: target });
           recordLastUsedWallet({
             address: row.address,
             chain: "evm",
             walletName: target.name,
           });
-          onOpenChange(false);
           return;
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
           if (!/user rejected|user cancel|user closed/i.test(msg)) {
-            // Connector not available (e.g. wallet uninstalled) — surface the
-            // RainbowKit modal so they can pick another.
-            openRainbowKit?.();
-            onOpenChange(false);
+            // Connector not available (e.g. wallet uninstalled) — fall back
+            // to the RainbowKit modal once the disconnect lands.
+            setPendingEvmModal(true);
           }
           return;
         }
       }
-      openRainbowKit?.();
+      setPendingEvmModal(true);
       onOpenChange(false);
     } catch (e) {
       toast.error("Couldn't reconnect wallet", {
@@ -334,10 +365,18 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
     setSolModalVisible(true);
   };
 
-  const handleNewEvm = () => {
+  const handleNewEvm = async () => {
     onOpenChange(false);
-    if (openRainbowKit) openRainbowKit();
-    else toast.error("EVM wallet modal isn't ready yet");
+    if (evmConnected) {
+      try {
+        await disconnectEvm();
+      } catch {
+        /* ignore */
+      }
+    }
+    // RainbowKit hides the connect modal while a wallet is connected, so we
+    // queue the open and let the effect fire it once disconnect lands.
+    setPendingEvmModal(true);
   };
 
   return (
