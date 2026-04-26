@@ -447,8 +447,8 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md rounded-2xl border-border bg-card p-6">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[calc(100vh-2rem)] w-[calc(100vw-1.5rem)] max-w-md flex-col overflow-hidden rounded-2xl border-border bg-card p-0 sm:max-h-[calc(100vh-4rem)]">
+        <DialogHeader className="shrink-0 px-6 pt-6">
           <DialogTitle className="text-center text-lg font-light">
             Choose a wallet
           </DialogTitle>
@@ -457,6 +457,7 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
           </DialogDescription>
         </DialogHeader>
 
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
         {/* Recent / registered */}
         <div className="mt-2 space-y-1.5">
           {loadingLinked ? (
@@ -585,6 +586,7 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
         <p className="mt-4 text-center text-[10px] uppercase tracking-widest text-muted-foreground/60">
           We never auto-reconnect — you stay in control.
         </p>
+        </div>
       </DialogContent>
     </Dialog>
   );
