@@ -551,9 +551,37 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
           <div className="h-px flex-1 bg-border/60" />
         </div>
 
+        {/* Search */}
+        <div className="relative mt-3">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/70" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search wallets…"
+            className="h-9 rounded-xl border-border/60 bg-secondary/40 pl-9 text-xs placeholder:text-muted-foreground/60"
+          />
+        </div>
+
         {/* Flat wallet list */}
         <div className="mt-3 grid grid-cols-1 gap-1.5">
-          {SUPPORTED_WALLETS.map((w) => {
+          {(() => {
+            const q = search.trim().toLowerCase();
+            const filtered = q
+              ? SUPPORTED_WALLETS.filter(
+                  (w) =>
+                    w.label.toLowerCase().includes(q) ||
+                    w.blurb.toLowerCase().includes(q) ||
+                    w.id.toLowerCase().includes(q),
+                )
+              : SUPPORTED_WALLETS;
+            if (filtered.length === 0) {
+              return (
+                <div className="rounded-xl border border-dashed border-border/60 px-3 py-6 text-center text-xs text-muted-foreground">
+                  No wallets match “{search}”.
+                </div>
+              );
+            }
+            return filtered.map((w) => {
             const busyKey = `wallet:${w.id}`;
             const isBusy = busyId === busyKey;
             return (
@@ -583,7 +611,8 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
                 )}
               </button>
             );
-          })}
+            });
+          })()}
         </div>
 
         <p className="mt-4 text-center text-[10px] uppercase tracking-widest text-muted-foreground/60">
