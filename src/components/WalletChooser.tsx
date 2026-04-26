@@ -357,10 +357,18 @@ export const WalletChooser = ({ open, onOpenChange, preferredChain }: Props) => 
     setSolModalVisible(true);
   };
 
-  const handleNewEvm = () => {
+  const handleNewEvm = async () => {
     onOpenChange(false);
-    if (openRainbowKit) openRainbowKit();
-    else toast.error("EVM wallet modal isn't ready yet");
+    if (evmConnected) {
+      try {
+        await disconnectEvm();
+      } catch {
+        /* ignore */
+      }
+    }
+    // RainbowKit hides the connect modal while a wallet is connected, so we
+    // queue the open and let the effect fire it once disconnect lands.
+    setPendingEvmModal(true);
   };
 
   return (
