@@ -7,7 +7,7 @@ import {
   useConnectors,
   useDisconnect as useEvmDisconnect,
 } from "wagmi";
-import { Loader2, Wallet, History as HistoryIcon } from "lucide-react";
+import { Loader2, Wallet, History as HistoryIcon, Search } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -161,6 +162,7 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [pendingSolanaWalletName, setPendingSolanaWalletName] =
     useState<WalletName | null>(null);
+  const [search, setSearch] = useState("");
 
   // ---------------------------------------------------------------------------
   // Solana two-step handoff. `select()` is async via state, so we wait until
@@ -207,6 +209,7 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
     if (!open) {
       setBusyId(null);
       setPendingSolanaWalletName(null);
+      setSearch("");
     }
   }, [open]);
 
@@ -548,9 +551,37 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
           <div className="h-px flex-1 bg-border/60" />
         </div>
 
+        {/* Search */}
+        <div className="relative mt-3">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/70" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search wallets…"
+            className="h-9 rounded-xl border-border/60 bg-secondary/40 pl-9 text-xs placeholder:text-muted-foreground/60"
+          />
+        </div>
+
         {/* Flat wallet list */}
         <div className="mt-3 grid grid-cols-1 gap-1.5">
-          {SUPPORTED_WALLETS.map((w) => {
+          {(() => {
+            const q = search.trim().toLowerCase();
+            const filtered = q
+              ? SUPPORTED_WALLETS.filter(
+                  (w) =>
+                    w.label.toLowerCase().includes(q) ||
+                    w.blurb.toLowerCase().includes(q) ||
+                    w.id.toLowerCase().includes(q),
+                )
+              : SUPPORTED_WALLETS;
+            if (filtered.length === 0) {
+              return (
+                <div className="rounded-xl border border-dashed border-border/60 px-3 py-6 text-center text-xs text-muted-foreground">
+                  No wallets match “{search}”.
+                </div>
+              );
+            }
+            return filtered.map((w) => {
             const busyKey = `wallet:${w.id}`;
             const isBusy = busyId === busyKey;
             return (
@@ -580,7 +611,8 @@ export const WalletChooser = ({ open, onOpenChange }: Props) => {
                 )}
               </button>
             );
-          })}
+            });
+          })()}
         </div>
 
         <p className="mt-4 text-center text-[10px] uppercase tracking-widest text-muted-foreground/60">
