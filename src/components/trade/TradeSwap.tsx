@@ -412,7 +412,7 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
       if (!mounted.current) return;
       setPhase({ name: "error", message: e instanceof Error ? e.message : "Something went wrong." });
     }
-  }, [connected, publicKey, signTransaction, quote, outputToken]);
+  }, [connected, publicKey, signTransaction, quote, outputToken, dynamicSlippage]);
 
   const resetSwap = () => {
     setAmount("");
