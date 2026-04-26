@@ -285,10 +285,13 @@ const Auth = () => {
                   </p>
                   <p className="text-xs leading-relaxed text-muted-foreground">
                     You're viewing Vision inside {inApp.label ?? "an in-app browser"}.
-                    Google blocks sign-in from in-app browsers, and other methods
-                    may behave oddly. Tap the <span className="font-medium text-foreground">⋯</span> menu
-                    and choose <span className="font-medium text-foreground">"Open in Safari"</span> or
-                    <span className="font-medium text-foreground"> "Open in Chrome"</span>.
+                    Google blocks sign-in from in-app browsers
+                    (<span className="font-mono">error 403: disallowed_useragent</span>),
+                    and other methods may behave oddly. Tap the
+                    <span className="font-medium text-foreground"> ⋯ </span>menu and choose
+                    <span className="font-medium text-foreground"> "Open in Safari"</span> or
+                    <span className="font-medium text-foreground"> "Open in Chrome"</span>,
+                    or paste the link below into your normal browser.
                   </p>
                   <div className="flex flex-wrap gap-2 pt-1">
                     <Button
