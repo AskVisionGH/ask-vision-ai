@@ -178,6 +178,7 @@ const Onboarding = () => {
     setFinishing(true);
     const ok = await updateProfile({
       risk_tolerance: risk,
+      language,
       onboarding_completed: true,
     });
     setFinishing(false);
