@@ -23,7 +23,7 @@ interface Props {
 export const ConnectWalletButton = ({ className, size = "lg" }: Props) => {
   const [chooserOpen, setChooserOpen] = useState(false);
   const { connected, publicKey, disconnect, connecting, wallet } = useWallet();
-  const { address: evmAddress, isConnected: evmConnected, connector: evmConnector } = useAccount();
+  const { address: evmAddress, isConnected: evmConnected, connector: evmConnector, chainId: evmChainId } = useAccount();
   const { disconnect: evmDisconnect } = useEvmDisconnect();
 
   // Persist successful connects to the "last used" history so the chooser
