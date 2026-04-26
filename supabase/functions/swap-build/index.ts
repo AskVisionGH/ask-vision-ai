@@ -347,3 +347,56 @@ async function detectToken2022Mint(mint: string): Promise<boolean> {
     return false;
   }
 }
+
+async function buildUpfrontFeeTx(opts: {
+  userPublicKey: string;
+  inputMint: string;
+  totalAtomic: bigint;
+  inputIsToken2022: boolean;
+}): Promise<{ transaction: string; feeAmountAtomic: string }> {
+  const treasury = Deno.env.get("TREASURY_PUBLIC_KEY");
+  const heliusKey = Deno.env.get("HELIUS_API_KEY");
+  if (!treasury) throw new Error("TREASURY_PUBLIC_KEY not configured");
+  if (!heliusKey) throw new Error("HELIUS_API_KEY not configured");
+
+  // 1% of input, rounded up so we never under-collect.
+  const feeAtomic = (opts.totalAtomic * BigInt(FEE_BPS) + 9999n) / 10000n;
+
+  const user = new PublicKey(opts.userPublicKey);
+  const treasuryPk = new PublicKey(treasury);
+  const conn = new Connection(`https://mainnet.helius-rpc.com/?api-key=${heliusKey}`, "confirmed");
+
+  const tx = new Transaction();
+  tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }));
+
+  if (opts.inputMint === SOL_MINT) {
+    tx.add(SystemProgram.transfer({
+      fromPubkey: user,
+      toPubkey: treasuryPk,
+      lamports: Number(feeAtomic),
+    }));
+  } else {
+    const tokenProgram = opts.inputIsToken2022 ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID;
+    const mintPk = new PublicKey(opts.inputMint);
+    // Look up decimals on-chain so transferChecked validates correctly.
+    const mintInfo = await conn.getParsedAccountInfo(mintPk, "confirmed");
+    const decimals = Number((mintInfo.value?.data as any)?.parsed?.info?.decimals ?? 0);
+    const fromAta = getAssociatedTokenAddressSync(mintPk, user, true, tokenProgram);
+    const toAta = getAssociatedTokenAddressSync(mintPk, treasuryPk, true, tokenProgram);
+    tx.add(createAssociatedTokenAccountIdempotentInstruction(
+      user, toAta, treasuryPk, mintPk, tokenProgram,
+    ));
+    tx.add(createTransferCheckedInstruction(
+      fromAta, mintPk, toAta, user, feeAtomic, decimals, [], tokenProgram,
+    ));
+  }
+
+  const { blockhash } = await conn.getLatestBlockhash("confirmed");
+  tx.recentBlockhash = blockhash;
+  tx.feePayer = user;
+
+  const serialized = tx.serialize({ requireAllSignatures: false, verifySignatures: false });
+  const txB64 = btoa(String.fromCharCode(...serialized));
+
+  return { transaction: txB64, feeAmountAtomic: feeAtomic.toString() };
+}
