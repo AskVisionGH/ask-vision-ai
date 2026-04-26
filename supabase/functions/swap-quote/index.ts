@@ -30,6 +30,7 @@ interface TokenMeta {
   decimals: number;
   logo: string | null;
   priceUsd: number | null;
+  isToken2022?: boolean;
 }
 
 const isMint = (s: string) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s);
@@ -102,14 +103,12 @@ const STABLE_MINTS = new Set<string>([
 ]);
 
 async function fetchMeta(mint: string, dexPair?: any): Promise<TokenMeta | null> {
-  // Get decimals + symbol from Jupiter token list. Jupiter v2 also returns
-  // `usdPrice` which is generally more reliable than DexScreener for
-  // mid-cap and stablecoin tokens — use it as the primary price source.
   let decimals = 9;
   let symbol = "?";
   let name = "Unknown";
   let logo: string | null = null;
   let priceUsd: number | null = null;
+  const isToken2022 = await detectToken2022Mint(mint);
 
   try {
     const jupResp = await fetch(`https://lite-api.jup.ag/tokens/v2/search?query=${mint}`);
@@ -128,7 +127,6 @@ async function fetchMeta(mint: string, dexPair?: any): Promise<TokenMeta | null>
     }
   } catch (_) { /* ignore */ }
 
-  // DexScreener fallback for price + logo (only if Jupiter didn't have a price)
   try {
     const pair = dexPair ?? await (async () => {
       const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${mint}`);
@@ -139,8 +137,6 @@ async function fetchMeta(mint: string, dexPair?: any): Promise<TokenMeta | null>
       return ps[0] ?? null;
     })();
     if (pair) {
-      // Only adopt DexScreener's price if Jupiter didn't give us one AND
-      // the pair has the token as the BASE (so priceUsd is in real USD).
       if (priceUsd == null && pair.priceUsd && pair.baseToken?.address === mint) {
         priceUsd = Number(pair.priceUsd);
       }
@@ -150,11 +146,33 @@ async function fetchMeta(mint: string, dexPair?: any): Promise<TokenMeta | null>
     }
   } catch (_) { /* ignore */ }
 
-  // Hard pin known stablecoins to $1. Even if Jupiter/DexScreener returned
-  // a slightly off-peg figure, the swap-card math expects ~$1 here.
   if (STABLE_MINTS.has(mint)) priceUsd = 1;
 
-  return { symbol, name, address: mint, decimals, logo, priceUsd };
+  return { symbol, name, address: mint, decimals, logo, priceUsd, isToken2022 };
+}
+
+async function detectToken2022Mint(mint: string): Promise<boolean> {
+  const heliusKey = Deno.env.get("HELIUS_API_KEY");
+  const rpcUrl = heliusKey
+    ? `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`
+    : "https://api.mainnet-beta.solana.com";
+  try {
+    const resp = await fetch(rpcUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "mint-owner",
+        method: "getAccountInfo",
+        params: [mint, { encoding: "jsonParsed", commitment: "confirmed" }],
+      }),
+    });
+    if (!resp.ok) return false;
+    const data = await resp.json();
+    return data?.result?.value?.owner === "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+  } catch {
+    return false;
+  }
 }
 
 serve(async (req) => {
@@ -209,12 +227,13 @@ serve(async (req) => {
     quoteUrl.searchParams.set("slippageBps", String(slippageBps));
     quoteUrl.searchParams.set("restrictIntermediateTokens", "true");
 
-    // Platform fee — Jupiter takes it in the OUTPUT mint and routes it to
-    // a token account owned by our referral PDA. Configured via secret so
-    // we can rotate without code changes.
+    // Platform fee — use Jupiter's output-fee path for normal SPL outputs,
+    // but fall back to an upfront input-token fee for Token-2022 outputs,
+    // since some routes fail on-chain when the output mint carries the fee.
     const PLATFORM_FEE_BPS = 100; // 1%
     const referralAccount = Deno.env.get("JUPITER_REFERRAL_ACCOUNT") ?? "";
-    if (referralAccount) {
+    const collectPlatformFeeUpfront = Boolean(referralAccount) && outMeta.isToken2022 === true;
+    if (referralAccount && !collectPlatformFeeUpfront) {
       quoteUrl.searchParams.set("platformFeeBps", String(PLATFORM_FEE_BPS));
     }
 
@@ -237,7 +256,6 @@ serve(async (req) => {
       ? Number(quote.priceImpactPct) * 100
       : null;
 
-    // Route hops with AMM names
     const route = (quote.routePlan ?? []).map((step: any) => ({
       ammKey: step.swapInfo?.ammKey ?? null,
       label: step.swapInfo?.label ?? "Unknown",
@@ -245,12 +263,15 @@ serve(async (req) => {
       outputMint: step.swapInfo?.outputMint ?? null,
     }));
 
-    // Platform fee surfaced for UI disclosure
     const platformFeeBps = referralAccount ? PLATFORM_FEE_BPS : 0;
-    const platformFeeUi = quote.platformFee?.amount
-      ? Number(quote.platformFee.amount) / Math.pow(10, outMeta.decimals)
-      : (platformFeeBps > 0 ? outUi * (platformFeeBps / 10_000) : 0);
-    const platformFeeUsd = outMeta.priceUsd != null ? platformFeeUi * outMeta.priceUsd : null;
+    const platformFeeUi = collectPlatformFeeUpfront
+      ? inUi * (platformFeeBps / 10_000)
+      : quote.platformFee?.amount
+        ? Number(quote.platformFee.amount) / Math.pow(10, outMeta.decimals)
+        : (platformFeeBps > 0 ? outUi * (platformFeeBps / 10_000) : 0);
+    const platformFeeUsd = collectPlatformFeeUpfront
+      ? (inMeta.priceUsd != null ? platformFeeUi * inMeta.priceUsd : null)
+      : (outMeta.priceUsd != null ? platformFeeUi * outMeta.priceUsd : null);
 
     return json({
       input: { ...inMeta, amountUi: inUi, amountAtomic: atomicIn, valueUsd: inValueUsd },
@@ -260,13 +281,13 @@ serve(async (req) => {
       slippageBps,
       dynamicSlippage,
       route,
-      // Typical Solana network fee for a swap (rough estimate, in SOL)
       estNetworkFeeSol: 0.000075,
       platformFee: {
         bps: platformFeeBps,
         amountUi: platformFeeUi,
-        symbol: outMeta.symbol,
+        symbol: collectPlatformFeeUpfront ? inMeta.symbol : outMeta.symbol,
         valueUsd: platformFeeUsd,
+        collectUpfront: collectPlatformFeeUpfront,
       },
       quotedAt: Date.now(),
     });
