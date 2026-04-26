@@ -160,7 +160,7 @@ const Auth = () => {
         const result = await signInWithEthereum({
           walletAddress: evmAddress,
           chainId: evmChainId ?? 1,
-          signMessage: (message) => signMessageAsync({ message }),
+          signMessage: (message) => signMessageAsync({ account: evmAddress as `0x${string}`, message }),
         });
         if (result.error) {
           toast.error("Wallet sign-in failed", { description: result.error });
