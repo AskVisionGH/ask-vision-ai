@@ -486,7 +486,7 @@ const Chat = () => {
       {/* Main column */}
       <div className="relative z-10 flex h-full min-w-0 flex-1 flex-col">
         {/* Header */}
-        <header className="flex shrink-0 items-center justify-between border-b border-border/60 bg-background/60 px-4 py-3 backdrop-blur-md sm:px-6">
+        <header className="flex shrink-0 items-center justify-between border-b border-border/60 bg-background/60 px-3 py-2.5 backdrop-blur-md sm:px-6 sm:py-3">
           <div className="flex items-center gap-2">
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
               <SheetTrigger asChild>
