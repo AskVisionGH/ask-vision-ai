@@ -100,6 +100,11 @@ serve(async (req) => {
     //     (so e.g. "bought $HENRY with SOL" still produces cost basis).
     await backfillSolValueUsd(parsed, balance);
 
+    // 3c) Enrich tx legs with the real ticker from the balance snapshot when
+    //     available — so a recently bought $HENRY in `recentTxs` shows
+    //     "HENRY" instead of "CJUr…pump".
+    enrichTxSymbols(parsed, balance);
+
     // 4) Compute per-token PnL
     const tokenPnL = computeTokenPnL(parsed, balance);
 
