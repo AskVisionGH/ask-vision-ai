@@ -1,21 +1,15 @@
 import { Link } from "react-router-dom";
 import {
-  ArrowLeftRight,
-  Bell,
   LogOut,
-  MessageSquare,
   MessageSquarePlus,
   PanelLeftClose,
   PanelLeftOpen,
-  Radar,
-  Repeat,
   Settings as SettingsIcon,
-  Shield,
-  Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { UserAvatar } from "@/components/UserAvatar";
 import { VisionLogo } from "@/components/VisionLogo";
+import { getActiveNavId, getAppNavItems } from "@/lib/app-nav";
 import { cn } from "@/lib/utils";
 
 /**
