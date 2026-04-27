@@ -144,9 +144,20 @@ export const TradeDca = () => {
   );
   const [outputUsdPrice, setOutputUsdPrice] = useState<number | null>(null);
 
-  const { publicKey, connected, signTransaction } = useWallet();
+  const [walletSource, setWalletSource] = useState<WalletSource>("vision");
+  const [fundOpen, setFundOpen] = useState(false);
+
+  const { publicKey, connected } = useWallet();
   const { setVisible } = useWalletModal();
+  const visionWallet = useVisionWallet();
+  const visionSigner = useVisionWalletSigner();
+  const signer = useTradeSigner(walletSource);
   const mounted = useRef(true);
+
+  const activePayerAddress =
+    walletSource === "vision"
+      ? visionWallet.solanaAddress
+      : publicKey?.toBase58() ?? null;
 
   useEffect(() => {
     mounted.current = true;
