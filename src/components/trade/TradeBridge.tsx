@@ -26,6 +26,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { useEvmBridge } from "@/hooks/useEvmBridge";
 import { findEvmChain } from "@/lib/evm-chains";
 import { BridgeProgressModal } from "@/components/trade/BridgeProgressModal";
+import { useVisionWallet } from "@/hooks/useVisionWallet";
+import { useVisionWalletSigner } from "@/hooks/useVisionWalletSigner";
+import {
+  WalletSourcePicker,
+  type WalletSource,
+} from "@/components/trade/WalletSourcePicker";
+
+// CAIP-2 chain ID for Solana mainnet-beta — required by Privy's RPC.
+const SOLANA_CAIP2 = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
 
 // LI.FI uses numeric ids for every chain. Solana's id is this constant.
 const SOLANA_CHAIN_ID = 1151111081099710 as const;
