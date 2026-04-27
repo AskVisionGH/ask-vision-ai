@@ -74,9 +74,8 @@ export const VisionWalletCard = () => {
         <h2 className="text-lg font-semibold">Vision Wallet (beta)</h2>
       </div>
       <p className="text-sm text-muted-foreground mb-4">
-        One embedded wallet that works on Solana and every EVM chain
-        (Ethereum, Base, Arbitrum, Polygon, BSC). Recoverable via your
-        email — no extension required.
+        One magic wallet that trades on every chain — no extension, no
+        seed phrase. Recoverable via your email.
       </p>
 
       {!ready || loading ? (
@@ -96,7 +95,7 @@ export const VisionWalletCard = () => {
           {evmAddress && (
             <div>
               <Label className="text-xs uppercase text-muted-foreground">
-                EVM (Ethereum, Base, Arbitrum, Polygon, BSC)
+                Ethereum &amp; EVM chains
               </Label>
               <p className="font-mono text-sm break-all">{evmAddress}</p>
             </div>
@@ -104,14 +103,8 @@ export const VisionWalletCard = () => {
           {(!solanaAddress || !evmAddress) && (
             <Button onClick={handleCreate} disabled={working} variant="secondary">
               {working && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Add missing {!solanaAddress ? "Solana" : "EVM"} wallet
+              Finish wallet setup
             </Button>
-          )}
-          {row && (
-            <p className="text-xs text-muted-foreground">
-              Origin: {row.origin} · Linked to Privy user{" "}
-              {row.privy_user_id.slice(0, 12)}…
-            </p>
           )}
           <Button variant="outline" size="sm" onClick={disconnect}>
             Disconnect from this device
@@ -121,7 +114,7 @@ export const VisionWalletCard = () => {
         step === "idle" ? (
           <Button onClick={startLogin} disabled={busy}>
             {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Set up Vision Wallet
+            Create Vision Wallet
           </Button>
         ) : (
           <div className="space-y-3 max-w-sm">
@@ -154,7 +147,7 @@ export const VisionWalletCard = () => {
       ) : (
         <Button onClick={handleCreate} disabled={working}>
           {working && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Create Vision Wallet (Solana + EVM)
+          Create Vision Wallet
         </Button>
       )}
     </section>
