@@ -625,11 +625,6 @@ export const BridgePreviewCard = ({ data }: Props) => {
               visionAvailable={visionReady}
               externalAvailable={externalReady}
             />
-            {fromIsEvm && (
-              <p className="mt-2 font-mono text-[10px] leading-relaxed text-muted-foreground">
-                Vision Wallet doesn't yet support EVM-source bridges — using your external EVM wallet.
-              </p>
-            )}
           </div>
         )}
 
