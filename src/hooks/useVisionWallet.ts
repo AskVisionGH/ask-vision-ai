@@ -18,6 +18,23 @@ type VisionWalletRow = {
 };
 
 /**
+ * Module-level cache keyed by Supabase user id. Without this, every page
+ * navigation remounts `useVisionWallet`, which starts with `row = null`
+ * and triggers a refetch — causing the wallet pill in the header to
+ * briefly flash back to "Connect wallet" before the row reloads.
+ */
+const cache = new Map<string, VisionWalletRow | null>();
+const inflight = new Map<string, Promise<void>>();
+type Listener = (row: VisionWalletRow | null) => void;
+const listeners = new Map<string, Set<Listener>>();
+
+function notify(userId: string, row: VisionWalletRow | null) {
+  cache.set(userId, row);
+  const set = listeners.get(userId);
+  if (set) for (const fn of set) fn(row);
+}
+
+/**
  * useVisionWallet — single source of truth for the user's Vision Wallet.
  *
  * Vision Wallet is a fully managed (custodial) wallet provisioned by our
@@ -31,8 +48,12 @@ export function useVisionWallet() {
   const { session } = useAuth();
   const supabaseUserId = session?.user?.id ?? null;
 
-  const [row, setRow] = useState<VisionWalletRow | null>(null);
-  const [loading, setLoading] = useState(false);
+  // Seed from cache so navigation between pages doesn't blank the pill.
+  const [row, setRow] = useState<VisionWalletRow | null>(() =>
+    supabaseUserId ? cache.get(supabaseUserId) ?? null : null,
+  );
+  const cached = supabaseUserId ? cache.has(supabaseUserId) : false;
+  const [loading, setLoading] = useState(!cached && Boolean(supabaseUserId));
   const [working, setWorking] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -40,23 +61,51 @@ export function useVisionWallet() {
       setRow(null);
       return;
     }
-    setLoading(true);
-    const { data, error } = await supabase
-      .from("vision_wallets")
-      .select("*")
-      .eq("user_id", supabaseUserId)
-      .eq("is_active", true)
-      .maybeSingle();
-    if (error && error.code !== "PGRST116") {
-      console.warn("[useVisionWallet] load failed", error);
+    // De-dupe concurrent fetches across components
+    let promise = inflight.get(supabaseUserId);
+    if (!promise) {
+      setLoading(true);
+      promise = (async () => {
+        const { data, error } = await supabase
+          .from("vision_wallets")
+          .select("*")
+          .eq("user_id", supabaseUserId)
+          .eq("is_active", true)
+          .maybeSingle();
+        if (error && error.code !== "PGRST116") {
+          console.warn("[useVisionWallet] load failed", error);
+        }
+        notify(supabaseUserId, (data as VisionWalletRow | null) ?? null);
+      })().finally(() => {
+        inflight.delete(supabaseUserId);
+      });
+      inflight.set(supabaseUserId, promise);
     }
-    setRow((data as VisionWalletRow | null) ?? null);
+    await promise;
     setLoading(false);
   }, [supabaseUserId]);
 
+  // Subscribe to cache updates so all mounted instances stay in sync.
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    if (!supabaseUserId) return;
+    const listener: Listener = (next) => setRow(next);
+    let set = listeners.get(supabaseUserId);
+    if (!set) {
+      set = new Set();
+      listeners.set(supabaseUserId, set);
+    }
+    set.add(listener);
+    return () => {
+      set?.delete(listener);
+    };
+  }, [supabaseUserId]);
+
+  useEffect(() => {
+    // Only fetch if we don't already have a cached value for this user.
+    if (supabaseUserId && !cache.has(supabaseUserId)) {
+      void refresh();
+    }
+  }, [refresh, supabaseUserId]);
 
   /**
    * Create the Vision Wallet (or finish creating any missing chain).
