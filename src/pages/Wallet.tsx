@@ -178,11 +178,4 @@ const WalletPage = () => {
   );
 };
 
-const ComingSoon = ({ title, body }: { title: string; body: string }) => (
-  <div className="rounded-2xl border border-dashed border-border bg-card/30 p-8 text-center backdrop-blur-md">
-    <p className="text-sm text-foreground">{title}</p>
-    <p className="mt-2 text-xs text-muted-foreground">{body}</p>
-  </div>
-);
-
 export default WalletPage;
