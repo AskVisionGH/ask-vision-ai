@@ -24,6 +24,7 @@ import Admin from "./pages/Admin.tsx";
 import Trade from "./pages/Trade.tsx";
 import Alerts from "./pages/Alerts.tsx";
 import NotFound from "./pages/NotFound.tsx";
+import DesktopOnlyGate from "./components/DesktopOnlyGate";
 
 const queryClient = new QueryClient();
 
@@ -139,23 +140,25 @@ const AppRoutes = () => {
 
 const App = () => (
   <HelmetProvider>
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <ProfileProvider>
-          <WalletContextProvider>
-            <EvmWalletProvider queryClient={queryClient}>
-            <TooltipProvider>
-              <Toaster />
-              <Sonner />
-              <BrowserRouter>
-                <AppRoutes />
-              </BrowserRouter>
-            </TooltipProvider>
-            </EvmWalletProvider>
-          </WalletContextProvider>
-        </ProfileProvider>
-      </AuthProvider>
-    </QueryClientProvider>
+    <DesktopOnlyGate>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <ProfileProvider>
+            <WalletContextProvider>
+              <EvmWalletProvider queryClient={queryClient}>
+              <TooltipProvider>
+                <Toaster />
+                <Sonner />
+                <BrowserRouter>
+                  <AppRoutes />
+                </BrowserRouter>
+              </TooltipProvider>
+              </EvmWalletProvider>
+            </WalletContextProvider>
+          </ProfileProvider>
+        </AuthProvider>
+      </QueryClientProvider>
+    </DesktopOnlyGate>
   </HelmetProvider>
 );
 
