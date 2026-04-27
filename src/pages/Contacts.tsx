@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { ArrowLeft, Menu, Plus, Trash2, UserRound, Wallet } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
+import { AlertBell } from "@/components/AlertBell";
+import { ConnectWalletButton } from "@/components/ConnectWalletButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,7 +36,7 @@ import { cn } from "@/lib/utils";
 const truncate = (a: string) => (a.length > 12 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a);
 
 const Contacts = () => {
-  const navigate = useNavigate();
+  
   const location = useLocation();
   const { user, signOut } = useAuth();
   const { profile } = useProfile();
@@ -130,15 +132,15 @@ const Contacts = () => {
 
       {/* Main column */}
       <div className="relative z-10 flex h-full min-w-0 flex-1 flex-col overflow-hidden">
-        {/* Mobile header */}
-        <header className="flex shrink-0 items-center justify-between border-b border-border/60 bg-background/60 px-4 py-3 backdrop-blur-md md:hidden">
+        {/* Header */}
+        <header className="flex shrink-0 items-center justify-between border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
           <div className="flex items-center gap-2">
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
               <SheetTrigger asChild>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-muted-foreground"
+                  className="h-9 w-9 text-muted-foreground md:hidden"
                   aria-label="Open menu"
                 >
                   <Menu className="h-4 w-4" />
@@ -155,24 +157,28 @@ const Contacts = () => {
                 />
               </SheetContent>
             </Sheet>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 md:hidden">
               <VisionLogo size={20} />
               <span className="font-mono text-xs tracking-widest uppercase text-muted-foreground">
                 Vision
               </span>
             </div>
+            <Link
+              to="/chat"
+              className="hidden md:flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/60 ease-vision"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Back to chat
+            </Link>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <AlertBell />
+            <ConnectWalletButton size="default" />
           </div>
         </header>
 
         <main className="flex-1 overflow-y-auto px-4 py-8 sm:px-6">
           <div className="mx-auto max-w-2xl">
-            <button
-              onClick={() => navigate("/chat")}
-              className="mb-6 hidden md:flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground ease-vision"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              Back to chat
-            </button>
 
         <div className="mb-8 flex items-end justify-between gap-4">
           <div>
