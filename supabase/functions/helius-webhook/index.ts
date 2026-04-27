@@ -182,6 +182,19 @@ Deno.serve(async (req) => {
   }
   const tracked = new Set(trackers.keys());
 
+  // Map (wallet → user_id) for OWN linked wallets — used to attribute the 1%
+  // swap fee. Only true owners (wallet_links) get a treasury_fees row, never
+  // observed smart-money wallets.
+  const { data: ownLinks } = await admin
+    .from("wallet_links")
+    .select("wallet_address, user_id")
+    .in("wallet_address", [...allAddrs]);
+  const ownerByWallet = new Map<string, string>();
+  for (const r of ownLinks ?? []) {
+    ownerByWallet.set(String(r.wallet_address), String(r.user_id));
+  }
+
+
   const solUsd = await fetchSolPrice();
 
   let inserted = 0;
@@ -202,24 +215,28 @@ Deno.serve(async (req) => {
     const incoming = tts.find((t) => t.toUserAccount === involved);
 
     for (const userId of userIds) {
-      const { error } = await admin.from("tx_events").insert({
-        user_id: userId,
-        kind,
-        signature: sig,
-        wallet_address: involved,
-        input_mint: outgoing?.mint ?? null,
-        input_amount: outgoing?.tokenAmount ?? null,
-        output_mint: incoming?.mint ?? null,
-        output_amount: incoming?.tokenAmount ?? null,
-        value_usd: Math.round(valueUsd * 100) / 100,
-        recipient: incoming?.toUserAccount ?? outgoing?.toUserAccount ?? null,
-        metadata: {
-          source: tx.source ?? null,
-          type: tx.type ?? null,
-          timestamp: tx.timestamp ?? null,
-          via: "helius_webhook",
-        },
-      });
+      const { data: txRow, error } = await admin
+        .from("tx_events")
+        .insert({
+          user_id: userId,
+          kind,
+          signature: sig,
+          wallet_address: involved,
+          input_mint: outgoing?.mint ?? null,
+          input_amount: outgoing?.tokenAmount ?? null,
+          output_mint: incoming?.mint ?? null,
+          output_amount: incoming?.tokenAmount ?? null,
+          value_usd: Math.round(valueUsd * 100) / 100,
+          recipient: incoming?.toUserAccount ?? outgoing?.toUserAccount ?? null,
+          metadata: {
+            source: tx.source ?? null,
+            type: tx.type ?? null,
+            timestamp: tx.timestamp ?? null,
+            via: "helius_webhook",
+          },
+        })
+        .select("id")
+        .maybeSingle();
       if (error) {
         // Duplicate on (user_id, signature) is expected on retries — ignore.
         if (!String(error.message ?? "").toLowerCase().includes("duplicate")) {
@@ -227,6 +244,66 @@ Deno.serve(async (req) => {
         }
       } else {
         inserted++;
+      }
+
+      // ---- Treasury fee attribution (server-side fallback) ------------------
+      // The chat-side `record-swap-fee` call only fires if the user keeps the
+      // page open through confirmation polling. For high-value memecoin swaps
+      // that take 30s+ to land, users often close the chat first — losing
+      // attribution. This server-side path guarantees every own-wallet swap
+      // generates a 1% treasury_fees row, deduped against the client call by
+      // the unique (chain, signature, asset_address) index.
+      const ownerUser = ownerByWallet.get(involved);
+      const isOwnSwap =
+        kind === "swap" &&
+        ownerUser === userId &&
+        tx.feePayer === involved &&
+        valueUsd > 0;
+      if (isOwnSwap) {
+        const PLATFORM_FEE_BPS = 100;
+        const SOL_TREASURY = "ASKVSe32esNeK7i84oGsL5F9cqh8ov3neXEF8jSc9i89";
+        // Jupiter takes the fee from the OUTPUT mint. Map known mints to the
+        // same shape `record-swap-fee` writes so the dedupe index matches.
+        const outMint = incoming?.mint ?? null;
+        const isSolOut = !outMint || outMint === SOL_MINT;
+        const assetSymbol = isSolOut
+          ? "SOL"
+          : (outMint && STABLES.has(outMint) ? "USDC" : null);
+        const assetAddress = isSolOut ? null : outMint;
+        const feeUsd = Math.round(valueUsd * (PLATFORM_FEE_BPS / 10_000) * 1_000_000) / 1_000_000;
+
+        const { error: feeErr } = await admin.from("treasury_fees").insert({
+          chain: "solana",
+          treasury_address: SOL_TREASURY,
+          source_kind: "swap_fee",
+          asset_symbol: assetSymbol,
+          asset_address: assetAddress,
+          amount: 0, // unknown without on-chain inspection — USD value is what matters
+          amount_usd: feeUsd,
+          signature: sig,
+          from_address: involved,
+          block_time: tx.timestamp
+            ? new Date(tx.timestamp * 1000).toISOString()
+            : new Date().toISOString(),
+          related_user_id: userId,
+          related_tx_event_id: txRow?.id ?? null,
+          metadata: {
+            bps: PLATFORM_FEE_BPS,
+            valueUsd,
+            inputMint: outgoing?.mint ?? null,
+            outputMint: outMint,
+            via: "helius_webhook",
+          },
+        });
+        if (feeErr) {
+          // 23505 = unique violation = client-side `record-swap-fee` already
+          // recorded this fee. That's the success path — both ends raced and
+          // the index protected us.
+          const code = (feeErr as { code?: string }).code;
+          if (code !== "23505" && !String(feeErr.message ?? "").toLowerCase().includes("duplicate")) {
+            console.error("treasury_fees insert failed", { sig, userId, err: feeErr.message });
+          }
+        }
       }
     }
   }
