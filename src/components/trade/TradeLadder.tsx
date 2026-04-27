@@ -558,6 +558,16 @@ export const TradeLadder = ({ expirySeconds }: Props) => {
   return (
     <TooltipProvider delayDuration={150}>
       <div className="w-full max-w-[440px] space-y-4">
+        <WalletSourcePicker
+          value={walletSource}
+          onChange={setWalletSource}
+          visionAvailable
+          externalAvailable={connected}
+          onCreateVision={() => {
+            visionWallet.createWallet().catch(() => { /* hook toasts */ });
+          }}
+          onConnectExternal={() => setVisible(true)}
+        />
         <div className="overflow-hidden rounded-2xl border border-border bg-card/60 backdrop-blur-sm shadow-soft">
           {/* Side toggle */}
           <div className="flex items-center gap-1 border-b border-border/60 bg-secondary/20 p-1">
