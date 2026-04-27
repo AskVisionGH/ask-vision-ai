@@ -1334,7 +1334,88 @@ function safeJson(s: unknown): any {
   }
 }
 
-async function invokeFn(name: string, body: unknown, req: Request) {
+// ----------------------------------------------------------------------------
+// Entry-relative price resolution
+// ----------------------------------------------------------------------------
+//
+// Users naturally express trade targets relative to their cost basis: "sell at
+// 2x my buy", "+50% from entry", "stop at break-even", "when I'm down 30%".
+// We resolve these on the server by calling wallet-pnl with `slice: token_pnl`
+// (which already returns `costUsd` and `unitsBought` for the matched token)
+// and computing the absolute USD target. Centralising here keeps the per-tool
+// handlers small.
+
+interface FromEntrySpec {
+  multiplier?: number;
+  percentChange?: number;
+}
+
+interface EntryResolution {
+  avgEntryUsd: number | null;
+  targetPriceUsd: number | null;
+  symbol: string | null;
+  unitsBought: number | null;
+  costUsd: number | null;
+  error: string | null;
+}
+
+function isStableTicker(t: unknown): boolean {
+  if (typeof t !== "string") return false;
+  const upper = t.trim().replace(/^\$/, "").toUpperCase();
+  return upper === "USDC" || upper === "USDT";
+}
+
+/** Convert a `{ multiplier?, percentChange? }` spec into an absolute USD price. */
+function applyFromEntry(avgEntryUsd: number, spec: FromEntrySpec): number | null {
+  if (spec.multiplier != null && Number.isFinite(spec.multiplier) && spec.multiplier > 0) {
+    return avgEntryUsd * spec.multiplier;
+  }
+  if (spec.percentChange != null && Number.isFinite(spec.percentChange)) {
+    const v = avgEntryUsd * (1 + spec.percentChange / 100);
+    return v > 0 ? v : null;
+  }
+  return null;
+}
+
+async function resolveEntryRelativePrice(opts: {
+  wallet: string;
+  token: string;
+  priceFromEntry: FromEntrySpec;
+  req: Request;
+}): Promise<EntryResolution> {
+  const { wallet, token, priceFromEntry, req } = opts;
+  const empty: EntryResolution = {
+    avgEntryUsd: null, targetPriceUsd: null, symbol: null,
+    unitsBought: null, costUsd: null, error: null,
+  };
+  if (!wallet || !token) {
+    return { ...empty, error: "Need both a connected wallet and a token to resolve entry price." };
+  }
+  const isEvm = /^0x[a-fA-F0-9]{40}$/.test(wallet);
+  const fnName = isEvm ? "evm-wallet-pnl" : "wallet-pnl";
+  const body: Record<string, unknown> = { address: wallet, slice: "token_pnl", tokenFilter: token };
+  if (isEvm) body.chainId = 1;
+  const data = await invokeFn(fnName, body, req);
+  if (!data || typeof data !== "object" || (data as any).error) {
+    return { ...empty, error: (data as any)?.error ?? "Couldn't load PnL for that token." };
+  }
+  const tk = (data as any).token;
+  if (!tk) {
+    return { ...empty, error: `No PnL history found for ${token} in the last 30 days — I can't resolve "from my entry" without a buy on record. Use an absolute price instead.` };
+  }
+  const costUsd = Number(tk.costUsd ?? 0);
+  const unitsBought = Number(tk.unitsBought ?? 0);
+  if (!(costUsd > 0) || !(unitsBought > 0)) {
+    return { ...empty, symbol: tk.symbol ?? null, error: `I don't have a recorded buy for ${tk.symbol ?? token} (it may have been transferred in). Use an absolute price instead.` };
+  }
+  const avgEntryUsd = costUsd / unitsBought;
+  const targetPriceUsd = applyFromEntry(avgEntryUsd, priceFromEntry);
+  return {
+    avgEntryUsd, targetPriceUsd,
+    symbol: tk.symbol ?? null, unitsBought, costUsd,
+    error: targetPriceUsd == null ? "priceFromEntry needs `multiplier` (>0) or `percentChange`." : null,
+  };
+}
   const supaUrl = Deno.env.get("SUPABASE_URL");
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
   if (!supaUrl || !anonKey) return { error: "Backend misconfigured" };
