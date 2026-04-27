@@ -893,7 +893,7 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
   if (phase.name === "building") busyLabel = "Building transaction…";
   else if (phase.name === "switching_chain") busyLabel = "Switch network in wallet…";
   else if (phase.name === "approving") busyLabel = "Approving token…";
-  else if (phase.name === "awaiting_signature") busyLabel = "Approve in wallet…";
+  else if (phase.name === "awaiting_signature") busyLabel = walletSource === "vision" ? "Signing with Vision Wallet…" : "Approve in wallet…";
   else if (phase.name === "submitting") busyLabel = "Submitting…";
   else if (phase.name === "bridging") {
     const elapsedSec = Math.max(0, (nowTick - phase.startedAt) / 1000);
