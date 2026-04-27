@@ -31,6 +31,7 @@ import {
   recordStrandedRoute,
   clearStrandedRoute,
   makeStrandedId,
+  type StrandedRoute,
 } from "@/lib/stranded-routes";
 
 const SOLANA_CAIP2 = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
