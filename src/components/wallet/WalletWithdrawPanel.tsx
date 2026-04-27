@@ -227,7 +227,7 @@ function SolanaWithdrawForm({ fromAddress }: { fromAddress: string }) {
         <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Asset</Label>
         <AssetPicker
           holdings={(holdings ?? []).map((h) => ({
-            id: h.mint === "SOL" ? "SOL" : h.mint,
+            id: isSolMint(h.mint) ? "SOL" : h.mint,
             symbol: h.symbol,
             name: h.name,
             logo: h.logo,
