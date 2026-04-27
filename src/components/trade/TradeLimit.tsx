@@ -157,10 +157,22 @@ export const TradeLimit = ({ tab, onTabChange }: Props) => {
   const [ordersRefreshKey, setOrdersRefreshKey] = useState(0);
   const [confirmInstantFill, setConfirmInstantFill] = useState(false);
 
+  const [walletSource, setWalletSource] = useState<WalletSource>("vision");
+  const [fundOpen, setFundOpen] = useState(false);
+
   const { connection } = useConnection();
-  const { publicKey, connected, signTransaction } = useWallet();
+  const { publicKey, connected } = useWallet();
   const { setVisible } = useWalletModal();
+  const visionWallet = useVisionWallet();
+  const signer = useTradeSigner(walletSource);
   const mounted = useRef(true);
+
+  const activePayerAddress =
+    walletSource === "vision"
+      ? visionWallet.solanaAddress
+      : publicKey?.toBase58() ?? null;
+  const activePayerReady =
+    walletSource === "vision" ? !!visionWallet.solanaAddress : connected;
 
   useEffect(() => {
     mounted.current = true;
