@@ -453,7 +453,7 @@ const TokenShare = ({ data, theme }: { data: TokenPnLData; theme: Theme }) => {
       {/* Token row */}
       <div className="flex items-center gap-4">
         <div style={{ transform: "scale(1.6)", transformOrigin: "left center" }}>
-          <TokenLogo logo={t.logo} symbol={t.symbol} />
+          <TokenLogo logo={t.logo} symbol={t.symbol} crossOrigin />
         </div>
         <div className="ml-5">
           <p className="font-mono text-[24px] font-medium leading-tight">${t.symbol}</p>
