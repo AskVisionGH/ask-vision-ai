@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { useConnection } from "@solana/wallet-adapter-react";
 import { LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
+import { createPublicClient, http, formatEther, type Chain } from "viem";
+import { mainnet, arbitrum, optimism, base, polygon, bsc } from "wagmi/chains";
 import {
   Dialog,
   DialogContent,
@@ -22,10 +24,28 @@ interface FundVisionWalletDialogProps {
   defaultChain?: "solana" | "evm";
 }
 
+// EVM chains we surface a live native balance for. Kept short so the
+// dialog stays fast — covers the chains most users actually deposit on.
+// The same address works on every EVM chain regardless.
+const EVM_BALANCE_CHAINS: { chain: Chain; label: string }[] = [
+  { chain: mainnet, label: "Ethereum" },
+  { chain: base, label: "Base" },
+  { chain: arbitrum, label: "Arbitrum" },
+  { chain: optimism, label: "Optimism" },
+  { chain: polygon, label: "Polygon" },
+  { chain: bsc, label: "BNB Chain" },
+];
+
+type EvmBalanceState = {
+  // value is null when still loading, undefined when the RPC errored
+  [chainId: number]: { value: bigint | null | undefined; symbol: string };
+};
+
 /**
  * FundVisionWalletDialog — shows the user's Vision Wallet deposit addresses
- * for Solana and EVM chains, with QR codes, copy buttons, and a live native
- * balance read for Solana. Users send funds to these addresses to top up.
+ * for Solana and EVM chains, with QR codes, copy buttons, and live native
+ * balance reads on both chains. Users send funds to these addresses to top
+ * up.
  *
  * IMPORTANT: deposits are on-chain transfers from the user's *external*
  * source (CEX, other wallet) into the Vision Wallet. We do not initiate
@@ -41,6 +61,21 @@ export function FundVisionWalletDialog({
   const [copied, setCopied] = useState<"solana" | "evm" | null>(null);
   const [solBalance, setSolBalance] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [evmBalances, setEvmBalances] = useState<EvmBalanceState>({});
+  const [evmRefreshing, setEvmRefreshing] = useState(false);
+
+  // One viem client per chain — memoised so we don't recreate on every
+  // render. Uses each chain's built-in default RPC; good enough for a
+  // read-only `eth_getBalance` poll.
+  const evmClients = useMemo(
+    () =>
+      EVM_BALANCE_CHAINS.map(({ chain, label }) => ({
+        chain,
+        label,
+        client: createPublicClient({ chain, transport: http() }),
+      })),
+    [],
+  );
 
   // Live SOL balance — refreshes when dialog opens, then polls every 15s
   // while open so users see incoming deposits without manually refreshing.
@@ -66,6 +101,66 @@ export function FundVisionWalletDialog({
       window.clearInterval(id);
     };
   }, [open, solanaAddress, connection]);
+
+  // Live native balances on every supported EVM chain. We fan out in
+  // parallel and tolerate per-chain errors so one bad RPC doesn't kill
+  // the whole panel.
+  useEffect(() => {
+    if (!open || !evmAddress) return;
+    let cancelled = false;
+    // Seed loading state so the UI shows spinners on first render.
+    setEvmBalances((prev) => {
+      const next: EvmBalanceState = { ...prev };
+      for (const { chain } of evmClients) {
+        if (!next[chain.id]) {
+          next[chain.id] = {
+            value: null,
+            symbol: chain.nativeCurrency.symbol,
+          };
+        }
+      }
+      return next;
+    });
+
+    const fetchAll = async () => {
+      setEvmRefreshing(true);
+      const results = await Promise.allSettled(
+        evmClients.map(async ({ chain, client }) => {
+          const wei = await client.getBalance({
+            address: evmAddress as `0x${string}`,
+          });
+          return { chainId: chain.id, wei, symbol: chain.nativeCurrency.symbol };
+        }),
+      );
+      if (cancelled) return;
+      setEvmBalances((prev) => {
+        const next: EvmBalanceState = { ...prev };
+        results.forEach((r, i) => {
+          const { chain } = evmClients[i];
+          if (r.status === "fulfilled") {
+            next[chain.id] = {
+              value: r.value.wei,
+              symbol: r.value.symbol,
+            };
+          } else {
+            next[chain.id] = {
+              value: undefined,
+              symbol: chain.nativeCurrency.symbol,
+            };
+          }
+        });
+        return next;
+      });
+      if (!cancelled) setEvmRefreshing(false);
+    };
+
+    void fetchAll();
+    const id = window.setInterval(fetchAll, 20_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [open, evmAddress, evmClients]);
 
   const copy = async (label: "solana" | "evm", value: string) => {
     try {
@@ -161,6 +256,43 @@ export function FundVisionWalletDialog({
                   copied={copied === "evm"}
                   onCopy={() => copy("evm", evmAddress)}
                 />
+
+                {/* Live native balance per chain */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                      Native balances
+                    </p>
+                    {evmRefreshing && (
+                      <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                    )}
+                  </div>
+                  <div className="divide-y divide-border/60 rounded-lg border border-border bg-background/40">
+                    {evmClients.map(({ chain, label }) => {
+                      const entry = evmBalances[chain.id];
+                      const value = entry?.value;
+                      const symbol = entry?.symbol ?? chain.nativeCurrency.symbol;
+                      return (
+                        <div
+                          key={chain.id}
+                          className="flex items-center justify-between px-3 py-1.5 text-xs"
+                        >
+                          <span className="text-muted-foreground">{label}</span>
+                          <span className="font-mono text-foreground">
+                            {value === null ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : value === undefined ? (
+                              <span className="text-muted-foreground/70">—</span>
+                            ) : (
+                              `${formatNativeBalance(value)} ${symbol}`
+                            )}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <p className="text-[11px] leading-relaxed text-muted-foreground">
                   Same address works on Ethereum, Base, Arbitrum, Polygon,
                   BSC, Optimism, and other EVM chains. Make sure you
@@ -184,6 +316,16 @@ export function FundVisionWalletDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+/** Trim noisy zeros from a wei value while keeping small balances readable. */
+function formatNativeBalance(wei: bigint): string {
+  const ether = Number(formatEther(wei));
+  if (!Number.isFinite(ether) || ether === 0) return "0";
+  if (ether < 0.0001) return ether.toExponential(2);
+  if (ether < 1) return ether.toFixed(6);
+  if (ether < 1000) return ether.toFixed(4);
+  return ether.toLocaleString("en-US", { maximumFractionDigits: 2 });
 }
 
 function AddressBlock({
