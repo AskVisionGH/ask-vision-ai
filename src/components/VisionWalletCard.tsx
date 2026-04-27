@@ -74,25 +74,43 @@ export const VisionWalletCard = () => {
         <h2 className="text-lg font-semibold">Vision Wallet (beta)</h2>
       </div>
       <p className="text-sm text-muted-foreground mb-4">
-        An embedded wallet managed by Vision so you can trade without
-        installing an extension. Recoverable via your email.
+        One embedded wallet that works on Solana and every EVM chain
+        (Ethereum, Base, Arbitrum, Polygon, BSC). Recoverable via your
+        email — no extension required.
       </p>
 
       {!ready || loading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading…
         </div>
-      ) : solanaAddress ? (
-        <div className="space-y-3">
-          <div>
-            <Label className="text-xs uppercase text-muted-foreground">
-              Solana address
-            </Label>
-            <p className="font-mono text-sm break-all">{solanaAddress}</p>
-          </div>
+      ) : solanaAddress || evmAddress ? (
+        <div className="space-y-4">
+          {solanaAddress && (
+            <div>
+              <Label className="text-xs uppercase text-muted-foreground">
+                Solana
+              </Label>
+              <p className="font-mono text-sm break-all">{solanaAddress}</p>
+            </div>
+          )}
+          {evmAddress && (
+            <div>
+              <Label className="text-xs uppercase text-muted-foreground">
+                EVM (Ethereum, Base, Arbitrum, Polygon, BSC)
+              </Label>
+              <p className="font-mono text-sm break-all">{evmAddress}</p>
+            </div>
+          )}
+          {(!solanaAddress || !evmAddress) && (
+            <Button onClick={handleCreate} disabled={working} variant="secondary">
+              {working && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Add missing {!solanaAddress ? "Solana" : "EVM"} wallet
+            </Button>
+          )}
           {row && (
             <p className="text-xs text-muted-foreground">
-              Origin: {row.origin} · Linked to Privy user {row.privy_user_id.slice(0, 12)}…
+              Origin: {row.origin} · Linked to Privy user{" "}
+              {row.privy_user_id.slice(0, 12)}…
             </p>
           )}
           <Button variant="outline" size="sm" onClick={disconnect}>
@@ -136,7 +154,7 @@ export const VisionWalletCard = () => {
       ) : (
         <Button onClick={handleCreate} disabled={working}>
           {working && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Create Solana wallet
+          Create Vision Wallet (Solana + EVM)
         </Button>
       )}
     </section>
