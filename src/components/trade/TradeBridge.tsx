@@ -914,12 +914,21 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
   // CTA needs to know whether the *source-chain* wallet is connected.
   const sourceConnected = !!fromAddress;
 
-  let ctaLabel = "Bridge";
+  let ctaLabel = walletSource === "vision" ? "Bridge with Vision Wallet" : "Bridge";
   let ctaDisabled = false;
   let ctaAction: (() => void) | null = handleBridge;
   if (!fromChain || !fromToken) {
     ctaLabel = "Select source chain";
     ctaDisabled = true; ctaAction = null;
+  } else if (visionEvmUnsupported) {
+    ctaLabel = "EVM source unavailable for Vision Wallet";
+    ctaDisabled = true; ctaAction = null;
+  } else if (walletSource === "vision" && fromIsSvm && !visionWallet.solanaAddress) {
+    ctaLabel = visionWallet.working ? "Creating Vision Wallet…" : "Create Vision Wallet";
+    ctaDisabled = visionWallet.working;
+    ctaAction = visionWallet.working
+      ? null
+      : () => { visionWallet.createWallet().catch(() => { /* hook toasts */ }); };
   } else if (!sourceConnected) {
     ctaLabel = fromIsEvm ? "Connect EVM wallet" : "Connect Solana wallet";
     ctaAction = null; // The Connect button is rendered separately below.
