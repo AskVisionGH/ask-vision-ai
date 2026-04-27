@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePrivy, useLoginWithEmail } from "@privy-io/react-auth";
 import {
-  usePrivy,
-  useSolanaWallets,
-  useLoginWithEmail,
-} from "@privy-io/react-auth";
+  useWallets as useSolanaWallets,
+  useCreateWallet as useCreateSolanaWallet,
+} from "@privy-io/react-auth/solana";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
