@@ -509,19 +509,43 @@ const TOOLS = [
     type: "function",
     function: {
       name: "prepare_bracket_order",
-      description: "Preview a TP+SL bracket order. Final signing happens in /trade (vault required).",
+      description:
+        "Preview a TP+SL bracket order. Final signing happens in /trade (vault required). " +
+        "TP/SL prices can be expressed two ways: " +
+        "(a) absolute USD via `tpPriceUsd` / `slPriceUsd`, or " +
+        "(b) **entry-relative** via `tpFromEntry` / `slFromEntry` — server resolves to absolute USD using the user's average buy-in for the **OUTPUT token** (the token they're holding). " +
+        "Use entry-relative whenever the user references their cost basis: 'TP at 2x my entry', 'stop at -25% from buy', 'TP when it doubles, SL at break-even'. " +
+        "Provide ONE of `tpPriceUsd` OR `tpFromEntry` (same for SL), not both.",
       parameters: {
         type: "object",
         properties: {
           inputToken: { type: "string" },
           outputToken: { type: "string" },
           sellAmount: { type: "number" },
-          tpPriceUsd: { type: "number", description: "Take-profit price for the OUTPUT token in USD." },
-          slPriceUsd: { type: "number", description: "Stop-loss price for the OUTPUT token in USD." },
+          tpPriceUsd: { type: "number", description: "Take-profit USD price (absolute) for the OUTPUT token." },
+          slPriceUsd: { type: "number", description: "Stop-loss USD price (absolute) for the OUTPUT token." },
+          tpFromEntry: {
+            type: "object",
+            description: "Entry-relative take-profit. Server uses the user's avg buy-in for OUTPUT token.",
+            properties: {
+              multiplier: { type: "number", description: "tp = avgEntry × multiplier (e.g. 2 = '2x my buy')." },
+              percentChange: { type: "number", description: "tp = avgEntry × (1 + pct/100), e.g. 50 for '+50%'." },
+            },
+            additionalProperties: false,
+          },
+          slFromEntry: {
+            type: "object",
+            description: "Entry-relative stop-loss. Server uses the user's avg buy-in for OUTPUT token.",
+            properties: {
+              multiplier: { type: "number", description: "sl = avgEntry × multiplier (e.g. 0.7 = '30% below buy')." },
+              percentChange: { type: "number", description: "sl = avgEntry × (1 + pct/100), e.g. -25 for 'down 25%'." },
+            },
+            additionalProperties: false,
+          },
           entryMode: { type: "string", enum: ["market", "limit"] },
           entryPriceUsd: { type: "number" },
         },
-        required: ["inputToken", "outputToken", "sellAmount", "tpPriceUsd", "slPriceUsd"],
+        required: ["inputToken", "outputToken", "sellAmount"],
         additionalProperties: false,
       },
     },
