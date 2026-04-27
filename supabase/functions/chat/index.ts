@@ -522,11 +522,11 @@ const TOOLS = [
           inputToken: { type: "string" },
           outputToken: { type: "string" },
           sellAmount: { type: "number" },
-          tpPriceUsd: { type: "number", description: "Take-profit USD price (absolute) for the OUTPUT token." },
-          slPriceUsd: { type: "number", description: "Stop-loss USD price (absolute) for the OUTPUT token." },
+          tpPriceUsd: { type: "number", description: "Take-profit USD price (absolute) for the INPUT token (asset being sold)." },
+          slPriceUsd: { type: "number", description: "Stop-loss USD price (absolute) for the INPUT token (asset being sold)." },
           tpFromEntry: {
             type: "object",
-            description: "Entry-relative take-profit. Server uses the user's avg buy-in for OUTPUT token.",
+            description: "Entry-relative take-profit. Server uses the user's avg buy-in for the INPUT token.",
             properties: {
               multiplier: { type: "number", description: "tp = avgEntry × multiplier (e.g. 2 = '2x my buy')." },
               percentChange: { type: "number", description: "tp = avgEntry × (1 + pct/100), e.g. 50 for '+50%'." },
@@ -535,7 +535,7 @@ const TOOLS = [
           },
           slFromEntry: {
             type: "object",
-            description: "Entry-relative stop-loss. Server uses the user's avg buy-in for OUTPUT token.",
+            description: "Entry-relative stop-loss. Server uses the user's avg buy-in for the INPUT token.",
             properties: {
               multiplier: { type: "number", description: "sl = avgEntry × multiplier (e.g. 0.7 = '30% below buy')." },
               percentChange: { type: "number", description: "sl = avgEntry × (1 + pct/100), e.g. -25 for 'down 25%'." },
