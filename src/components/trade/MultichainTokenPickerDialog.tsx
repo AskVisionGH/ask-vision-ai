@@ -569,6 +569,18 @@ export const MultichainTokenPickerDialog = ({
   const visiblePopular = filterExcluded(filterByChain(popularPool))
     .filter((t) => !heldKeys.has(tokenKey(t)) && !recentKeys.has(tokenKey(t)))
     .map(withLivePrice);
+  const popularKeys = new Set(visiblePopular.map(tokenKey));
+  // Pull trending list for the active chain (or merge ALL on "ALL").
+  const trendingPool: MultichainToken[] =
+    activeChain === "ALL"
+      ? Object.values(trending).flat()
+      : trending[String(activeChain)] ?? [];
+  const visibleTrending = filterExcluded(filterByChain(trendingPool)).filter(
+    (t) =>
+      !heldKeys.has(tokenKey(t)) &&
+      !recentKeys.has(tokenKey(t)) &&
+      !popularKeys.has(tokenKey(t)),
+  );
 
   const showResults = query.trim().length > 0;
 
