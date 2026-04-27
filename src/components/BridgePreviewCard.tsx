@@ -43,17 +43,21 @@ const POLL_TIMEOUT_MS = 15 * 60 * 1000;
 type Phase =
   | { name: "preview" }
   | { name: "building" }
+  | { name: "switching_chain" }
+  | { name: "approving" }
   | { name: "awaiting_signature" }
   | { name: "submitting" }
   | {
       name: "bridging";
       signature: string;
+      sourceExplorer: string;
       startedAt: number;
       estimatedSec: number | null;
     }
   | {
       name: "success";
       signature: string;
+      sourceExplorer: string;
       durationMs: number;
       toAmountUi: number;
       destExplorer: string | null;
