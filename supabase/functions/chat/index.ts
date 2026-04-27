@@ -1145,20 +1145,53 @@ serve(async (req) => {
               eventType = "dca_quote";
             } else if (name === "prepare_bracket_order") {
               const args = safeJson(tc.function?.arguments);
-              result = await invokeFn(
-                "chat-order-quote",
-                {
-                  kind: "bracket",
-                  inputToken: args.inputToken ?? "",
-                  outputToken: args.outputToken ?? "",
-                  sellAmount: args.sellAmount,
-                  tpPriceUsd: args.tpPriceUsd,
-                  slPriceUsd: args.slPriceUsd,
-                  entryMode: args.entryMode ?? "market",
-                  entryPriceUsd: args.entryPriceUsd ?? null,
-                },
-                req,
-              );
+              // Bracket TP/SL are USD prices on the OUTPUT token (the asset
+              // the user holds). Resolve any entry-relative TP / SL using
+              // the user's avg buy-in for OUTPUT token. We can do both in
+              // parallel since the wallet-pnl call is on the same token.
+              let tpPriceUsd = args.tpPriceUsd;
+              let slPriceUsd = args.slPriceUsd;
+              let entryResolution: EntryResolution | null = null;
+              if ((args.tpFromEntry || args.slFromEntry) && walletAddress) {
+                const r = await resolveEntryRelativePrice({
+                  wallet: walletAddress,
+                  token: args.outputToken,
+                  // We only need the avg entry once — pass either spec; the
+                  // helper returns avgEntryUsd which we then re-apply locally.
+                  priceFromEntry: args.tpFromEntry ?? args.slFromEntry,
+                  req,
+                });
+                entryResolution = r;
+                if (r.avgEntryUsd != null) {
+                  if (args.tpFromEntry) {
+                    tpPriceUsd = applyFromEntry(r.avgEntryUsd, args.tpFromEntry);
+                  }
+                  if (args.slFromEntry) {
+                    slPriceUsd = applyFromEntry(r.avgEntryUsd, args.slFromEntry);
+                  }
+                } else if (r.error) {
+                  result = { error: r.error };
+                }
+              }
+              if (!result) {
+                result = await invokeFn(
+                  "chat-order-quote",
+                  {
+                    kind: "bracket",
+                    inputToken: args.inputToken ?? "",
+                    outputToken: args.outputToken ?? "",
+                    sellAmount: args.sellAmount,
+                    tpPriceUsd,
+                    slPriceUsd,
+                    entryMode: args.entryMode ?? "market",
+                    entryPriceUsd: args.entryPriceUsd ?? null,
+                  },
+                  req,
+                );
+                if (entryResolution && result && typeof result === "object") {
+                  (result as Record<string, unknown>).entryResolution = entryResolution;
+                }
+              }
               eventType = "bracket_quote";
             } else if (name === "prepare_ladder") {
               const args = safeJson(tc.function?.arguments);
