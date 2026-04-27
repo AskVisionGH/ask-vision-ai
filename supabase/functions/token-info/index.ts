@@ -98,7 +98,18 @@ serve(async (req) => {
 
     const data = await dexResp.json();
     const allPairs = (data.pairs ?? []) as any[];
-    const solanaPairs = allPairs.filter((p) => p.chainId === "solana");
+    let solanaPairs = allPairs.filter((p) => p.chainId === "solana");
+
+    // Ticker search: DexScreener's /search is fuzzy and matches pair names,
+    // descriptions, and quote tokens — so a query like "HENRY" can return
+    // pairs whose BASE is something else entirely. Strictly require
+    // baseToken.symbol to match the requested ticker.
+    if (!looksLikeMint && !knownSolanaMint) {
+      const symbolMatches = solanaPairs.filter(
+        (p) => String(p.baseToken?.symbol ?? "").toUpperCase() === upper,
+      );
+      if (symbolMatches.length > 0) solanaPairs = symbolMatches;
+    }
 
     if (solanaPairs.length === 0) {
       return json({ error: `No token found for "${cleaned}"` }, 404);
