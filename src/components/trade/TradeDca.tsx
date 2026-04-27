@@ -489,15 +489,16 @@ export const TradeDca = () => {
     phase.name === "submitting_fee" ||
     phase.name === "awaiting_signature" ||
     phase.name === "submitting";
+  const isVision = walletSource === "vision";
   const busyLabel =
     phase.name === "preparing"
       ? "Preparing fee…"
       : phase.name === "awaiting_fee_signature"
-        ? "Approve fee in wallet…"
+        ? isVision ? "Signing fee with Vision Wallet…" : "Approve fee in wallet…"
         : phase.name === "submitting_fee"
           ? "Sending fee…"
           : phase.name === "awaiting_signature"
-            ? "Approve DCA in wallet…"
+            ? isVision ? "Signing DCA with Vision Wallet…" : "Approve DCA in wallet…"
             : phase.name === "submitting"
               ? "Submitting DCA…"
               : "";
@@ -505,7 +506,13 @@ export const TradeDca = () => {
   let ctaLabel = "Start DCA";
   let ctaDisabled = false;
   let ctaAction: (() => void) | null = placeDca;
-  if (!connected) {
+  if (isVision && !visionWallet.solanaAddress) {
+    ctaLabel = visionWallet.working ? "Creating wallet…" : "Create Vision Wallet";
+    ctaDisabled = visionWallet.working;
+    ctaAction = () => {
+      visionWallet.createWallet().catch(() => { /* hook toasts */ });
+    };
+  } else if (!isVision && !connected) {
     ctaLabel = "Connect wallet";
     ctaAction = () => setVisible(true);
   } else if (validation) {
