@@ -1226,6 +1226,13 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
         }}
       />
 
+      {/* Fund Vision Wallet */}
+      <FundVisionWalletDialog
+        open={fundOpen}
+        onOpenChange={setFundOpen}
+        defaultChain={fromIsEvm ? "evm" : "solana"}
+      />
+
       {/* EVM bridge progress modal — only opens during the EVM source path. */}
       <BridgeProgressModal
         open={evmProgress !== null}
