@@ -181,14 +181,20 @@ export const TradeLimit = ({ tab, onTabChange }: Props) => {
     };
   }, []);
 
-  // Balance — same logic as TradeSwap.
+  // Balance — scoped to whichever wallet source is active.
   useEffect(() => {
-    if (!connected || !publicKey) {
+    if (!activePayerAddress) {
       setInputBalance(null);
       return;
     }
     let cancelled = false;
-    const owner = new PublicKey(publicKey.toBase58());
+    let owner: PublicKey;
+    try {
+      owner = new PublicKey(activePayerAddress);
+    } catch {
+      setInputBalance(null);
+      return;
+    }
     setInputBalance(null);
     (async () => {
       try {
@@ -212,7 +218,7 @@ export const TradeLimit = ({ tab, onTabChange }: Props) => {
     return () => {
       cancelled = true;
     };
-  }, [connected, publicKey, connection, inputToken.address, phase.name]);
+  }, [activePayerAddress, connection, inputToken.address, phase.name]);
 
   // Probe market rate using a representative amount of the input token.
   // Uses 1 unit; we re-quote whenever the pair changes or refresh tick fires.
