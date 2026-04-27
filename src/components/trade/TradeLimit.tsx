@@ -600,6 +600,18 @@ export const TradeLimit = ({ tab, onTabChange }: Props) => {
           </Popover>
         </div>
 
+        {/* Wallet source picker — Vision recommended */}
+        <WalletSourcePicker
+          value={walletSource}
+          onChange={setWalletSource}
+          visionAvailable
+          externalAvailable={connected}
+          onCreateVision={() => {
+            visionWallet.createWallet().catch(() => { /* hook toasts */ });
+          }}
+          onConnectExternal={() => setVisible(true)}
+        />
+
         {/* Card */}
         <div className="overflow-hidden rounded-2xl border border-border bg-card/60 backdrop-blur-sm shadow-soft">
           {/* Sell side */}
