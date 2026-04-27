@@ -124,7 +124,7 @@ function SolanaWithdrawForm({ fromAddress }: { fromAddress: string }) {
   const selected = useMemo(() => {
     if (!holdings) return null;
     if (selectedMint === "SOL") {
-      return holdings.find((h) => h.mint === "SOL" || h.symbol === "SOL") ?? null;
+      return holdings.find((h) => isSolMint(h.mint) || h.symbol === "SOL") ?? null;
     }
     return holdings.find((h) => h.mint === selectedMint) ?? null;
   }, [holdings, selectedMint]);
