@@ -722,6 +722,18 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
           </Popover>
         </div>
 
+        {/* Wallet source picker — Vision Wallet recommended, external is secondary */}
+        <WalletSourcePicker
+          value={walletSource}
+          onChange={setWalletSource}
+          visionAvailable={!!visionWallet.solanaAddress}
+          externalAvailable={connected}
+          onCreateVision={() => {
+            visionWallet.createWallet().catch(() => { /* hook toasts */ });
+          }}
+          onConnectExternal={() => setVisible(true)}
+        />
+
         {/* Card */}
         <div className="overflow-hidden rounded-2xl border border-border bg-card/60 backdrop-blur-sm shadow-soft">
           {/* Sell side */}
