@@ -655,6 +655,30 @@ export const useRouteExecutor = () => {
     });
 
     const explorer = explorerUrl(chain, hash);
+
+    // Record the 1% integrator fee that 0x paid into the EVM treasury inside
+    // this swap tx. We rely on `built.platformFee*` echoes from evm-swap-build
+    // (which configures the 0x router with swapFeeRecipient = EVM_TREASURY).
+    // For multi-leg trades, `bridgeSignature` ties this fee to its bridge in
+    // the admin view.
+    const feeAtomic = built.platformFeeAtomic ? Number(built.platformFeeAtomic) : null;
+    const feeAmountUi = feeAtomic != null && feeAtomic > 0
+      ? feeAtomic / Math.pow(10, toToken.decimals)
+      : null;
+    void supaPost("record-swap-fee", {
+      chain: "evm",
+      chainId,
+      signature: hash,
+      valueUsd: quote.input?.valueUsd ?? quote.output?.valueUsd ?? null,
+      feeUsd: quote.platformFee?.valueUsd ?? null,
+      feeAmountUi,
+      feeSymbol: quote.platformFee?.symbol ?? toToken.symbol,
+      feeMint: built.platformFeeToken ?? toToken.address,
+      inputMint: fromToken.address,
+      outputMint: toToken.address,
+      bridgeSignature: bridgeSignature ?? null,
+    }).catch((e) => console.warn("record-swap-fee (evm) failed:", e));
+
     return { hash, explorer };
   }
 
