@@ -1294,6 +1294,7 @@ function json(body: unknown, status = 200) {
 
 function inferForcedToolCall(message: string):
   | { name: "get_wallet_balance"; args: { address?: string } }
+  | { name: "get_wallet_pnl"; args: { address?: string } }
   | { name: "get_token_chart"; args: { query: string; interval?: string } }
   | { name: "get_social_sentiment"; args: { query: string } }
   | null {
@@ -1303,9 +1304,16 @@ function inferForcedToolCall(message: string):
 
   const addressMatch = raw.match(/[1-9A-HJ-NP-Za-km-z]{32,44}/);
   const address = addressMatch?.[0];
+  const walletPnlIntent = /\b(my pnl|show (?:me )?my pnl|wallet pnl|portfolio pnl|port pnl|show my port|show me my port|what(?:'| i)?s my profit|show my performance|am i up or down|how am i doing|how(?:'| i)?s my portfolio)\b/.test(lower);
   const holdingsIntent = /\b(holdings|holding|balance|portfolio|wallet holdings|what(?:'| i)?s in (?:this |that |my )?wallet|what does .* hold|show me .* holdings|show .* portfolio)\b/.test(lower);
   const chartIntent = /\b(chart|candles|candle|price action|how's it looking|trend|graph)\b/.test(lower);
   const sentimentIntent = /\b(sentiment|social|twitter|x\b|reddit|vibe check|lore)\b/.test(lower);
+
+  // Check P/L intent before generic portfolio/holdings intent so phrases like
+  // "portfolio pnl" or shorthand like "port pnl" don't get misrouted.
+  if (walletPnlIntent) {
+    return { name: "get_wallet_pnl", args: address ? { address } : {} };
+  }
 
   if (holdingsIntent) {
     return { name: "get_wallet_balance", args: address ? { address } : {} };
