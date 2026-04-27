@@ -120,25 +120,24 @@ export const PnLShareCard = forwardRef<HTMLDivElement, PnLShareProps>(
             zIndex: 2,
           }}
         >
-          {/* Brand */}
+          {/* Brand row — Vision triangle + wordmark + window badge.
+              Use whitespace-nowrap on the badge so the "30d P/L" label
+              never wraps onto two lines (which previously overlapped the
+              wordmark on shorter labels). */}
           <div className="flex items-center gap-3">
             <div
               style={{
-                width: 40,
-                height: 40,
-                borderRadius: 10,
+                width: 44,
+                height: 44,
+                borderRadius: 12,
                 background:
                   "linear-gradient(135deg, hsl(252 95% 85%), hsl(258 90% 66%))",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                color: "hsl(240 6% 6%)",
-                fontWeight: 700,
-                fontSize: 20,
-                fontFamily: "'Instrument Serif', serif",
               }}
             >
-              V
+              <VisionLogo size={24} className="text-[hsl(240_6%_6%)]" />
             </div>
             <p
               style={{ fontFamily: "'Instrument Serif', serif" }}
@@ -147,11 +146,12 @@ export const PnLShareCard = forwardRef<HTMLDivElement, PnLShareProps>(
               Vision
             </p>
             <span
-              className="ml-2 rounded-full px-2.5 py-1 font-mono text-[10px] uppercase tracking-widest"
+              className="ml-2 whitespace-nowrap rounded-full px-3 py-1.5 font-mono text-[11px] uppercase tracking-widest"
               style={{
                 background: theme.accentSoft,
                 color: theme.accent,
                 border: `1px solid ${theme.accent}`,
+                lineHeight: 1,
               }}
             >
               {props.data.windowDays}d P/L
