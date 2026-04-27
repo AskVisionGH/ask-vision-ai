@@ -468,7 +468,17 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
       if (!mounted.current) return;
       setPhase({ name: "error", message: e instanceof Error ? e.message : "Something went wrong." });
     }
-  }, [connected, publicKey, signTransaction, quote, outputToken, dynamicSlippage]);
+  }, [
+    walletSource,
+    activePayerAddress,
+    connected,
+    publicKey,
+    signTransaction,
+    visionSigner,
+    quote,
+    outputToken,
+    dynamicSlippage,
+  ]);
 
   const resetSwap = () => {
     setAmount("");
@@ -556,19 +566,29 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
     phase.name === "building"
       ? "Building transaction…"
       : phase.name === "awaiting_signature"
-        ? "Approve in wallet…"
+        ? walletSource === "vision"
+          ? "Signing with Vision Wallet…"
+          : "Approve in wallet…"
         : phase.name === "submitting"
           ? "Submitting…"
           : phase.name === "confirming"
             ? "Confirming on-chain…"
             : "";
 
-  let ctaLabel = "Swap";
+  let ctaLabel = walletSource === "vision" ? "Swap with Vision Wallet" : "Swap";
   let ctaDisabled = false;
   let ctaAction: (() => void) | null = handleSwap;
 
-  if (!connected) {
-    ctaLabel = "Connect wallet";
+  if (walletSource === "vision" && !visionWallet.solanaAddress) {
+    ctaLabel = visionWallet.working ? "Creating Vision Wallet…" : "Create Vision Wallet";
+    ctaDisabled = visionWallet.working;
+    ctaAction = visionWallet.working
+      ? null
+      : () => {
+          visionWallet.createWallet().catch(() => { /* hook toasts */ });
+        };
+  } else if (walletSource === "external" && !connected) {
+    ctaLabel = "Connect external wallet";
     ctaAction = () => setVisible(true);
   } else if (!outputToken) {
     ctaLabel = "Select a token";
