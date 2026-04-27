@@ -1078,18 +1078,53 @@ serve(async (req) => {
               eventType = "wallet_token_history";
             } else if (name === "prepare_limit_order") {
               const args = safeJson(tc.function?.arguments);
-              result = await invokeFn(
-                "chat-order-quote",
-                {
-                  kind: "limit",
-                  inputToken: args.inputToken ?? "",
-                  outputToken: args.outputToken ?? "",
-                  sellAmount: args.sellAmount,
-                  limitPrice: args.limitPrice,
-                  expirySeconds: args.expirySeconds ?? null,
-                },
-                req,
-              );
+              // Entry-relative pricing: if the user said "sell at 2x my buy",
+              // resolve their avg entry for the INPUT token (the one they're
+              // selling) and convert to an absolute limitPrice (output per 1
+              // input). For limit orders we assume the OUTPUT side is a stable
+              // quote (USDC/USDT) — the most common phrasing — so the avg
+              // entry USD price = limitPrice in USDC terms. If the output
+              // isn't a stable, we surface an error rather than guess.
+              let limitPrice = args.limitPrice;
+              let entryResolution: EntryResolution | null = null;
+              if (args.priceFromEntry && walletAddress) {
+                const r = await resolveEntryRelativePrice({
+                  wallet: walletAddress,
+                  token: args.inputToken,
+                  priceFromEntry: args.priceFromEntry,
+                  req,
+                });
+                entryResolution = r;
+                if (r.targetPriceUsd != null) {
+                  if (!isStableTicker(args.outputToken)) {
+                    result = {
+                      error:
+                        "Entry-relative limit prices currently work when selling to a stable (USDC/USDT). Try 'sell X to USDC at 2x my entry'.",
+                    };
+                  } else {
+                    limitPrice = r.targetPriceUsd;
+                  }
+                } else if (r.error) {
+                  result = { error: r.error };
+                }
+              }
+              if (!result) {
+                result = await invokeFn(
+                  "chat-order-quote",
+                  {
+                    kind: "limit",
+                    inputToken: args.inputToken ?? "",
+                    outputToken: args.outputToken ?? "",
+                    sellAmount: args.sellAmount,
+                    limitPrice,
+                    expirySeconds: args.expirySeconds ?? null,
+                  },
+                  req,
+                );
+                if (entryResolution && result && typeof result === "object") {
+                  (result as Record<string, unknown>).entryResolution = entryResolution;
+                }
+              }
               eventType = "limit_quote";
             } else if (name === "prepare_dca") {
               const args = safeJson(tc.function?.arguments);
