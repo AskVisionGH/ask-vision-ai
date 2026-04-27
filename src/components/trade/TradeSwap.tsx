@@ -36,6 +36,12 @@ import {
 } from "@/components/trade/TokenPickerDialog";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { useVisionWallet } from "@/hooks/useVisionWallet";
+import { useVisionWalletSigner } from "@/hooks/useVisionWalletSigner";
+import {
+  WalletSourcePicker,
+  type WalletSource,
+} from "@/components/trade/WalletSourcePicker";
 
 const SOL_TOKEN: TokenMeta = {
   symbol: "SOL",
@@ -157,11 +163,22 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
   const [pickerSide, setPickerSide] = useState<"in" | "out" | null>(null);
   const [phase, setPhase] = useState<Phase>({ name: "idle" });
   const [inputBalance, setInputBalance] = useState<number | null>(null);
+  const [walletSource, setWalletSource] = useState<WalletSource>("vision");
 
   const { connection } = useConnection();
   const { publicKey, connected, signTransaction } = useWallet();
   const { setVisible } = useWalletModal();
+  const visionWallet = useVisionWallet();
+  const visionSigner = useVisionWalletSigner();
   const mounted = useRef(true);
+
+  // Active payer pubkey (string) — depends on selected wallet source.
+  const activePayerAddress: string | null =
+    walletSource === "vision"
+      ? visionWallet.solanaAddress
+      : publicKey?.toBase58() ?? null;
+  const activePayerReady =
+    walletSource === "vision" ? !!visionWallet.solanaAddress : connected;
 
   useEffect(() => {
     mounted.current = true;
@@ -170,15 +187,22 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
     };
   }, []);
 
-  // Load balance for whichever token is selected on the input side.
+  // Load balance for whichever token is selected on the input side, scoped to
+  // the active payer (Vision Wallet OR external wallet).
   // SOL → native lamports; SPL → sum of parsed token accounts for that mint.
   useEffect(() => {
-    if (!connected || !publicKey) {
+    if (!activePayerAddress) {
       setInputBalance(null);
       return;
     }
     let cancelled = false;
-    const owner = new PublicKey(publicKey.toBase58());
+    let owner: PublicKey;
+    try {
+      owner = new PublicKey(activePayerAddress);
+    } catch {
+      setInputBalance(null);
+      return;
+    }
     setInputBalance(null);
     (async () => {
       try {
@@ -202,7 +226,7 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
     return () => {
       cancelled = true;
     };
-  }, [connected, publicKey, connection, inputToken.address, phase.name]);
+  }, [activePayerAddress, connection, inputToken.address, phase.name]);
 
 
   const numericAmount = useMemo(() => {
@@ -323,12 +347,15 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
 
 
   const handleSwap = useCallback(async () => {
-    if (!connected || !publicKey || !signTransaction || !quote || !outputToken) return;
+    if (!quote || !outputToken) return;
+    if (!activePayerAddress) return;
+    if (walletSource === "external" && (!connected || !publicKey || !signTransaction)) return;
+
     const startedAt = Date.now();
     try {
       setPhase({ name: "building" });
       const built = await supaPost("swap-build", {
-        userPublicKey: publicKey.toBase58(),
+        userPublicKey: activePayerAddress,
         inputMint: quote.input.address,
         outputMint: quote.output.address,
         amount: quote.input.amountAtomic,
@@ -337,41 +364,66 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
       });
       if (!built.swapTransaction) throw new Error("No transaction returned");
 
-      setPhase({ name: "awaiting_signature" });
-      const txBytes = Uint8Array.from(atob(built.swapTransaction), (c) => c.charCodeAt(0));
-      const tx = VersionedTransaction.deserialize(txBytes);
+      let signature: string;
 
-      let signed: VersionedTransaction;
-      try {
-        signed = await signTransaction(tx);
-      } catch {
-        if (mounted.current) setPhase({
-          name: "cancelled",
-          inUi: quote.input.amountUi,
-          inSymbol: quote.input.symbol,
-          outUi: quote.output.amountUi,
-          outSymbol: quote.output.symbol,
+      if (walletSource === "vision") {
+        // ---- Vision Wallet path: server signs + broadcasts via Privy.
+        // 1% platform fee is already baked into the swap tx via the
+        // referral feeAccount in `swap-build` — do NOT bypass it.
+        setPhase({ name: "awaiting_signature" });
+        try {
+          const result = await visionSigner.signAndSend({
+            chain: "solana",
+            caip2: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp", // Solana mainnet-beta
+            transaction: built.swapTransaction, // already base64-serialized
+            method: "signAndSendTransaction",
+          });
+          if (!result.hash) throw new Error("No signature returned from Vision Wallet");
+          signature = result.hash;
+        } catch (e: any) {
+          // User-style cancellation isn't really possible server-side, so
+          // treat anything thrown here as a real failure.
+          throw e instanceof Error ? e : new Error("Vision Wallet sign failed");
+        }
+      } else {
+        // ---- External wallet path: user signs in-browser, we submit.
+        setPhase({ name: "awaiting_signature" });
+        const txBytes = Uint8Array.from(atob(built.swapTransaction), (c) => c.charCodeAt(0));
+        const tx = VersionedTransaction.deserialize(txBytes);
+
+        let signed: VersionedTransaction;
+        try {
+          signed = await signTransaction!(tx);
+        } catch {
+          if (mounted.current) setPhase({
+            name: "cancelled",
+            inUi: quote.input.amountUi,
+            inSymbol: quote.input.symbol,
+            outUi: quote.output.amountUi,
+            outSymbol: quote.output.symbol,
+          });
+          return;
+        }
+
+        setPhase({ name: "submitting" });
+        const signedB64 = btoa(String.fromCharCode(...signed.serialize()));
+        const submitted = await supaPost("tx-submit", {
+          signedTransaction: signedB64,
+          kind: "swap",
+          valueUsd: quote.input.valueUsd ?? quote.output.valueUsd ?? null,
+          inputMint: quote.input.address,
+          outputMint: quote.output.address,
+          inputAmount: quote.input.amountUi,
+          outputAmount: quote.output.amountUi,
+          walletAddress: activePayerAddress,
         });
-        return;
+        if (submitted?.fallback && submitted?.error) {
+          throw new Error(submitted.error as string);
+        }
+        const sig = submitted.signature as string;
+        if (!sig) throw new Error("No signature returned from submit");
+        signature = sig;
       }
-
-      setPhase({ name: "submitting" });
-      const signedB64 = btoa(String.fromCharCode(...signed.serialize()));
-      const submitted = await supaPost("tx-submit", {
-        signedTransaction: signedB64,
-        kind: "swap",
-        valueUsd: quote.input.valueUsd ?? quote.output.valueUsd ?? null,
-        inputMint: quote.input.address,
-        outputMint: quote.output.address,
-        inputAmount: quote.input.amountUi,
-        outputAmount: quote.output.amountUi,
-        walletAddress: publicKey.toBase58(),
-      });
-      if (submitted?.fallback && submitted?.error) {
-        throw new Error(submitted.error as string);
-      }
-      const signature = submitted.signature as string;
-      if (!signature) throw new Error("No signature returned from submit");
 
       setPhase({ name: "confirming", signature, startedAt });
       const deadline = Date.now() + POLL_TIMEOUT_MS;
@@ -416,7 +468,17 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
       if (!mounted.current) return;
       setPhase({ name: "error", message: e instanceof Error ? e.message : "Something went wrong." });
     }
-  }, [connected, publicKey, signTransaction, quote, outputToken, dynamicSlippage]);
+  }, [
+    walletSource,
+    activePayerAddress,
+    connected,
+    publicKey,
+    signTransaction,
+    visionSigner,
+    quote,
+    outputToken,
+    dynamicSlippage,
+  ]);
 
   const resetSwap = () => {
     setAmount("");
@@ -504,19 +566,29 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
     phase.name === "building"
       ? "Building transaction…"
       : phase.name === "awaiting_signature"
-        ? "Approve in wallet…"
+        ? walletSource === "vision"
+          ? "Signing with Vision Wallet…"
+          : "Approve in wallet…"
         : phase.name === "submitting"
           ? "Submitting…"
           : phase.name === "confirming"
             ? "Confirming on-chain…"
             : "";
 
-  let ctaLabel = "Swap";
+  let ctaLabel = walletSource === "vision" ? "Swap with Vision Wallet" : "Swap";
   let ctaDisabled = false;
   let ctaAction: (() => void) | null = handleSwap;
 
-  if (!connected) {
-    ctaLabel = "Connect wallet";
+  if (walletSource === "vision" && !visionWallet.solanaAddress) {
+    ctaLabel = visionWallet.working ? "Creating Vision Wallet…" : "Create Vision Wallet";
+    ctaDisabled = visionWallet.working;
+    ctaAction = visionWallet.working
+      ? null
+      : () => {
+          visionWallet.createWallet().catch(() => { /* hook toasts */ });
+        };
+  } else if (walletSource === "external" && !connected) {
+    ctaLabel = "Connect external wallet";
     ctaAction = () => setVisible(true);
   } else if (!outputToken) {
     ctaLabel = "Select a token";
@@ -649,6 +721,18 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
             </PopoverContent>
           </Popover>
         </div>
+
+        {/* Wallet source picker — Vision Wallet recommended, external is secondary */}
+        <WalletSourcePicker
+          value={walletSource}
+          onChange={setWalletSource}
+          visionAvailable={!!visionWallet.solanaAddress}
+          externalAvailable={connected}
+          onCreateVision={() => {
+            visionWallet.createWallet().catch(() => { /* hook toasts */ });
+          }}
+          onConnectExternal={() => setVisible(true)}
+        />
 
         {/* Card */}
         <div className="overflow-hidden rounded-2xl border border-border bg-card/60 backdrop-blur-sm shadow-soft">
