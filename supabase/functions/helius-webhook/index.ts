@@ -182,6 +182,19 @@ Deno.serve(async (req) => {
   }
   const tracked = new Set(trackers.keys());
 
+  // Map (wallet → user_id) for OWN linked wallets — used to attribute the 1%
+  // swap fee. Only true owners (wallet_links) get a treasury_fees row, never
+  // observed smart-money wallets.
+  const { data: ownLinks } = await admin
+    .from("wallet_links")
+    .select("wallet_address, user_id")
+    .in("wallet_address", [...allAddrs]);
+  const ownerByWallet = new Map<string, string>();
+  for (const r of ownLinks ?? []) {
+    ownerByWallet.set(String(r.wallet_address), String(r.user_id));
+  }
+
+
   const solUsd = await fetchSolPrice();
 
   let inserted = 0;
