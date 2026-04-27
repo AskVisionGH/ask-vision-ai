@@ -456,6 +456,8 @@ export const BridgePreviewCard = ({ data }: Props) => {
 
   const isBusy =
     phase.name === "building" ||
+    phase.name === "switching_chain" ||
+    phase.name === "approving" ||
     phase.name === "awaiting_signature" ||
     phase.name === "submitting" ||
     phase.name === "bridging";
@@ -466,13 +468,19 @@ export const BridgePreviewCard = ({ data }: Props) => {
   const busyLabel =
     phase.name === "building"
       ? "Building transaction…"
-      : phase.name === "awaiting_signature"
-        ? "Approve in wallet…"
-        : phase.name === "submitting"
-          ? "Submitting on Solana…"
-          : phase.name === "bridging"
-            ? bridgingLabel(phase, nowTick)
-            : "";
+      : phase.name === "switching_chain"
+        ? "Switching network…"
+        : phase.name === "approving"
+          ? "Approving token…"
+          : phase.name === "awaiting_signature"
+            ? "Approve in wallet…"
+            : phase.name === "submitting"
+              ? fromIsEvm
+                ? "Confirming on source chain…"
+                : "Submitting on Solana…"
+              : phase.name === "bridging"
+                ? bridgingLabel(phase, nowTick)
+                : "";
 
   return (
     <TooltipProvider delayDuration={150}>
