@@ -222,7 +222,12 @@ serve(async (req) => {
 
     const client = createPublicClient({
       chain,
-      transport: http(undefined, { batch: true, timeout: 15_000 }),
+      transport: fallback(
+        (RPC_URLS[chainId] ?? []).map((url) =>
+          http(url, { batch: true, timeout: 12_000, retryCount: 1 }),
+        ),
+        { rank: false, retryCount: 1 },
+      ),
     });
 
     // Native balance is a separate eth_getBalance call.
