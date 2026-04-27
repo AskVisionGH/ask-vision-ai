@@ -74,7 +74,7 @@ export const useVisionEvmBridge = () => {
       // ── 1. ERC-20 approval (only when source is a token) ────────────────
       if (params.approvalAddress && !isNative(params.fromTokenAddress)) {
         const required = BigInt(params.fromAmount);
-        const currentAllowance = (await publicClient.readContract({
+        const currentAllowance = (await (publicClient as any).readContract({
           address: params.fromTokenAddress as Hex,
           abi: erc20Abi,
           functionName: "allowance",
@@ -101,7 +101,7 @@ export const useVisionEvmBridge = () => {
           const approvalHash = approveRes.hash as Hex | null;
           if (!approvalHash) throw new Error("Approval tx returned no hash");
           params.onStatus?.("approving", { approvalHash });
-          await publicClient.waitForTransactionReceipt({ hash: approvalHash });
+          await (publicClient as any).waitForTransactionReceipt({ hash: approvalHash });
           params.onStatus?.("approved", { approvalHash });
         }
       }
@@ -126,7 +126,7 @@ export const useVisionEvmBridge = () => {
 
       // ── 3. Wait for source-chain inclusion ──────────────────────────────
       params.onStatus?.("confirming");
-      await publicClient.waitForTransactionReceipt({ hash });
+      await (publicClient as any).waitForTransactionReceipt({ hash });
       return hash;
     },
     [visionWallet.evmAddress, visionSigner],
