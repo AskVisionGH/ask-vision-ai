@@ -74,7 +74,7 @@ interface ChainOption {
  *   - supabase/functions/evm-swap-quote/index.ts (SUPPORTED_CHAINS)
  *   - src/lib/evm-chains.ts (SUPPORTED_EVM_CHAINS)
  */
-const CHAINS: ChainOption[] = [
+export const CHAINS: ChainOption[] = [
   { key: "SOL", label: "Solana", logo: "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png", nativeSymbol: "SOL", lifiId: "SOL" },
   { key: 1, label: "Ethereum", logo: "https://icons.llamao.fi/icons/chains/rsz_ethereum.jpg", nativeSymbol: "ETH", lifiId: "1" },
   { key: 8453, label: "Base", logo: "https://icons.llamao.fi/icons/chains/rsz_base.jpg", nativeSymbol: "ETH", lifiId: "8453" },
@@ -87,7 +87,7 @@ const CHAINS: ChainOption[] = [
   { key: 534352, label: "Scroll", logo: "https://icons.llamao.fi/icons/chains/rsz_scroll.jpg", nativeSymbol: "ETH", lifiId: "534352" },
 ];
 
-const chainOption = (key: ChainKey): ChainOption | undefined =>
+export const chainOption = (key: ChainKey): ChainOption | undefined =>
   CHAINS.find((c) => String(c.key) === String(key));
 
 // Solana popular tokens — same set as TokenPickerDialog so users get a
