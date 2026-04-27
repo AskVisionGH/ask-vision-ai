@@ -59,8 +59,23 @@ type DepositItem = {
 type ActivityItem = TxEventItem | DepositItem;
 
 type ChainFilter = "all" | "solana" | "evm";
+type KindFilter = "all" | "swap" | "bridge" | "transfer" | "deposit";
 
 const PAGE_SIZE = 30;
+
+const itemKind = (item: ActivityItem): KindFilter => {
+  if (item.kind === "deposit") return "deposit";
+  switch (item.subKind) {
+    case "swap":
+      return "swap";
+    case "bridge":
+      return "bridge";
+    case "transfer":
+      return "transfer";
+    default:
+      return "transfer";
+  }
+};
 
 const fmtAmount = (n: number | null | undefined) => {
   if (n == null || !Number.isFinite(n)) return "—";
