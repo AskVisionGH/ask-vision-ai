@@ -698,6 +698,15 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
           onConnectExternal={() => setVisible(true)}
         />
 
+        {/* Stranded routes — surfaces if the user has a bridge_then_swap
+            with leg 2 unfinished. Hidden entirely when none exist. */}
+        <StrandedRoutesCard
+          userId={user?.id}
+          refreshKey={strandedRefreshKey}
+          onResume={handleResumeStranded}
+          busy={isBusy}
+        />
+
         {/* Card */}
         <div className="overflow-hidden rounded-2xl border border-border bg-card/60 backdrop-blur-sm shadow-soft">
           <SwapSide
