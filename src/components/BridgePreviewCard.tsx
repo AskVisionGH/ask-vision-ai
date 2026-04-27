@@ -766,3 +766,22 @@ const Row = ({ label, value }: { label: string; value: React.ReactNode }) => (
     {value}
   </div>
 );
+
+// Minimal EVM explorer URL — mirrors the Trade tab's helper so chat success
+// links go to the right scanner per source chain.
+function buildEvmExplorer(chainId: number, hash: string): string {
+  const map: Record<number, string> = {
+    1: "https://etherscan.io/tx/",
+    10: "https://optimistic.etherscan.io/tx/",
+    56: "https://bscscan.com/tx/",
+    137: "https://polygonscan.com/tx/",
+    250: "https://ftmscan.com/tx/",
+    8453: "https://basescan.org/tx/",
+    42161: "https://arbiscan.io/tx/",
+    43114: "https://snowscan.xyz/tx/",
+    59144: "https://lineascan.build/tx/",
+    534352: "https://scrollscan.com/tx/",
+  };
+  const base = map[chainId] ?? "https://etherscan.io/tx/";
+  return `${base}${hash}`;
+}
