@@ -566,6 +566,8 @@ const Chat = () => {
                   </p>
                 )}
 
+                <VisionWalletReadyBanner />
+
                 <div className="mt-5 grid w-full max-w-md grid-cols-1 gap-2 sm:mt-10 sm:grid-cols-2">
                   {suggestions.map((s) => (
                     <button
