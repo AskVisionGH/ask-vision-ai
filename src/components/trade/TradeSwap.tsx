@@ -166,6 +166,7 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
   const [phase, setPhase] = useState<Phase>({ name: "idle" });
   const [inputBalance, setInputBalance] = useState<number | null>(null);
   const [walletSource, setWalletSource] = useState<WalletSource>("vision");
+  const [fundOpen, setFundOpen] = useState(false);
 
   const { connection } = useConnection();
   const { publicKey, connected, signTransaction } = useWallet();
