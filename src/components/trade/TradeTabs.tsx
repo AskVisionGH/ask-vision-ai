@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
-export type TradeTab = "trade" | "limit" | "pro" | "bridge" | "buy" | "sell";
+export type TradeTab = "trade" | "limit" | "pro" | "buy" | "sell";
 
 interface Props {
   active: TradeTab;
@@ -12,7 +12,6 @@ const TABS: { id: TradeTab; label: string; enabled: boolean }[] = [
   { id: "trade", label: "Swap", enabled: true },
   { id: "limit", label: "Limit", enabled: true },
   { id: "pro", label: "Pro", enabled: true },
-  { id: "bridge", label: "Bridge", enabled: true },
   { id: "buy", label: "Buy", enabled: false },
   { id: "sell", label: "Sell", enabled: false },
 ];
