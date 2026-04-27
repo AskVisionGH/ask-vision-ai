@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useQueries, useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { VersionedTransaction } from "@solana/web3.js";
 import {
+  ArrowDown,
+  ArrowUp,
   Clock,
   Loader2,
   Repeat,
   Sparkles,
+  TrendingDown,
+  TrendingUp,
   Wallet as WalletIcon,
   X,
 } from "lucide-react";
@@ -17,24 +21,31 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useVisionWallet } from "@/hooks/useVisionWallet";
 import { useTradeSigner } from "@/hooks/useTradeSigner";
+import { useJupiterV2Auth } from "@/hooks/useJupiterV2Auth";
 import type { WalletSource } from "@/components/trade/WalletSourcePicker";
 
 /**
- * OrdersPanel — unified active orders view across Limit + DCA, fetched for
- * BOTH the user's Vision Wallet and any connected external Solana wallet.
+ * OrdersPanel — unified active orders view across Limit + DCA + Bracket
+ * (Jupiter Trigger v2 TP/SL/OTOCO), fetched for BOTH the user's Vision Wallet
+ * and any connected external Solana wallet.
  *
  * Cancel reuses the existing edge functions:
  *   - Limit:   limit-order-manage (action=cancel) → limit-order-execute
  *   - DCA:     recurring-cancel                  → recurring-execute
+ *   - Bracket: trigger-v2-orders (cancel)        → trigger-v2-orders (confirm-cancel)
  *
- * Signing is delegated to useTradeSigner so the same flow works for Vision
- * (custodial Privy) and external (wallet-adapter) sources.
+ * Signing for Limit/DCA is delegated to useTradeSigner so the same flow works
+ * for Vision (custodial Privy) and external (wallet-adapter) sources.
+ *
+ * Brackets currently require an external wallet (Jupiter v2 auth uses
+ * `signMessage`, which Vision Wallet doesn't surface yet). Vision bracket
+ * support would need a Privy signMessage path — tracked as follow-up.
  *
  * Edits aren't supported by Jupiter's APIs — users cancel + recreate from
  * the Trade page. We surface that in the empty/help copy.
  */
 
-type OrderKind = "limit" | "dca";
+type OrderKind = "limit" | "dca" | "bracket";
 
 interface UnifiedOrder {
   id: string;
@@ -49,13 +60,20 @@ interface UnifiedOrder {
   outLogo: string | null;
   inAmount: number;
   outAmount: number | null;
-  /** Per-cycle amount for DCA, null for limit. */
+  /** Per-cycle amount for DCA, null for limit/bracket. */
   perCycleAmount: number | null;
   pctFilled: number | null;
   intervalSec: number | null;
-  /** ms unix; for limit = expiry, for DCA = next cycle. */
+  /** ms unix; for limit/bracket = expiry, for DCA = next cycle. */
   primaryTimeMs: number | null;
   createdAtMs: number | null;
+  /** Bracket-only: TP/SL/entry trigger metadata. */
+  bracketType?: "single" | "oco" | "otoco";
+  triggerCondition?: "above" | "below" | null;
+  triggerPriceUsd?: number | null;
+  tpPriceUsd?: number | null;
+  slPriceUsd?: number | null;
+  bracketState?: string;
 }
 
 const supaPost = async <T = unknown>(fn: string, body: unknown): Promise<T> => {
@@ -117,6 +135,16 @@ const fmtAmount = (n: number): string => {
   });
 };
 
+const fmtUsd = (n: number | null | undefined): string => {
+  if (n == null || !Number.isFinite(n)) return "—";
+  if (Math.abs(n) < 0.01 && n !== 0) return `$${n.toExponential(2)}`;
+  return n.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 4,
+  });
+};
+
 const fmtCountdown = (ms: number | null): string => {
   if (!ms) return "No expiry";
   const diff = ms - Date.now();
@@ -169,6 +197,27 @@ interface RawDcaOrder {
   createdAt?: string | number;
   inputTokenInfo?: { symbol?: string; decimals?: number; logo?: string | null } | null;
   outputTokenInfo?: { symbol?: string; decimals?: number; logo?: string | null } | null;
+}
+
+interface RawBracketOrder {
+  id?: string;
+  orderType?: "single" | "oco" | "otoco" | string;
+  orderState?: string;
+  rawState?: string;
+  inputMint?: string;
+  outputMint?: string;
+  triggerMint?: string;
+  triggerCondition?: "above" | "below" | string;
+  triggerPriceUsd?: number | string | null;
+  tpPriceUsd?: number | string | null;
+  slPriceUsd?: number | string | null;
+  initialInputAmount?: string | number;
+  remainingInputAmount?: string | number;
+  inputAmount?: string | number;
+  expiresAt?: number | string | null;
+  createdAt?: number | string | null;
+  inputMintInfo?: { symbol?: string; decimals?: number; logo?: string | null } | null;
+  outputMintInfo?: { symbol?: string; decimals?: number; logo?: string | null } | null;
 }
 
 const normalizeLimit = (
@@ -260,7 +309,56 @@ const normalizeDca = (
   };
 };
 
-type FilterKind = "all" | "limit" | "dca";
+const normalizeBracket = (
+  o: RawBracketOrder,
+  source: WalletSource,
+  walletAddress: string,
+): UnifiedOrder | null => {
+  if (!o.id || !o.inputMint || !o.outputMint) return null;
+  const inDec = o.inputMintInfo?.decimals ?? 9;
+  const inAtomic = Number(
+    o.remainingInputAmount ?? o.initialInputAmount ?? o.inputAmount ?? 0,
+  );
+  const inAmount = Number.isFinite(inAtomic)
+    ? inAtomic / Math.pow(10, inDec)
+    : 0;
+  const rawType = (o.orderType ?? "single") as string;
+  const bracketType = (
+    ["single", "oco", "otoco"].includes(rawType) ? rawType : "single"
+  ) as "single" | "oco" | "otoco";
+
+  return {
+    id: o.id,
+    kind: "bracket",
+    source,
+    walletAddress,
+    inMint: o.inputMint,
+    outMint: o.outputMint,
+    inSymbol: o.inputMintInfo?.symbol || `${o.inputMint.slice(0, 4)}…`,
+    outSymbol: o.outputMintInfo?.symbol || `${o.outputMint.slice(0, 4)}…`,
+    inLogo: o.inputMintInfo?.logo ?? null,
+    outLogo: o.outputMintInfo?.logo ?? null,
+    inAmount,
+    outAmount: null,
+    perCycleAmount: null,
+    pctFilled: null,
+    intervalSec: null,
+    primaryTimeMs: toMs(o.expiresAt ?? null),
+    createdAtMs: toMs(o.createdAt ?? null),
+    bracketType,
+    triggerCondition:
+      o.triggerCondition === "above" || o.triggerCondition === "below"
+        ? o.triggerCondition
+        : null,
+    triggerPriceUsd:
+      o.triggerPriceUsd != null ? Number(o.triggerPriceUsd) : null,
+    tpPriceUsd: o.tpPriceUsd != null ? Number(o.tpPriceUsd) : null,
+    slPriceUsd: o.slPriceUsd != null ? Number(o.slPriceUsd) : null,
+    bracketState: o.orderState ?? o.rawState ?? "open",
+  };
+};
+
+type FilterKind = "all" | "limit" | "dca" | "bracket";
 
 export const OrdersPanel = () => {
   const queryClient = useQueryClient();
@@ -316,12 +414,44 @@ export const OrdersPanel = () => {
     ]),
   });
 
+  // Bracket (Trigger v2) orders — separate query because they need the v2
+  // JWT (signMessage challenge) and only run for the connected external
+  // wallet today. Vision-Wallet brackets need Privy signMessage support
+  // which isn't wired yet, so they're excluded from this query.
+  const { ensureJwt, hasCachedJwt, signing: bracketSigning } = useJupiterV2Auth();
+  const bracketWallet = externalSolana;
+
+  const {
+    data: bracketData,
+    isLoading: bracketLoading,
+    isError: bracketError,
+    isFetching: bracketFetching,
+    refetch: refetchBrackets,
+  } = useQuery({
+    queryKey: ["orders-page", "bracket", bracketWallet] as const,
+    enabled: !!bracketWallet && hasCachedJwt,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+    retry: false,
+    queryFn: async () => {
+      const jwt = await ensureJwt();
+      const res = await supaPost<{ orders?: RawBracketOrder[] }>(
+        "trigger-v2-orders",
+        { action: "list", jwt, state: "active", limit: 50 },
+      );
+      return (res?.orders ?? [])
+        .map((o) => normalizeBracket(o, "external", bracketWallet!))
+        .filter((x): x is UnifiedOrder => !!x);
+    },
+  });
+
   const isLoading = queries.length > 0 && queries.some((q) => q.isLoading);
-  const isFetching = queries.some((q) => q.isFetching);
+  const isFetching =
+    queries.some((q) => q.isFetching) || bracketFetching;
   const hasError = queries.some((q) => q.isError);
   const allOrders: UnifiedOrder[] = useMemo(
-    () => queries.flatMap((q) => q.data ?? []),
-    [queries],
+    () => [...queries.flatMap((q) => q.data ?? []), ...(bracketData ?? [])],
+    [queries, bracketData],
   );
 
   const [filter, setFilter] = useState<FilterKind>("all");
@@ -339,7 +469,11 @@ export const OrdersPanel = () => {
 
   const limitCount = allOrders.filter((o) => o.kind === "limit").length;
   const dcaCount = allOrders.filter((o) => o.kind === "dca").length;
+  const bracketCount = allOrders.filter((o) => o.kind === "bracket").length;
   const showSourceBadge = sources.length > 1;
+  // Show the bracket "Load" affordance only if an external wallet is
+  // connected (since v2 auth requires it) and we don't already have a JWT.
+  const canLoadBrackets = !!bracketWallet && !hasCachedJwt;
 
   // Tick every 30s so countdowns refresh without re-fetching.
   const [, setTick] = useState(0);
@@ -352,13 +486,94 @@ export const OrdersPanel = () => {
     queryClient.invalidateQueries({ queryKey: ["orders-page"] });
   }, [queryClient]);
 
-  // ---- Cancel flow (works for both Vision and external) ----
+  const handleLoadBrackets = useCallback(async () => {
+    try {
+      await ensureJwt();
+      await refetchBrackets();
+    } catch (e) {
+      toast({
+        title: "Couldn't load brackets",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  }, [ensureJwt, refetchBrackets]);
+
+  // ---- Cancel flow (works for Limit/DCA via useTradeSigner; Bracket via
+  //      Jupiter v2 two-step withdrawal flow) ----
   const visionSigner = useTradeSigner("vision");
   const externalSigner = useTradeSigner("external");
   const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   const handleCancel = useCallback(
     async (order: UnifiedOrder) => {
+      // ---- Bracket cancel = Jupiter v2 two-step withdrawal ----
+      if (order.kind === "bracket") {
+        if (!externalWallet.signTransaction) {
+          toast({
+            title: "Connect external wallet",
+            description: "Bracket cancellation needs your wallet signature.",
+            variant: "destructive",
+          });
+          return;
+        }
+        setCancellingId(order.id);
+        try {
+          const jwt = await ensureJwt();
+          toast({
+            title: "Cancelling bracket",
+            description: "Building withdrawal transaction…",
+          });
+          const built = await supaPost<{
+            transaction: string;
+            requestId: string;
+          }>("trigger-v2-orders", {
+            action: "cancel",
+            jwt,
+            orderId: order.id,
+          });
+          if (!built.transaction || !built.requestId) {
+            throw new Error("Withdrawal transaction missing");
+          }
+          const txBytes = Uint8Array.from(atob(built.transaction), (c) =>
+            c.charCodeAt(0),
+          );
+          const tx = VersionedTransaction.deserialize(txBytes);
+          const signed = await externalWallet.signTransaction(tx);
+          const signedB64 = btoa(
+            String.fromCharCode(...signed.serialize()),
+          );
+          const confirmed = await supaPost<{
+            txSignature?: string;
+            signature?: string;
+          }>("trigger-v2-orders", {
+            action: "confirm-cancel",
+            jwt,
+            orderId: order.id,
+            signedTransaction: signedB64,
+            cancelRequestId: built.requestId,
+          });
+          const sig = confirmed.txSignature ?? confirmed.signature ?? null;
+          toast({
+            title: "Bracket cancelled",
+            description: sig
+              ? `${order.inSymbol} → ${order.outSymbol} · ${String(sig).slice(0, 8)}…`
+              : `${order.inSymbol} → ${order.outSymbol}`,
+          });
+          setTimeout(refreshAll, 1500);
+        } catch (e) {
+          toast({
+            title: "Couldn't cancel",
+            description: e instanceof Error ? e.message : "Unknown error",
+            variant: "destructive",
+          });
+        } finally {
+          setCancellingId(null);
+        }
+        return;
+      }
+
+      // ---- Limit / DCA cancel ----
       const signer = order.source === "vision" ? visionSigner : externalSigner;
       if (!signer.ready) {
         toast({
@@ -433,7 +648,13 @@ export const OrdersPanel = () => {
         setCancellingId(null);
       }
     },
-    [visionSigner, externalSigner, refreshAll],
+    [
+      visionSigner,
+      externalSigner,
+      externalWallet,
+      ensureJwt,
+      refreshAll,
+    ],
   );
 
   // ---- Render ----
@@ -470,6 +691,12 @@ export const OrdersPanel = () => {
             label="DCA"
             count={dcaCount}
           />
+          <FilterChip
+            active={filter === "bracket"}
+            onClick={() => setFilter("bracket")}
+            label="TP/SL"
+            count={bracketCount}
+          />
         </div>
         <button
           type="button"
@@ -480,6 +707,40 @@ export const OrdersPanel = () => {
           {isFetching ? "Refreshing…" : "Refresh"}
         </button>
       </div>
+
+      {/* Bracket auth gate — only when external wallet connected and JWT
+          not yet cached. Lets users opt into bracket visibility without
+          forcing a signature on every page load. */}
+      {canLoadBrackets && (filter === "all" || filter === "bracket") && (
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-dashed border-border/60 bg-card/30 px-4 py-3">
+          <p className="font-mono text-[11px] text-muted-foreground">
+            Sign once to load your TP/SL bracket orders.
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleLoadBrackets}
+            disabled={bracketSigning || bracketLoading}
+            className="h-8 font-mono text-[11px]"
+          >
+            {bracketSigning ? (
+              <>
+                <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                Check wallet
+              </>
+            ) : (
+              "Load TP/SL"
+            )}
+          </Button>
+        </div>
+      )}
+
+      {/* Bracket-specific error (don't block other orders) */}
+      {bracketError && hasCachedJwt && (filter === "all" || filter === "bracket") && (
+        <div className="rounded-2xl border border-destructive/30 bg-destructive/5 px-4 py-2.5 font-mono text-[11px] text-destructive">
+          Couldn't load brackets. Refresh to retry.
+        </div>
+      )}
 
       {/* Body */}
       {isLoading ? (
@@ -497,7 +758,9 @@ export const OrdersPanel = () => {
               ? "No active orders."
               : filter === "limit"
                 ? "No active limit orders."
-                : "No active DCA orders."}
+                : filter === "dca"
+                  ? "No active DCA orders."
+                  : "No active TP/SL brackets."}
           </p>
           <p className="mt-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/70">
             Place one from the Trade page
@@ -566,13 +829,15 @@ const OrderRow = ({
   showSourceBadge: boolean;
 }) => {
   const expired =
-    order.kind === "limit" &&
+    (order.kind === "limit" || order.kind === "bracket") &&
     order.primaryTimeMs != null &&
     order.primaryTimeMs <= Date.now();
   const due =
     order.kind === "dca" &&
     order.primaryTimeMs != null &&
     order.primaryTimeMs <= Date.now();
+  const pendingWithdraw =
+    order.kind === "bracket" && order.bracketState === "pending_withdraw";
 
   return (
     <div className="ease-vision rounded-2xl border border-border bg-card/60 p-3 backdrop-blur-sm transition-colors hover:border-border/90">
@@ -594,17 +859,52 @@ const OrderRow = ({
                   <span className="text-muted-foreground">→</span>{" "}
                   {fmtAmount(order.outAmount ?? 0)} {order.outSymbol}
                 </>
-              ) : (
+              ) : order.kind === "dca" ? (
                 <>
                   {fmtAmount(order.perCycleAmount ?? 0)} {order.inSymbol}{" "}
                   <span className="text-muted-foreground">→</span>{" "}
                   {order.outSymbol}
                 </>
+              ) : (
+                <>
+                  <span className="text-muted-foreground">Spend</span>{" "}
+                  {fmtAmount(order.inAmount)} {order.inSymbol}{" "}
+                  <span className="text-muted-foreground">→</span>{" "}
+                  {order.outSymbol}
+                </>
               )}
             </p>
-            <KindBadge kind={order.kind} />
+            <KindBadge order={order} />
             {showSourceBadge && <SourceBadge source={order.source} />}
           </div>
+
+          {/* Bracket trigger summary (entry / TP / SL) */}
+          {order.kind === "bracket" && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px]">
+              {order.triggerPriceUsd != null && (
+                <span className="flex items-center gap-1 text-muted-foreground">
+                  {order.triggerCondition === "above" ? (
+                    <ArrowUp className="h-2.5 w-2.5" />
+                  ) : (
+                    <ArrowDown className="h-2.5 w-2.5" />
+                  )}
+                  Entry {fmtUsd(order.triggerPriceUsd)}
+                </span>
+              )}
+              {order.tpPriceUsd != null && (
+                <span className="flex items-center gap-1 text-up">
+                  <TrendingUp className="h-2.5 w-2.5" />
+                  TP {fmtUsd(order.tpPriceUsd)}
+                </span>
+              )}
+              {order.slPriceUsd != null && (
+                <span className="flex items-center gap-1 text-down">
+                  <TrendingDown className="h-2.5 w-2.5" />
+                  SL {fmtUsd(order.slPriceUsd)}
+                </span>
+              )}
+            </div>
+          )}
 
           {order.kind === "dca" && (
             <div className="space-y-0.5">
@@ -648,12 +948,17 @@ const OrderRow = ({
                 )}
               </>
             ) : (
-              <span className="flex items-center gap-1">
-                <Clock className="h-2.5 w-2.5" />
-                <span className={cn(expired && "text-down")}>
-                  {fmtCountdown(order.primaryTimeMs)}
+              <>
+                <span className="flex items-center gap-1">
+                  <Clock className="h-2.5 w-2.5" />
+                  <span className={cn(expired && "text-down")}>
+                    {fmtCountdown(order.primaryTimeMs)}
+                  </span>
                 </span>
-              </span>
+                {pendingWithdraw && (
+                  <span className="text-warn">Withdrawal pending</span>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -664,8 +969,8 @@ const OrderRow = ({
           onClick={onCancel}
           disabled={cancelling}
           className="h-8 w-8 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-          aria-label="Cancel order"
-          title="Cancel order"
+          aria-label={pendingWithdraw ? "Retry withdrawal" : "Cancel order"}
+          title={pendingWithdraw ? "Retry withdrawal" : "Cancel order"}
         >
           {cancelling ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -678,11 +983,23 @@ const OrderRow = ({
   );
 };
 
-const KindBadge = ({ kind }: { kind: OrderKind }) => (
-  <span className="rounded-full border border-border/60 bg-secondary/50 px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-    {kind === "limit" ? "Limit" : "DCA"}
-  </span>
-);
+const KindBadge = ({ order }: { order: UnifiedOrder }) => {
+  const label =
+    order.kind === "limit"
+      ? "Limit"
+      : order.kind === "dca"
+        ? "DCA"
+        : order.bracketType === "otoco"
+          ? "OTOCO"
+          : order.bracketType === "oco"
+            ? "TP/SL"
+            : "Trigger";
+  return (
+    <span className="rounded-full border border-border/60 bg-secondary/50 px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+      {label}
+    </span>
+  );
+};
 
 const SourceBadge = ({ source }: { source: WalletSource }) => (
   <span
