@@ -513,7 +513,7 @@ const TOOLS = [
         "Preview a TP+SL bracket order. Final signing happens in /trade (vault required). " +
         "TP/SL prices can be expressed two ways: " +
         "(a) absolute USD via `tpPriceUsd` / `slPriceUsd`, or " +
-        "(b) **entry-relative** via `tpFromEntry` / `slFromEntry` — server resolves to absolute USD using the user's average buy-in for the **OUTPUT token** (the token they're holding). " +
+        "(b) **entry-relative** via `tpFromEntry` / `slFromEntry` — server resolves to absolute USD using the user's average buy-in for the **INPUT token** (the asset they're holding and selling). " +
         "Use entry-relative whenever the user references their cost basis: 'TP at 2x my entry', 'stop at -25% from buy', 'TP when it doubles, SL at break-even'. " +
         "Provide ONE of `tpPriceUsd` OR `tpFromEntry` (same for SL), not both.",
       parameters: {
