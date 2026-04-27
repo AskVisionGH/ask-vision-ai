@@ -33,7 +33,7 @@ import {
   type ShareMode,
 } from "@/hooks/useConversations";
 import { streamChat, type ChatMessage, type ToolEvent } from "@/lib/chat-stream";
-import { pickSuggestions } from "@/lib/chat-suggestions";
+
 import { cn } from "@/lib/utils";
 
 const Chat = () => {
@@ -63,10 +63,6 @@ const Chat = () => {
   // the user lands on the empty-chat screen (no activeId). useMemo with these
   // deps gives us a stable list within a single empty-state render but a
   // fresh draw whenever they start a new chat.
-  const suggestions = useMemo(
-    () => pickSuggestions(4),
-    [user?.id, activeId],
-  );
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loadingThread, setLoadingThread] = useState(false);
   const [input, setInput] = useState("");
