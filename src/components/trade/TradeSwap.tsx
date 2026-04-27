@@ -590,14 +590,14 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
                   aria-checked={dynamicSlippage}
                   onClick={() => setDynamicSlippage((v) => !v)}
                   className={cn(
-                    "ease-vision relative h-5 w-9 shrink-0 rounded-full border transition-colors",
+                    "ease-vision relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors",
                     dynamicSlippage ? "border-primary/60 bg-primary/40" : "border-border/60 bg-secondary/60",
                   )}
                 >
                   <span
                     className={cn(
-                      "ease-vision absolute top-0.5 h-3.5 w-3.5 rounded-full bg-foreground transition-transform",
-                      dynamicSlippage ? "translate-x-4" : "translate-x-0.5",
+                      "ease-vision inline-block h-3.5 w-3.5 rounded-full bg-foreground transition-transform",
+                      dynamicSlippage ? "translate-x-[18px]" : "translate-x-0.5",
                     )}
                   />
                 </button>
