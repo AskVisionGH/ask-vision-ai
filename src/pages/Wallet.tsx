@@ -164,10 +164,7 @@ const WalletPage = () => {
                   </TabsContent>
 
                   <TabsContent value="activity" className="pt-6">
-                    <ComingSoon
-                      title="Activity"
-                      body="Unified feed of swaps, transfers, and incoming deposits across Solana and EVM. Edge function is deployed — UI lands in the next update."
-                    />
+                    <WalletActivityPanel />
                   </TabsContent>
                 </Tabs>
               )}
