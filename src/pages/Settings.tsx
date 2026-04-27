@@ -239,6 +239,8 @@ const Settings = () => {
 
             {/* All other settings — collapsed into dropdowns */}
             <Accordion type="multiple" className="space-y-3">
+              <VisionWalletCard />
+
               <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card/40 p-5 backdrop-blur-md sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0 flex items-start gap-2">
                   <Bell className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" />
@@ -482,7 +484,6 @@ const Settings = () => {
           </div>
         )}
 
-        <VisionWalletCard />
       </div>
 
       {user?.email && (
