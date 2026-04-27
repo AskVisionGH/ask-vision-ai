@@ -13,6 +13,7 @@ import { VisionLoader } from "@/components/VisionLoader";
 import { SEO } from "@/components/SEO";
 import { WalletOnboardingPrompt } from "@/components/WalletOnboardingPrompt";
 import { ChatPushPrompt } from "@/components/ChatPushPrompt";
+import { VisionWalletReadyBanner } from "@/components/VisionWalletReadyBanner";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Menu } from "lucide-react";
@@ -564,6 +565,8 @@ const Chat = () => {
                     Connect a wallet to unlock balance, swap, and transfer actions.
                   </p>
                 )}
+
+                <VisionWalletReadyBanner />
 
                 <div className="mt-5 grid w-full max-w-md grid-cols-1 gap-2 sm:mt-10 sm:grid-cols-2">
                   {suggestions.map((s) => (
