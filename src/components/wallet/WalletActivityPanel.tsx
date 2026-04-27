@@ -328,7 +328,7 @@ export function WalletActivityPanel() {
       )}
       {hasMore && filtersActive && (
         <p className="py-4 text-center text-[10px] text-muted-foreground/70">
-          Filter is on — switch to All to load older events.
+          Filter is on — clear filters to load older events.
         </p>
       )}
     </div>
