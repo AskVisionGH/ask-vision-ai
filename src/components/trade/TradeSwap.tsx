@@ -943,6 +943,13 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
             pickerSide === "in" ? outputToken?.address : pickerSide === "out" ? inputToken.address : undefined
           }
         />
+
+        {/* Fund Vision Wallet */}
+        <FundVisionWalletDialog
+          open={fundOpen}
+          onOpenChange={setFundOpen}
+          defaultChain="solana"
+        />
       </div>
     </TooltipProvider>
   );
