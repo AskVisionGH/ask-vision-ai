@@ -67,11 +67,3 @@ export function usePnLShare(filename: string) {
 
   return { nodeRef, share, busy };
 }
-
-function isSameOrigin(src: string): boolean {
-  try {
-    return new URL(src, window.location.href).origin === window.location.origin;
-  } catch {
-    return false;
-  }
-}
