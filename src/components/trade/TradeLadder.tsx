@@ -157,10 +157,20 @@ export const TradeLadder = ({ expirySeconds }: Props) => {
   const [balance, setBalance] = useState<number | null>(null);
   const [ordersRefreshKey, setOrdersRefreshKey] = useState(0);
 
+  const [walletSource, setWalletSource] = useState<WalletSource>("vision");
+  const [fundOpen, setFundOpen] = useState(false);
+
   const { connection } = useConnection();
-  const { publicKey, connected, signTransaction } = useWallet();
+  const { publicKey, connected } = useWallet();
   const { setVisible } = useWalletModal();
+  const visionWallet = useVisionWallet();
+  const signer = useTradeSigner(walletSource);
   const mounted = useRef(true);
+
+  const activePayerAddress =
+    walletSource === "vision"
+      ? visionWallet.solanaAddress
+      : publicKey?.toBase58() ?? null;
 
   useEffect(() => {
     mounted.current = true;
