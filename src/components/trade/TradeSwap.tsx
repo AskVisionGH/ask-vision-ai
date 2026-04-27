@@ -1,3 +1,16 @@
+// TradeSwap — unified "any token, any chain" swap UI.
+//
+// Backed by the route-quote orchestrator + useRouteExecutor:
+//   - Solana same-chain swap         → Jupiter (existing path)
+//   - EVM same-chain swap            → 0x (Vision EVM driver or wagmi)
+//   - Cross-chain bridge             → LI.FI direct
+//   - Cross-chain bridge_then_swap   → LI.FI bridge to USDC + destination 0x/Jupiter swap
+//
+// The 1% Vision platform fee is applied per-leg by the underlying quote/build
+// functions (see useRouteExecutor for the per-strategy breakdown). Bridge-only
+// flows lean on LI.FI's integrator fee; bridge+swap flows charge only on the
+// destination swap leg.
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownUp,
@@ -14,7 +27,8 @@ import {
 } from "lucide-react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
-import { LAMPORTS_PER_SOL, PublicKey, VersionedTransaction } from "@solana/web3.js";
+import { useAccount } from "wagmi";
+import { LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -31,27 +45,29 @@ import {
 import { TokenLogo } from "@/components/TokenLogo";
 import { TradeTabs, type TradeTab } from "@/components/trade/TradeTabs";
 import {
-  TokenPickerDialog,
-  pushRecentToken,
-  type TokenMeta,
-} from "@/components/trade/TokenPickerDialog";
+  MultichainTokenPickerDialog,
+  pushRecentMultichainToken,
+  type MultichainToken,
+  type ChainKey,
+} from "@/components/trade/MultichainTokenPickerDialog";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useVisionWallet } from "@/hooks/useVisionWallet";
-import { useVisionWalletSigner } from "@/hooks/useVisionWalletSigner";
 import {
   WalletSourcePicker,
   type WalletSource,
 } from "@/components/trade/WalletSourcePicker";
 import { FundVisionWalletDialog } from "@/components/wallet/FundVisionWalletDialog";
+import { useRouteExecutor, type ExecutorStatus, type RoutePlan } from "@/components/trade/useRouteExecutor";
 
-const SOL_TOKEN: TokenMeta = {
+const SOL_TOKEN: MultichainToken = {
   symbol: "SOL",
   name: "Solana",
   address: "So11111111111111111111111111111111111111112",
   decimals: 9,
   logo: "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png",
   priceUsd: null,
+  chainId: "SOL",
 };
 
 const SLIPPAGE_PRESETS = [
@@ -60,32 +76,12 @@ const SLIPPAGE_PRESETS = [
   { label: "1.0%", bps: 100 },
 ];
 
-const QUOTE_DEBOUNCE_MS = 350;
+const QUOTE_DEBOUNCE_MS = 400;
 const QUOTE_REFRESH_MS = 15_000;
-const POLL_INTERVAL_MS = 1500;
-const POLL_TIMEOUT_MS = 60_000;
 
-interface QuoteData {
-  input: TokenMeta & { amountUi: number; amountAtomic: number; valueUsd: number | null };
-  output: TokenMeta & { amountUi: number; amountAtomic: number; valueUsd: number | null };
-  rate: number;
-  priceImpactPct: number | null;
-  slippageBps: number;
-  dynamicSlippage?: boolean;
-  route: { ammKey: string | null; label: string; inputMint: string | null; outputMint: string | null }[];
-  estNetworkFeeSol: number;
-  platformFee: { bps: number; amountUi: number; symbol: string; valueUsd: number | null } | null;
-}
-
-type Phase =
-  | { name: "idle" }
-  | { name: "building" }
-  | { name: "awaiting_signature" }
-  | { name: "submitting" }
-  | { name: "confirming"; signature: string; startedAt: number }
-  | { name: "success"; signature: string; durationMs: number; outUi: number; outSymbol: string; inUi: number; inSymbol: string }
-  | { name: "cancelled"; inUi: number; inSymbol: string; outUi: number; outSymbol: string }
-  | { name: "error"; message: string };
+const isSol = (c: ChainKey) => String(c).toUpperCase() === "SOL";
+const tokenKey = (t: { address: string; chainId: ChainKey }) =>
+  `${t.chainId}:${t.address.toLowerCase()}`;
 
 const fmtUsd = (n: number | null | undefined) => {
   if (n == null) return "$0.00";
@@ -100,15 +96,6 @@ const fmtAmount = (n: number) => {
   return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 };
 const truncSig = (s: string) => `${s.slice(0, 4)}…${s.slice(-4)}`;
-
-const impactBucket = (pct: number | null) => {
-  if (pct == null) return { color: "text-muted-foreground" };
-  const a = Math.abs(pct);
-  if (a < 1) return { color: "text-up" };
-  if (a < 3) return { color: "text-amber-400" };
-  return { color: "text-down" };
-};
-
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const supaPost = async (fn: string, body: unknown, attempt = 0): Promise<any> => {
@@ -126,10 +113,8 @@ const supaPost = async (fn: string, body: unknown, attempt = 0): Promise<any> =>
         } catch { /* ignore */ }
       }
     }
-    // Transparently retry transient cold-start / runtime failures
     const transient =
-      status === 503 ||
-      status === 504 ||
+      status === 503 || status === 504 ||
       (serverMsg ?? error.message ?? "").toLowerCase().includes("temporarily unavailable") ||
       (serverMsg ?? error.message ?? "").toLowerCase().includes("runtime_error");
     if (transient && attempt < 2) {
@@ -150,151 +135,195 @@ interface TradeSwapProps {
 }
 
 export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
-  const [inputToken, setInputToken] = useState<TokenMeta>(SOL_TOKEN);
-  const [outputToken, setOutputToken] = useState<TokenMeta | null>(null);
+  const [inputToken, setInputToken] = useState<MultichainToken>(SOL_TOKEN);
+  const [outputToken, setOutputToken] = useState<MultichainToken | null>(null);
   const [amount, setAmount] = useState("");
   const [slippageBps, setSlippageBps] = useState(50);
   const [customSlippage, setCustomSlippage] = useState("");
   const [dynamicSlippage, setDynamicSlippage] = useState(true);
 
-  const [quote, setQuote] = useState<QuoteData | null>(null);
-  const [quoteLoading, setQuoteLoading] = useState(false);
-  const [quoteError, setQuoteError] = useState<string | null>(null);
+  const [plan, setPlan] = useState<RoutePlan | null>(null);
+  const [planLoading, setPlanLoading] = useState(false);
+  const [planError, setPlanError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const [pickerSide, setPickerSide] = useState<"in" | "out" | null>(null);
-  const [phase, setPhase] = useState<Phase>({ name: "idle" });
+  const [status, setStatus] = useState<ExecutorStatus>({ kind: "idle" });
   const [inputBalance, setInputBalance] = useState<number | null>(null);
   const [walletSource, setWalletSource] = useState<WalletSource>("vision");
   const [fundOpen, setFundOpen] = useState(false);
 
   const { connection } = useConnection();
-  const { publicKey, connected, signTransaction } = useWallet();
+  const { publicKey, connected } = useWallet();
   const { setVisible } = useWalletModal();
+  const { address: externalEvmAddress } = useAccount();
   const visionWallet = useVisionWallet();
-  const visionSigner = useVisionWalletSigner();
+  const { execute } = useRouteExecutor();
   const mounted = useRef(true);
 
-  // Active payer pubkey (string) — depends on selected wallet source.
-  const activePayerAddress: string | null =
-    walletSource === "vision"
-      ? visionWallet.solanaAddress
-      : publicKey?.toBase58() ?? null;
-  const activePayerReady =
-    walletSource === "vision" ? !!visionWallet.solanaAddress : connected;
+  // Resolve the active payer address for the SOURCE chain of the trade.
+  // Solana trades use the Solana address; EVM trades use the EVM address.
+  // For cross-chain we also need the DESTINATION address — see toAddress.
+  const fromAddress: string | null = useMemo(() => {
+    if (isSol(inputToken.chainId)) {
+      return walletSource === "vision"
+        ? visionWallet.solanaAddress
+        : publicKey?.toBase58() ?? null;
+    }
+    return walletSource === "vision"
+      ? visionWallet.evmAddress
+      : externalEvmAddress ?? null;
+  }, [inputToken.chainId, walletSource, visionWallet.solanaAddress, visionWallet.evmAddress, publicKey, externalEvmAddress]);
+
+  // Destination address — same chain as outputToken.
+  const toAddress: string | null = useMemo(() => {
+    if (!outputToken) return null;
+    if (isSol(outputToken.chainId)) {
+      return walletSource === "vision"
+        ? visionWallet.solanaAddress
+        : publicKey?.toBase58() ?? null;
+    }
+    return walletSource === "vision"
+      ? visionWallet.evmAddress
+      : externalEvmAddress ?? null;
+  }, [outputToken, walletSource, visionWallet.solanaAddress, visionWallet.evmAddress, publicKey, externalEvmAddress]);
+
+  // Whether the active wallet source can sign for the source chain.
+  const fromReady = !!fromAddress;
+  // For cross-chain, we ALSO need the destination address provisioned.
+  const toReady = !!toAddress;
 
   useEffect(() => {
     mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
+    return () => { mounted.current = false; };
   }, []);
 
-  // Load balance for whichever token is selected on the input side, scoped to
-  // the active payer (Vision Wallet OR external wallet).
-  // SOL → native lamports; SPL → sum of parsed token accounts for that mint.
+  // Load balance for the input token, scoped to the current source-chain payer.
+  // Solana uses on-chain RPC (cheap, no edge call); EVM uses evm-wallet-balance
+  // which already understands chain-specific token lists + USD pricing.
   useEffect(() => {
-    if (!activePayerAddress) {
-      setInputBalance(null);
-      return;
-    }
+    if (!fromAddress) { setInputBalance(null); return; }
     let cancelled = false;
-    let owner: PublicKey;
-    try {
-      owner = new PublicKey(activePayerAddress);
-    } catch {
-      setInputBalance(null);
-      return;
-    }
     setInputBalance(null);
+
     (async () => {
       try {
-        if (inputToken.address === SOL_TOKEN.address) {
-          const lamports = await connection.getBalance(owner);
-          if (!cancelled) setInputBalance(lamports / LAMPORTS_PER_SOL);
-        } else {
-          const mint = new PublicKey(inputToken.address);
-          const resp = await connection.getParsedTokenAccountsByOwner(owner, { mint });
-          let total = 0;
-          for (const acc of resp.value) {
-            const ui = acc.account.data.parsed?.info?.tokenAmount?.uiAmount;
-            if (typeof ui === "number") total += ui;
+        if (isSol(inputToken.chainId)) {
+          const owner = new PublicKey(fromAddress);
+          if (inputToken.address === SOL_TOKEN.address) {
+            const lamports = await connection.getBalance(owner);
+            if (!cancelled) setInputBalance(lamports / LAMPORTS_PER_SOL);
+          } else {
+            const mint = new PublicKey(inputToken.address);
+            const resp = await connection.getParsedTokenAccountsByOwner(owner, { mint });
+            let total = 0;
+            for (const acc of resp.value) {
+              const ui = acc.account.data.parsed?.info?.tokenAmount?.uiAmount;
+              if (typeof ui === "number") total += ui;
+            }
+            if (!cancelled) setInputBalance(total);
           }
-          if (!cancelled) setInputBalance(total);
+        } else {
+          // EVM — call evm-wallet-balance and find the matching holding.
+          const { data, error } = await supabase.functions.invoke("evm-wallet-balance", {
+            body: { address: fromAddress, chainId: Number(inputToken.chainId) },
+          });
+          if (cancelled) return;
+          if (error || !data || data.error) { setInputBalance(null); return; }
+          const holdings = Array.isArray(data.holdings) ? data.holdings : [];
+          // evm-wallet-balance reports native as 0x000…0; user picks 0xEeeE… for native.
+          const isNativeQuery = inputToken.address.toLowerCase().startsWith("0xeeee");
+          const match = holdings.find((h: any) => {
+            const a = String(h.address ?? h.mint ?? "").toLowerCase();
+            if (isNativeQuery) return /^0x0{40}$/i.test(a);
+            return a === inputToken.address.toLowerCase();
+          });
+          setInputBalance(typeof match?.amount === "number" ? match.amount : 0);
         }
       } catch {
         if (!cancelled) setInputBalance(null);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, [activePayerAddress, connection, inputToken.address, phase.name]);
 
+    return () => { cancelled = true; };
+  }, [fromAddress, connection, inputToken.address, inputToken.chainId, status.kind]);
 
   const numericAmount = useMemo(() => {
     const n = parseFloat(amount);
     return Number.isFinite(n) && n > 0 ? n : 0;
   }, [amount]);
 
-  // Debounced quote fetch.
+  // ---- Quote via the orchestrator (debounced) ----
   useEffect(() => {
-    setQuote(null);
-    setQuoteError(null);
-    if (!outputToken || numericAmount <= 0) {
-      setQuoteLoading(false);
+    setPlan(null);
+    setPlanError(null);
+    if (!outputToken || numericAmount <= 0 || !fromAddress) {
+      setPlanLoading(false);
       return;
     }
-    setQuoteLoading(true);
+    // Skip the cross-chain leg requirement upfront — orchestrator validates anyway.
+    setPlanLoading(true);
     const timer = window.setTimeout(async () => {
       try {
-        const fresh = await supaPost("swap-quote", {
-          inputToken: inputToken.address,
-          outputToken: outputToken.address,
+        const fresh = await supaPost("route-quote", {
+          fromChain: inputToken.chainId,
+          toChain: outputToken.chainId,
+          fromToken: inputToken.address,
+          toToken: outputToken.address,
+          fromAddress,
+          toAddress: toAddress ?? fromAddress,
           amount: numericAmount,
+          fromDecimals: inputToken.decimals,
+          toDecimals: outputToken.decimals,
+          fromSymbol: inputToken.symbol,
+          toSymbol: outputToken.symbol,
           slippageBps,
-          dynamicSlippage,
         });
         if (!mounted.current) return;
-        setQuote(fresh);
-        setQuoteError(null);
+        setPlan(fresh as RoutePlan);
+        setPlanError(null);
       } catch (e) {
         if (!mounted.current) return;
-        setQuote(null);
-        setQuoteError(e instanceof Error ? e.message : "Couldn't fetch quote");
+        setPlan(null);
+        setPlanError(e instanceof Error ? e.message : "Couldn't fetch route");
       } finally {
-        if (mounted.current) setQuoteLoading(false);
+        if (mounted.current) setPlanLoading(false);
       }
     }, QUOTE_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
-  }, [inputToken.address, outputToken?.address, numericAmount, slippageBps, dynamicSlippage]);
+  }, [
+    inputToken.address, inputToken.chainId, inputToken.decimals,
+    outputToken?.address, outputToken?.chainId, outputToken?.decimals,
+    numericAmount, slippageBps, fromAddress, toAddress,
+  ]);
 
   // Auto-refresh quote every 15s while idle and we have one.
   useEffect(() => {
-    if (!quote || phase.name !== "idle" || !outputToken) return;
+    if (!plan || status.kind !== "idle" || !outputToken || !fromAddress) return;
     const timer = window.setInterval(async () => {
       if (!mounted.current) return;
       setRefreshing(true);
       try {
-        const fresh = await supaPost("swap-quote", {
-          inputToken: inputToken.address,
-          outputToken: outputToken.address,
+        const fresh = await supaPost("route-quote", {
+          fromChain: inputToken.chainId,
+          toChain: outputToken.chainId,
+          fromToken: inputToken.address,
+          toToken: outputToken.address,
+          fromAddress,
+          toAddress: toAddress ?? fromAddress,
           amount: numericAmount,
+          fromDecimals: inputToken.decimals,
+          toDecimals: outputToken.decimals,
+          fromSymbol: inputToken.symbol,
+          toSymbol: outputToken.symbol,
           slippageBps,
-          dynamicSlippage,
         });
-        if (mounted.current && !fresh.error) {
-          setQuote(fresh);
-          setQuoteError(null);
-        }
-      } catch {
-        /* keep stale quote */
-      } finally {
-        if (mounted.current) setRefreshing(false);
-      }
+        if (mounted.current) setPlan(fresh as RoutePlan);
+      } catch { /* keep stale */ }
+      finally { if (mounted.current) setRefreshing(false); }
     }, QUOTE_REFRESH_MS);
     return () => window.clearInterval(timer);
-  }, [quote, phase.name, inputToken.address, outputToken?.address, numericAmount, slippageBps, dynamicSlippage]);
+  }, [plan, status.kind, inputToken, outputToken, numericAmount, slippageBps, fromAddress, toAddress]);
 
   const flip = () => {
     if (!outputToken) return;
@@ -302,195 +331,78 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
     const newOut = inputToken;
     setInputToken(newIn);
     setOutputToken(newOut);
-    if (quote) {
-      setAmount(String(quote.output.amountUi || ""));
-    }
+    setAmount(plan?.summary.toAmountUi ? String(plan.summary.toAmountUi) : "");
   };
 
   const handleAmountChange = (v: string) => {
-    // Allow only digits and a single dot.
     if (v === "" || /^\d*\.?\d*$/.test(v)) setAmount(v);
   };
 
   const handleMax = () => {
     if (inputBalance == null) return;
-    if (inputToken.address === SOL_TOKEN.address) {
-      // Reserve a bit for rent + fees on native SOL
+    if (isSol(inputToken.chainId) && inputToken.address === SOL_TOKEN.address) {
       const reserve = 0.01;
       const max = Math.max(0, inputBalance - reserve);
       setAmount(max > 0 ? max.toFixed(6) : "");
+    } else if (!isSol(inputToken.chainId) && inputToken.address.toLowerCase().startsWith("0xeeee")) {
+      // EVM native — reserve a touch for gas.
+      const reserve = 0.001;
+      const max = Math.max(0, inputBalance - reserve);
+      setAmount(max > 0 ? max.toFixed(6) : "");
     } else {
-      // SPL tokens — full balance is spendable
       setAmount(inputBalance > 0 ? String(inputBalance) : "");
     }
   };
 
-  const handlePickToken = (t: TokenMeta) => {
+  const handlePickToken = (t: MultichainToken) => {
     if (pickerSide === "in") {
-      if (outputToken && outputToken.address === t.address) {
+      if (outputToken && tokenKey(outputToken) === tokenKey(t)) {
         setOutputToken(inputToken);
       }
       setInputToken(t);
     } else if (pickerSide === "out") {
-      if (inputToken.address === t.address) {
+      if (tokenKey(inputToken) === tokenKey(t)) {
         setInputToken(outputToken ?? SOL_TOKEN);
       }
       setOutputToken(t);
     }
-    pushRecentToken(t);
+    pushRecentMultichainToken(t);
+    setAmount("");
+    setPlan(null);
   };
 
   const insufficient =
-    inputBalance != null &&
-    numericAmount > 0 &&
-    numericAmount >
-      (inputToken.address === SOL_TOKEN.address
+    inputBalance != null && numericAmount > 0 &&
+    numericAmount > (
+      isSol(inputToken.chainId) && inputToken.address === SOL_TOKEN.address
         ? Math.max(0, inputBalance - 0.005)
-        : inputBalance);
-
+        : inputBalance
+    );
 
   const handleSwap = useCallback(async () => {
-    if (!quote || !outputToken) return;
-    if (!activePayerAddress) return;
-    if (walletSource === "external" && (!connected || !publicKey || !signTransaction)) return;
-
-    const startedAt = Date.now();
-    try {
-      setPhase({ name: "building" });
-      const built = await supaPost("swap-build", {
-        userPublicKey: activePayerAddress,
-        inputMint: quote.input.address,
-        outputMint: quote.output.address,
-        amount: quote.input.amountAtomic,
-        slippageBps: quote.slippageBps,
-        dynamicSlippage,
-      });
-      if (!built.swapTransaction) throw new Error("No transaction returned");
-
-      let signature: string;
-
-      if (walletSource === "vision") {
-        // ---- Vision Wallet path: server signs + broadcasts via Privy.
-        // 1% platform fee is already baked into the swap tx via the
-        // referral feeAccount in `swap-build` — do NOT bypass it.
-        setPhase({ name: "awaiting_signature" });
-        try {
-          const result = await visionSigner.signAndSend({
-            chain: "solana",
-            caip2: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp", // Solana mainnet-beta
-            transaction: built.swapTransaction, // already base64-serialized
-            method: "signAndSendTransaction",
-          });
-          if (!result.hash) throw new Error("No signature returned from Vision Wallet");
-          signature = result.hash;
-        } catch (e: any) {
-          // User-style cancellation isn't really possible server-side, so
-          // treat anything thrown here as a real failure.
-          throw e instanceof Error ? e : new Error("Vision Wallet sign failed");
-        }
-      } else {
-        // ---- External wallet path: user signs in-browser, we submit.
-        setPhase({ name: "awaiting_signature" });
-        const txBytes = Uint8Array.from(atob(built.swapTransaction), (c) => c.charCodeAt(0));
-        const tx = VersionedTransaction.deserialize(txBytes);
-
-        let signed: VersionedTransaction;
-        try {
-          signed = await signTransaction!(tx);
-        } catch {
-          if (mounted.current) setPhase({
-            name: "cancelled",
-            inUi: quote.input.amountUi,
-            inSymbol: quote.input.symbol,
-            outUi: quote.output.amountUi,
-            outSymbol: quote.output.symbol,
-          });
-          return;
-        }
-
-        setPhase({ name: "submitting" });
-        const signedB64 = btoa(String.fromCharCode(...signed.serialize()));
-        const submitted = await supaPost("tx-submit", {
-          signedTransaction: signedB64,
-          kind: "swap",
-          valueUsd: quote.input.valueUsd ?? quote.output.valueUsd ?? null,
-          inputMint: quote.input.address,
-          outputMint: quote.output.address,
-          inputAmount: quote.input.amountUi,
-          outputAmount: quote.output.amountUi,
-          walletAddress: activePayerAddress,
-        });
-        if (submitted?.fallback && submitted?.error) {
-          throw new Error(submitted.error as string);
-        }
-        const sig = submitted.signature as string;
-        if (!sig) throw new Error("No signature returned from submit");
-        signature = sig;
-      }
-
-      setPhase({ name: "confirming", signature, startedAt });
-      const deadline = Date.now() + POLL_TIMEOUT_MS;
-      while (Date.now() < deadline) {
-        if (!mounted.current) return;
-        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-        try {
-          const status = await supaPost("tx-status", { signature });
-          if (status.status === "confirmed") {
-            if (!mounted.current) return;
-            // Record the per-user platform fee. Best-effort — never block UX.
-            void supaPost("record-swap-fee", {
-              signature,
-              valueUsd: quote.input.valueUsd ?? quote.output.valueUsd ?? null,
-              feeUsd: quote.platformFee?.valueUsd ?? null,
-              feeAmountUi: quote.platformFee?.amountUi ?? null,
-              feeSymbol: quote.platformFee?.symbol ?? null,
-              feeMint: quote.output.address,
-              inputMint: quote.input.address,
-              outputMint: quote.output.address,
-            }).catch((e) => console.warn("record-swap-fee failed:", e));
-            setPhase({
-              name: "success",
-              signature,
-              durationMs: Date.now() - startedAt,
-              outUi: quote.output.amountUi,
-              outSymbol: quote.output.symbol,
-              inUi: quote.input.amountUi,
-              inSymbol: quote.input.symbol,
-            });
-            return;
-          }
-          if (status.status === "failed") {
-            throw new Error(status.err ?? "Transaction failed on-chain");
-          }
-        } catch {
-          continue;
-        }
-      }
-      throw new Error("Confirmation timed out. Check Solscan for status.");
-    } catch (e) {
-      if (!mounted.current) return;
-      setPhase({ name: "error", message: e instanceof Error ? e.message : "Something went wrong." });
-    }
-  }, [
-    walletSource,
-    activePayerAddress,
-    connected,
-    publicKey,
-    signTransaction,
-    visionSigner,
-    quote,
-    outputToken,
-    dynamicSlippage,
-  ]);
+    if (!plan || !outputToken || !fromAddress || !toAddress) return;
+    await execute({
+      plan,
+      fromToken: inputToken,
+      toToken: outputToken,
+      walletSource,
+      fromAddress,
+      toAddress,
+      slippageBps,
+      dynamicSlippage,
+      onStatus: (s) => { if (mounted.current) setStatus(s); },
+    });
+  }, [plan, outputToken, fromAddress, toAddress, inputToken, walletSource, slippageBps, dynamicSlippage, execute]);
 
   const resetSwap = () => {
     setAmount("");
-    setQuote(null);
-    setPhase({ name: "idle" });
+    setPlan(null);
+    setStatus({ kind: "idle" });
   };
 
   // ---------- Success view ----------
-  if (phase.name === "success") {
+  if (status.kind === "success") {
+    const last = status.legHashes[status.legHashes.length - 1];
     return (
       <div className="ease-vision animate-fade-up w-full max-w-[440px] overflow-hidden rounded-2xl border border-up/30 bg-card/60 backdrop-blur-sm">
         <div className="flex flex-col items-center gap-4 p-8 text-center">
@@ -499,24 +411,29 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
           </div>
           <div>
             <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-              Swap confirmed
+              {plan?.strategy === "swap" ? "Swap confirmed" : "Cross-chain swap confirmed"}
             </p>
             <p className="mt-2 font-mono text-sm text-foreground">
-              {fmtAmount(phase.inUi)} {phase.inSymbol} → {fmtAmount(phase.outUi)} {phase.outSymbol}
+              {fmtAmount(numericAmount)} {inputToken.symbol} → {fmtAmount(status.finalAmountUi)} {status.finalSymbol}
             </p>
             <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-              in {(phase.durationMs / 1000).toFixed(1)}s
+              in {(status.durationMs / 1000).toFixed(1)}s · {status.legHashes.length} {status.legHashes.length === 1 ? "leg" : "legs"}
             </p>
           </div>
-          <a
-            href={`https://solscan.io/tx/${phase.signature}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="ease-vision inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-secondary/40 px-3 py-1.5 font-mono text-[11px] text-primary transition-colors hover:bg-secondary"
-          >
-            View tx {truncSig(phase.signature)}
-            <ExternalLink className="h-3 w-3" />
-          </a>
+          <div className="flex flex-col gap-1.5">
+            {status.legHashes.map((leg, i) => (
+              <a
+                key={i}
+                href={leg.explorer}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ease-vision inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-secondary/40 px-3 py-1.5 font-mono text-[11px] text-primary transition-colors hover:bg-secondary"
+              >
+                Leg {i + 1} · {truncSig(leg.hash)}
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            ))}
+          </div>
           <Button
             onClick={resetSwap}
             className="ease-vision mt-2 w-full font-mono text-[11px] uppercase tracking-wider"
@@ -529,7 +446,7 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
   }
 
   // ---------- Cancelled view ----------
-  if (phase.name === "cancelled") {
+  if (status.kind === "cancelled") {
     return (
       <div className="ease-vision animate-fade-up w-full max-w-[440px] overflow-hidden rounded-2xl border border-border/60 bg-card/60 backdrop-blur-sm">
         <div className="flex flex-col items-center gap-4 p-8 text-center">
@@ -540,9 +457,6 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
             <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
               Swap cancelled
             </p>
-            <p className="mt-2 font-mono text-sm text-foreground">
-              {fmtAmount(phase.inUi)} {phase.inSymbol} → {fmtAmount(phase.outUi)} {phase.outSymbol}
-            </p>
             <p className="mt-1 font-mono text-[10px] text-muted-foreground">
               No funds were moved.
             </p>
@@ -551,7 +465,7 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
             onClick={resetSwap}
             className="ease-vision mt-2 w-full font-mono text-[11px] uppercase tracking-wider"
           >
-            New swap
+            Try again
           </Button>
         </div>
       </div>
@@ -560,79 +474,94 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
 
   // ---------- CTA computation ----------
   const isBusy =
-    phase.name === "building" ||
-    phase.name === "awaiting_signature" ||
-    phase.name === "submitting" ||
-    phase.name === "confirming";
+    status.kind === "building" || status.kind === "approving" ||
+    status.kind === "switching_chain" || status.kind === "awaiting_signature" ||
+    status.kind === "submitting" || status.kind === "confirming" ||
+    status.kind === "bridging";
 
-  const busyLabel =
-    phase.name === "building"
-      ? "Building transaction…"
-      : phase.name === "awaiting_signature"
-        ? walletSource === "vision"
-          ? "Signing with Vision Wallet…"
-          : "Approve in wallet…"
-        : phase.name === "submitting"
-          ? "Submitting…"
-          : phase.name === "confirming"
-            ? "Confirming on-chain…"
-            : "";
+  const busyLabel = (() => {
+    switch (status.kind) {
+      case "building": return status.legKind === "bridge" ? "Building bridge…" : "Building swap…";
+      case "switching_chain": return "Switching chain…";
+      case "approving": return "Approving token…";
+      case "awaiting_signature":
+        return walletSource === "vision" ? "Signing with Vision Wallet…" : "Approve in wallet…";
+      case "submitting": return "Submitting…";
+      case "confirming": return "Confirming on-chain…";
+      case "bridging": return "Bridging across chains…";
+      default: return "";
+    }
+  })();
+
+  const sameChain = outputToken ? tokenKey({ address: "x", chainId: inputToken.chainId }).startsWith(`${outputToken.chainId}:`) : true;
+  // Friendlier check above is wrong — use direct comparison:
+  const isCrossChain = !!outputToken && String(outputToken.chainId) !== String(inputToken.chainId);
 
   let ctaLabel = walletSource === "vision" ? "Swap with Vision Wallet" : "Swap";
+  if (isCrossChain && plan?.strategy === "bridge") ctaLabel = walletSource === "vision" ? "Bridge with Vision Wallet" : "Bridge";
+  if (isCrossChain && plan?.strategy === "bridge_then_swap") ctaLabel = walletSource === "vision" ? "Bridge & swap with Vision" : "Bridge & swap";
   let ctaDisabled = false;
   let ctaAction: (() => void) | null = handleSwap;
 
-  if (walletSource === "vision" && !visionWallet.solanaAddress) {
-    ctaLabel = visionWallet.working ? "Creating Vision Wallet…" : "Create Vision Wallet";
-    ctaDisabled = visionWallet.working;
-    ctaAction = visionWallet.working
-      ? null
-      : () => {
-          visionWallet.createWallet().catch(() => { /* hook toasts */ });
-        };
-  } else if (walletSource === "external" && !connected) {
-    ctaLabel = "Connect external wallet";
-    ctaAction = () => setVisible(true);
-  } else if (!outputToken) {
-    ctaLabel = "Select a token";
-    ctaDisabled = true;
-    ctaAction = null;
-  } else if (numericAmount <= 0) {
-    ctaLabel = "Enter an amount";
-    ctaDisabled = true;
-    ctaAction = null;
-  } else if (insufficient) {
-    ctaLabel = `Insufficient ${inputToken.symbol}`;
-    ctaDisabled = true;
-    ctaAction = null;
-  } else if (quoteLoading) {
-    ctaLabel = "Fetching best price…";
-    ctaDisabled = true;
-    ctaAction = null;
-  } else if (quoteError) {
-    ctaLabel = "Retry";
-    ctaAction = () => setAmount((a) => a); // re-trigger by touching state
-  } else if (isBusy) {
-    ctaLabel = busyLabel;
-    ctaDisabled = true;
-    ctaAction = null;
+  // Wallet provisioning checks — vary per chain.
+  const needsSolWallet = (isSol(inputToken.chainId) || (outputToken && isSol(outputToken.chainId)));
+  const needsEvmWallet = (!isSol(inputToken.chainId) || (outputToken && !isSol(outputToken.chainId)));
+
+  if (walletSource === "vision") {
+    const missingSol = needsSolWallet && !visionWallet.solanaAddress;
+    const missingEvm = needsEvmWallet && !visionWallet.evmAddress;
+    if (missingSol || missingEvm) {
+      ctaLabel = visionWallet.working ? "Creating Vision Wallet…" : "Create Vision Wallet";
+      ctaDisabled = visionWallet.working;
+      ctaAction = visionWallet.working
+        ? null
+        : () => { visionWallet.createWallet().catch(() => { /* hook toasts */ }); };
+    }
+  } else if (walletSource === "external") {
+    if (needsSolWallet && !connected) {
+      ctaLabel = "Connect Solana wallet";
+      ctaAction = () => setVisible(true);
+    } else if (needsEvmWallet && !externalEvmAddress) {
+      ctaLabel = "Connect EVM wallet";
+      // Wagmi connect modal lives in the global RainbowKit provider — same
+      // affordance the bridge tab used. Trigger via a CustomEvent picked up
+      // there; if not yet wired, the user can use the Connect button in header.
+      ctaAction = null;
+      ctaDisabled = true;
+    }
   }
 
-  const impact = impactBucket(quote?.priceImpactPct ?? null);
-  const routeLabels = quote?.route?.length
-    ? Array.from(new Set(quote.route.map((r) => r.label))).join(" → ")
-    : "Direct";
-  const routeHops = quote?.route?.length ?? 0;
+  if (ctaAction === handleSwap) {
+    if (!outputToken) { ctaLabel = "Select a token"; ctaDisabled = true; ctaAction = null; }
+    else if (numericAmount <= 0) { ctaLabel = "Enter an amount"; ctaDisabled = true; ctaAction = null; }
+    else if (insufficient) { ctaLabel = `Insufficient ${inputToken.symbol}`; ctaDisabled = true; ctaAction = null; }
+    else if (planLoading) { ctaLabel = "Fetching best route…"; ctaDisabled = true; ctaAction = null; }
+    else if (planError) { ctaLabel = "Retry"; ctaAction = () => setAmount((a) => a); }
+    else if (!plan) { ctaLabel = "No route available"; ctaDisabled = true; ctaAction = null; }
+    else if (isBusy) { ctaLabel = busyLabel; ctaDisabled = true; ctaAction = null; }
+  }
 
-  const inUsd =
-    quote?.input.valueUsd ??
+  // ---- Stats from the orchestrator plan ----
+  const inUsd = plan?.summary.fromAmountUsd ??
     (inputToken.priceUsd != null && numericAmount > 0 ? inputToken.priceUsd * numericAmount : null);
-  const outUsd = quote?.output.valueUsd ?? null;
+  const outUsd = plan?.summary.toAmountUsd ?? null;
+  const outAmountUi = plan?.summary.toAmountUi ?? null;
+  const platformFeeUsd = plan?.summary.platformFeeUsd ?? null;
+  const gasUsd = plan?.summary.gasUsd ?? null;
+
+  // Strategy badge for transparency.
+  const strategyLabel = plan?.strategy === "swap"
+    ? (isSol(inputToken.chainId) ? "Jupiter" : "0x")
+    : plan?.strategy === "bridge"
+      ? "LI.FI bridge"
+      : plan?.strategy === "bridge_then_swap"
+        ? "Bridge → swap"
+        : null;
 
   return (
     <TooltipProvider delayDuration={150}>
       <div className="w-full max-w-[440px] space-y-4">
-        {/* Tabs row — tabs centered over card, gear floats to the right */}
+        {/* Tabs row */}
         <div className="relative flex items-center justify-center">
           <TradeTabs active={tab} onChange={onTabChange} />
           <Popover>
@@ -652,7 +581,7 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
                     Dynamic slippage
                   </p>
                   <p className="mt-1 font-mono text-[10px] leading-relaxed text-muted-foreground">
-                    Jupiter picks the best per-route tolerance so volatile swaps land.
+                    Solana legs use Jupiter's per-route tolerance. EVM legs use the cap below.
                   </p>
                 </div>
                 <button
@@ -662,9 +591,7 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
                   onClick={() => setDynamicSlippage((v) => !v)}
                   className={cn(
                     "ease-vision relative h-5 w-9 shrink-0 rounded-full border transition-colors",
-                    dynamicSlippage
-                      ? "border-primary/60 bg-primary/40"
-                      : "border-border/60 bg-secondary/60",
+                    dynamicSlippage ? "border-primary/60 bg-primary/40" : "border-border/60 bg-secondary/60",
                   )}
                 >
                   <span
@@ -683,10 +610,7 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
                   <button
                     key={p.bps}
                     type="button"
-                    onClick={() => {
-                      setSlippageBps(p.bps);
-                      setCustomSlippage("");
-                    }}
+                    onClick={() => { setSlippageBps(p.bps); setCustomSlippage(""); }}
                     className={cn(
                       "ease-vision flex-1 rounded-md border px-2 py-1.5 font-mono text-[11px]",
                       slippageBps === p.bps && !customSlippage
@@ -716,30 +640,22 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
                 />
                 <span className="font-mono text-[11px] text-muted-foreground">%</span>
               </div>
-              <p className="mt-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
-                {dynamicSlippage
-                  ? "Jupiter trims slippage per route up to this ceiling."
-                  : "Higher slippage routes more reliably but may give a worse price."}
-              </p>
             </PopoverContent>
           </Popover>
         </div>
 
-        {/* Wallet source picker — Vision Wallet recommended, external is secondary */}
+        {/* Wallet source picker */}
         <WalletSourcePicker
           value={walletSource}
           onChange={setWalletSource}
-          visionAvailable={!!visionWallet.solanaAddress}
-          externalAvailable={connected}
-          onCreateVision={() => {
-            visionWallet.createWallet().catch(() => { /* hook toasts */ });
-          }}
+          visionAvailable={!!visionWallet.solanaAddress || !!visionWallet.evmAddress}
+          externalAvailable={connected || !!externalEvmAddress}
+          onCreateVision={() => { visionWallet.createWallet().catch(() => { /* hook toasts */ }); }}
           onConnectExternal={() => setVisible(true)}
         />
 
         {/* Card */}
         <div className="overflow-hidden rounded-2xl border border-border bg-card/60 backdrop-blur-sm shadow-soft">
-          {/* Sell side */}
           <SwapSide
             label="Sell"
             token={inputToken}
@@ -752,24 +668,20 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
             readOnly={false}
           />
 
-          {/* Fund prompt — Vision Wallet exists but selected token has 0 balance */}
-          {walletSource === "vision" &&
-            visionWallet.solanaAddress &&
-            inputBalance === 0 && (
-              <button
-                type="button"
-                onClick={() => setFundOpen(true)}
-                className="ease-vision flex w-full items-center justify-between border-t border-border/60 bg-primary/5 px-4 py-2.5 text-left text-xs text-primary transition-colors hover:bg-primary/10"
-              >
-                <span className="flex items-center gap-2">
-                  <ArrowDownToLine className="h-3.5 w-3.5" />
-                  No {inputToken.symbol} in your Vision Wallet — fund it to start trading
-                </span>
-                <span className="font-medium">Deposit →</span>
-              </button>
-            )}
+          {walletSource === "vision" && fromReady && inputBalance === 0 && isSol(inputToken.chainId) && (
+            <button
+              type="button"
+              onClick={() => setFundOpen(true)}
+              className="ease-vision flex w-full items-center justify-between border-t border-border/60 bg-primary/5 px-4 py-2.5 text-left text-xs text-primary transition-colors hover:bg-primary/10"
+            >
+              <span className="flex items-center gap-2">
+                <ArrowDownToLine className="h-3.5 w-3.5" />
+                No {inputToken.symbol} in your Vision Wallet — fund it to start trading
+              </span>
+              <span className="font-medium">Deposit →</span>
+            </button>
+          )}
 
-          {/* Flip */}
           <div className="relative">
             <div className="absolute inset-x-0 top-1/2 flex -translate-y-1/2 items-center justify-center">
               <button
@@ -790,83 +702,56 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
             <div className="border-t border-border/60" />
           </div>
 
-          {/* Buy side */}
           <SwapSide
             label="Buy"
             token={outputToken}
-            amount={
-              quoteLoading
-                ? ""
-                : quote
-                  ? fmtAmount(quote.output.amountUi)
-                  : ""
-            }
-            onAmountChange={() => { /* output is read-only */ }}
+            amount={planLoading ? "" : outAmountUi != null ? fmtAmount(outAmountUi) : ""}
+            onAmountChange={() => { /* read-only */ }}
             usd={outUsd}
             balance={null}
             onPickToken={() => setPickerSide("out")}
             readOnly
-            loading={quoteLoading}
+            loading={planLoading}
           />
 
           {/* Stats */}
-          {quote && (
+          {plan && outputToken && (
             <div className="space-y-1.5 border-t border-border/40 px-5 py-3">
-              <StatsRow
-                label="Rate"
-                value={
-                  <span className="font-mono text-[12px] text-foreground">
-                    1 {quote.input.symbol} = {fmtAmount(quote.rate)} {quote.output.symbol}
-                  </span>
-                }
-                right={
-                  refreshing ? (
-                    <RefreshCw className="h-3 w-3 animate-spin text-primary" />
-                  ) : null
-                }
-              />
-              <StatsRow
-                label="Price impact"
-                value={
-                  <span className={cn("font-mono text-[12px]", impact.color)}>
-                    {quote.priceImpactPct != null ? `${quote.priceImpactPct.toFixed(2)}%` : "—"}
-                  </span>
-                }
-              />
-              <StatsRow
-                label="Slippage"
-                value={
-                  <span className="font-mono text-[12px] text-foreground">
-                    {quote.dynamicSlippage !== false ? (
-                      <>
-                        Dynamic{" "}
-                        <span className="text-muted-foreground">
-                          (max {(quote.slippageBps / 100).toFixed(2)}%)
-                        </span>
-                      </>
-                    ) : (
-                      `${(quote.slippageBps / 100).toFixed(2)}%`
-                    )}
-                  </span>
-                }
-              />
               <StatsRow
                 label="Route"
                 value={
                   <span className="font-mono text-[12px] text-muted-foreground">
-                    {routeHops > 0 ? `${routeHops} hop${routeHops > 1 ? "s" : ""} · ${routeLabels}` : "Direct"}
+                    {strategyLabel ?? "Direct"}
+                    {isCrossChain && plan.intermediate ? ` · via ${plan.intermediate.symbol}` : ""}
                   </span>
                 }
+                right={refreshing ? <RefreshCw className="h-3 w-3 animate-spin text-primary" /> : null}
               />
+              {outAmountUi != null && numericAmount > 0 && (
+                <StatsRow
+                  label="Rate"
+                  value={
+                    <span className="font-mono text-[12px] text-foreground">
+                      1 {inputToken.symbol} = {fmtAmount(outAmountUi / numericAmount)} {outputToken.symbol}
+                    </span>
+                  }
+                />
+              )}
               <StatsRow
-                label="Network fee"
+                label="Slippage"
                 value={
-                  <span className="font-mono text-[12px] text-muted-foreground">
-                    ~{quote.estNetworkFeeSol.toFixed(6)} SOL
+                  <span className="font-mono text-[12px] text-foreground">
+                    {dynamicSlippage ? <>Dynamic <span className="text-muted-foreground">(max {(slippageBps / 100).toFixed(2)}%)</span></> : `${(slippageBps / 100).toFixed(2)}%`}
                   </span>
                 }
               />
-              {quote.platformFee && quote.platformFee.bps > 0 && (
+              {gasUsd != null && (
+                <StatsRow
+                  label="Network fee"
+                  value={<span className="font-mono text-[12px] text-muted-foreground">~{fmtUsd(gasUsd)}</span>}
+                />
+              )}
+              {platformFeeUsd != null && (
                 <StatsRow
                   label={
                     <span className="flex items-center gap-1">
@@ -875,37 +760,55 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
                         <TooltipTrigger asChild>
                           <Info className="h-3 w-3 text-muted-foreground/60 hover:text-foreground" />
                         </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-[240px]">
+                        <TooltipContent side="top" className="max-w-[260px]">
                           <p className="font-mono text-[11px] leading-relaxed">
-                            Vision charges a {(quote.platformFee.bps / 100).toFixed(0)}% fee in the output token. Transfers and bridges are free.
+                            Vision charges 1% on the swap leg{plan.strategy === "bridge_then_swap" ? " (destination chain only)" : ""}. Bridges are otherwise free of Vision fee.
                           </p>
                         </TooltipContent>
                       </Tooltip>
                     </span>
                   }
-                  value={
-                    <span className="font-mono text-[12px] text-muted-foreground">
-                      {(quote.platformFee.bps / 100).toFixed(2)}% (~{fmtAmount(quote.platformFee.amountUi)} {quote.platformFee.symbol})
-                    </span>
-                  }
+                  value={<span className="font-mono text-[12px] text-muted-foreground">~{fmtUsd(platformFeeUsd)}</span>}
+                />
+              )}
+              {plan.summary.executionDurationSec != null && isCrossChain && (
+                <StatsRow
+                  label="Est. duration"
+                  value={<span className="font-mono text-[12px] text-muted-foreground">~{Math.round(plan.summary.executionDurationSec)}s</span>}
                 />
               )}
             </div>
           )}
 
           {/* Inline error */}
-          {quoteError && !quoteLoading && (
+          {planError && !planLoading && (
             <div className="flex items-start gap-2 border-t border-destructive/30 bg-destructive/5 px-5 py-3">
               <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-destructive" />
-              <p className="font-mono text-[11px] leading-relaxed text-destructive">{quoteError}</p>
+              <p className="font-mono text-[11px] leading-relaxed text-destructive">{planError}</p>
             </div>
           )}
 
-          {phase.name === "error" && (
+          {status.kind === "error" && (
             <div className="flex items-start gap-2 border-t border-destructive/30 bg-destructive/5 px-5 py-3">
               <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-destructive" />
-              <p className="font-mono text-[11px] leading-relaxed text-destructive">
-                {(phase as Extract<Phase, { name: "error" }>).message}
+              <p className="font-mono text-[11px] leading-relaxed text-destructive">{status.message}</p>
+            </div>
+          )}
+
+          {/* In-progress hint for cross-chain (so users don't think it's stuck) */}
+          {(status.kind === "bridging" || status.kind === "confirming") && (
+            <div className="flex items-start gap-2 border-t border-primary/30 bg-primary/5 px-5 py-3">
+              <Loader2 className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 animate-spin text-primary" />
+              <p className="font-mono text-[11px] leading-relaxed text-primary">
+                {status.kind === "bridging" ? "Bridge in flight — this can take a few minutes." : "Waiting for on-chain confirmation."}
+                {"explorer" in status && (
+                  <>
+                    {" "}
+                    <a href={status.explorer} target="_blank" rel="noopener noreferrer" className="underline">
+                      View tx
+                    </a>
+                  </>
+                )}
               </p>
             </div>
           )}
@@ -914,37 +817,32 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
           <div className="border-t border-border/40 bg-secondary/30 p-3">
             <Button
               onClick={() => {
-                if (phase.name === "error") {
-                  setPhase({ name: "idle" });
-                  return;
-                }
+                if (status.kind === "error") { setStatus({ kind: "idle" }); return; }
                 ctaAction?.();
               }}
               disabled={ctaDisabled || isBusy}
               className={cn(
                 "ease-vision h-12 w-full rounded-xl font-mono text-[12px] uppercase tracking-wider",
-                connected && !ctaDisabled && "bg-primary text-primary-foreground shadow-glow hover:bg-primary/90",
+                fromReady && toReady && !ctaDisabled && "bg-primary text-primary-foreground shadow-glow hover:bg-primary/90",
               )}
             >
-              {(isBusy || quoteLoading) && (
-                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-              )}
-              {phase.name === "error" ? "Try again" : ctaLabel}
+              {(isBusy || planLoading) && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+              {status.kind === "error" ? "Try again" : ctaLabel}
             </Button>
           </div>
         </div>
 
         {/* Token picker */}
-        <TokenPickerDialog
+        <MultichainTokenPickerDialog
           open={pickerSide !== null}
           onOpenChange={(o) => !o && setPickerSide(null)}
           onSelect={handlePickToken}
-          excludeAddress={
-            pickerSide === "in" ? outputToken?.address : pickerSide === "out" ? inputToken.address : undefined
+          excludeKey={
+            pickerSide === "in" && outputToken ? tokenKey(outputToken) :
+            pickerSide === "out" ? tokenKey(inputToken) : undefined
           }
         />
 
-        {/* Fund Vision Wallet */}
         <FundVisionWalletDialog
           open={fundOpen}
           onOpenChange={setFundOpen}
@@ -958,19 +856,11 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
 // ---------- subcomponents ----------
 
 const SwapSide = ({
-  label,
-  token,
-  amount,
-  onAmountChange,
-  usd,
-  balance,
-  onMax,
-  onPickToken,
-  readOnly = false,
-  loading = false,
+  label, token, amount, onAmountChange, usd, balance, onMax, onPickToken,
+  readOnly = false, loading = false,
 }: {
   label: string;
-  token: TokenMeta | null;
+  token: MultichainToken | null;
   amount: string;
   onAmountChange: (v: string) => void;
   usd: number | null;
@@ -980,6 +870,9 @@ const SwapSide = ({
   readOnly?: boolean;
   loading?: boolean;
 }) => {
+  const chainLabel = token
+    ? (isSol(token.chainId) ? "Solana" : `Chain ${token.chainId}`)
+    : null;
   return (
     <div className="px-5 py-4">
       <div className="flex items-center justify-between">
@@ -1033,7 +926,10 @@ const SwapSide = ({
           {token ? (
             <>
               <TokenLogo logo={token.logo} symbol={token.symbol} size={24} />
-              <span className="font-mono text-sm font-medium text-foreground">{token.symbol}</span>
+              <div className="flex flex-col items-start leading-tight">
+                <span className="font-mono text-sm font-medium text-foreground">{token.symbol}</span>
+                <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">{chainLabel}</span>
+              </div>
               <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
             </>
           ) : (
@@ -1048,14 +944,8 @@ const SwapSide = ({
   );
 };
 
-const StatsRow = ({
-  label,
-  value,
-  right,
-}: {
-  label: React.ReactNode;
-  value: React.ReactNode;
-  right?: React.ReactNode;
+const StatsRow = ({ label, value, right }: {
+  label: React.ReactNode; value: React.ReactNode; right?: React.ReactNode;
 }) => (
   <div className="flex items-center justify-between gap-2">
     <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{label}</span>
