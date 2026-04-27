@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { VisionLogo } from "@/components/VisionLogo";
 import { WalletBalancesPanel } from "@/components/wallet/WalletBalancesPanel";
 import { WalletWithdrawPanel } from "@/components/wallet/WalletWithdrawPanel";
+import { WalletActivityPanel } from "@/components/wallet/WalletActivityPanel";
 import { FundVisionWalletDialog } from "@/components/wallet/FundVisionWalletDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
