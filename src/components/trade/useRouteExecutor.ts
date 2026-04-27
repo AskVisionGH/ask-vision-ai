@@ -360,6 +360,10 @@ export const useRouteExecutor = () => {
         });
         legHashes.push({ chain: intermediate.chain, hash: swapHash, explorer: swapExplorer });
 
+        // Destination swap landed — funds are at their final home, recovery
+        // record is no longer needed.
+        if (strandedId) clearStrandedRoute(strandedId);
+
         onStatus({
           kind: "success",
           legHashes,
@@ -371,12 +375,31 @@ export const useRouteExecutor = () => {
         if (cancelled.current) return;
         const msg = String(e?.message ?? e ?? "Something went wrong");
         const lower = msg.toLowerCase();
-        if (
+        const isUserCancel =
           lower.includes("user rejected") ||
           lower.includes("user denied") ||
           lower.includes("rejected the request") ||
-          lower.includes("user cancelled")
-        ) {
+          lower.includes("user cancelled");
+
+        // If we already recorded a stranded route (bridge landed, leg 2
+        // failed), upgrade its reason so the resume UI can phrase the
+        // prompt correctly. We deliberately do NOT clear it — the funds
+        // are still on the destination chain.
+        if (strandedId && !isUserCancel && userId) {
+          // Re-record with upgraded reason; same id keeps it deduped.
+          // (We re-read from the closure rather than tracking the full
+          // record again to keep this branch tight.)
+          try {
+            const existing = (await import("@/lib/stranded-routes"))
+              .listStrandedRoutes(userId)
+              .find((r) => r.id === strandedId);
+            if (existing) {
+              recordStrandedRoute({ ...existing, reason: "post_bridge_failure" });
+            }
+          } catch { /* best-effort */ }
+        }
+
+        if (isUserCancel) {
           onStatus({ kind: "cancelled" });
           return;
         }
