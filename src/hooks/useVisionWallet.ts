@@ -186,20 +186,41 @@ export function useVisionWallet() {
     if (!authenticated) {
       throw new Error("Must be logged into Privy first");
     }
+    if (addresses.solana && addresses.evm) {
+      toast.info("Vision Wallet already exists");
+      return;
+    }
     setWorking(true);
+    // Wrap each create call in a timeout so a hung Privy iframe doesn't
+    // leave the UI spinning forever.
+    const withTimeout = <T,>(p: Promise<T>, label: string, ms = 30_000) =>
+      Promise.race<T>([
+        p,
+        new Promise<T>((_, reject) =>
+          setTimeout(
+            () =>
+              reject(
+                new Error(
+                  `${label} timed out — Privy may be blocked. Check your network or try again.`,
+                ),
+              ),
+            ms,
+          ),
+        ),
+      ]);
     try {
-      const tasks: Array<Promise<unknown>> = [];
-      if (!addresses.solana) tasks.push(createSolanaWallet());
-      if (!addresses.evm) tasks.push(createEvmWallet());
-      if (tasks.length === 0) {
-        toast.info("Vision Wallet already exists");
-        return;
-      }
       // Privy SDK requires sequential creation (each wallet bumps the
       // user record), so we await one at a time.
-      if (!addresses.solana) await createSolanaWallet();
-      if (!addresses.evm) await createEvmWallet();
+      if (!addresses.solana) {
+        await withTimeout(createSolanaWallet(), "Solana wallet creation");
+      }
+      if (!addresses.evm) {
+        await withTimeout(createEvmWallet(), "EVM wallet creation");
+      }
       toast.success("Vision Wallet created");
+    } catch (err) {
+      console.error("[useVisionWallet] createWallet failed", err);
+      throw err;
     } finally {
       setWorking(false);
     }
