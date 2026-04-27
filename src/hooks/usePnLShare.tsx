@@ -27,14 +27,11 @@ export function usePnLShare(filename: string) {
         // Some token logos are hosted on CDNs without CORS — skip them rather
         // than fail the whole render.
         skipFonts: false,
-        filter: (el) => {
-          if (el instanceof HTMLImageElement) {
-            // Drop cross-origin images that we know will taint the canvas.
-            // TokenLogo will fall back to its initials placeholder.
-            return el.crossOrigin === "anonymous" || isSameOrigin(el.src);
-          }
-          return true;
-        },
+        // html-to-image fetches every <img>'s src and embeds it as a data URL
+        // before rasterizing. cacheBust avoids cached opaque responses that
+        // would taint the canvas.
+        imagePlaceholder:
+          "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32'/>",
       });
 
       // Convert to a Blob for Web Share API (preferred on mobile)
@@ -69,12 +66,4 @@ export function usePnLShare(filename: string) {
   }, [filename]);
 
   return { nodeRef, share, busy };
-}
-
-function isSameOrigin(src: string): boolean {
-  try {
-    return new URL(src, window.location.href).origin === window.location.origin;
-  } catch {
-    return false;
-  }
 }

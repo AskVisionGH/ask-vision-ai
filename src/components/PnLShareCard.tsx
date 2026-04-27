@@ -11,6 +11,7 @@
 import { forwardRef } from "react";
 import { TrendingDown, TrendingUp, Globe } from "lucide-react";
 import { TokenLogo } from "@/components/TokenLogo";
+import { VisionLogo } from "@/components/VisionLogo";
 import { cn } from "@/lib/utils";
 import type { TokenPnL, TokenPnLData, WalletPnLData } from "@/lib/chat-stream";
 
@@ -119,25 +120,24 @@ export const PnLShareCard = forwardRef<HTMLDivElement, PnLShareProps>(
             zIndex: 2,
           }}
         >
-          {/* Brand */}
+          {/* Brand row — Vision triangle + wordmark + window badge.
+              Use whitespace-nowrap on the badge so the "30d P/L" label
+              never wraps onto two lines (which previously overlapped the
+              wordmark on shorter labels). */}
           <div className="flex items-center gap-3">
             <div
               style={{
-                width: 40,
-                height: 40,
-                borderRadius: 10,
+                width: 44,
+                height: 44,
+                borderRadius: 12,
                 background:
                   "linear-gradient(135deg, hsl(252 95% 85%), hsl(258 90% 66%))",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                color: "hsl(240 6% 6%)",
-                fontWeight: 700,
-                fontSize: 20,
-                fontFamily: "'Instrument Serif', serif",
               }}
             >
-              V
+              <VisionLogo size={24} className="text-[hsl(240_6%_6%)]" />
             </div>
             <p
               style={{ fontFamily: "'Instrument Serif', serif" }}
@@ -146,11 +146,12 @@ export const PnLShareCard = forwardRef<HTMLDivElement, PnLShareProps>(
               Vision
             </p>
             <span
-              className="ml-2 rounded-full px-2.5 py-1 font-mono text-[10px] uppercase tracking-widest"
+              className="ml-2 whitespace-nowrap rounded-full px-3 py-1.5 font-mono text-[11px] uppercase tracking-widest"
               style={{
                 background: theme.accentSoft,
                 color: theme.accent,
                 border: `1px solid ${theme.accent}`,
+                lineHeight: 1,
               }}
             >
               {props.data.windowDays}d P/L
@@ -452,7 +453,7 @@ const TokenShare = ({ data, theme }: { data: TokenPnLData; theme: Theme }) => {
       {/* Token row */}
       <div className="flex items-center gap-4">
         <div style={{ transform: "scale(1.6)", transformOrigin: "left center" }}>
-          <TokenLogo logo={t.logo} symbol={t.symbol} />
+          <TokenLogo logo={t.logo} symbol={t.symbol} crossOrigin />
         </div>
         <div className="ml-5">
           <p className="font-mono text-[24px] font-medium leading-tight">${t.symbol}</p>
@@ -524,8 +525,11 @@ const WalletShare = ({ data, theme }: { data: WalletPnLData; theme: Theme }) => 
   const totalPnl = totals.totalRealizedUsd + totals.totalUnrealizedUsd;
   const pct = pnlPct(totalPnl, totals.totalCostUsd);
 
-  // Top 3 movers fits the landscape height nicely.
+  // Top 3 movers fits the landscape height nicely. Filter out tokens
+  // without a recognizable symbol — those render as "$?" and look broken
+  // on a shareable poster. Better to show fewer rows than mystery rows.
   const top = [...tokens]
+    .filter((t) => t.symbol && t.symbol !== "?" && t.symbol.trim().length > 0)
     .sort(
       (a, b) =>
         Math.abs(b.realizedUsd + b.unrealizedUsd) -
@@ -589,7 +593,7 @@ const ShareTokenRow = ({ token }: { token: TokenPnL }) => {
       style={{ background: "hsl(240 7% 11% / 0.7)" }}
     >
       <div className="flex items-center gap-3">
-        <TokenLogo logo={token.logo} symbol={token.symbol} />
+        <TokenLogo logo={token.logo} symbol={token.symbol} crossOrigin />
         <div>
           <p className="font-mono text-[16px] font-medium leading-tight">
             ${token.symbol}
