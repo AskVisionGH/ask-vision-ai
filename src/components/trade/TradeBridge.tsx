@@ -24,6 +24,7 @@ import { TokenLogo } from "@/components/TokenLogo";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useEvmBridge } from "@/hooks/useEvmBridge";
+import { useVisionEvmBridge } from "@/hooks/useVisionEvmBridge";
 import { findEvmChain } from "@/lib/evm-chains";
 import { BridgeProgressModal } from "@/components/trade/BridgeProgressModal";
 import { useVisionWallet } from "@/hooks/useVisionWallet";
@@ -310,6 +311,7 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
   // EVM hooks (active whenever source is an EVM chain AND user picked external).
   const { address: evmAddress, isConnected: evmConnected } = useAccount();
   const { sendBridgeTx } = useEvmBridge();
+  const { sendBridgeTx: sendVisionEvmBridgeTx } = useVisionEvmBridge();
   const visionWallet = useVisionWallet();
   const visionSigner = useVisionWalletSigner();
 
@@ -615,15 +617,8 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
       setPhase({ name: "building" });
       const built = await supaPost("bridge-build", { quote: quote.raw });
 
-      // ============ EVM source path ============
+      // ============ EVM source path (external or Vision) ============
       if (fromIsEvm) {
-        // Vision Wallet doesn't yet support EVM source bridges (per-chain
-        // switch + ERC-20 approval flow not wired through Privy RPC).
-        if (walletSource === "vision") {
-          throw new Error(
-            "Bridging from EVM with Vision Wallet is coming soon. For now, switch to External wallet (or use Solana as the source).",
-          );
-        }
         const txReq = built.transactionRequest;
         if (!txReq?.to || !txReq?.data) {
           throw new Error("Bridge route returned no EVM transaction.");
@@ -631,9 +626,13 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
         const approvalAddress: string | null =
           quote.raw?.estimate?.approvalAddress ?? built.step?.estimate?.approvalAddress ?? null;
 
+        // Pick the right driver: Vision Wallet routes through Privy server
+        // wallets (no popups, no chain switch); external uses wagmi.
+        const driver = walletSource === "vision" ? sendVisionEvmBridgeTx : sendBridgeTx;
+
         let sourceTxHash: Hex;
         try {
-          sourceTxHash = await sendBridgeTx({
+          sourceTxHash = await driver({
             fromChainId: Number(fromChain.id),
             fromTokenAddress: fromToken.address,
             fromAmount: quote.fromAmountAtomic,
@@ -783,7 +782,7 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
     }
   }, [
     quote, fromToken, toToken, fromChain, fromAddress, fromIsEvm,
-    sendBridgeTx, signTransaction, publicKey, numericAmount,
+    sendBridgeTx, sendVisionEvmBridgeTx, signTransaction, publicKey, numericAmount,
     walletSource, visionWallet.solanaAddress, visionSigner,
   ]);
 
