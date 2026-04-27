@@ -802,6 +802,23 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
           onOpenChange={setFundOpen}
           defaultChain="solana"
         />
+
+        {/* Multi-leg progress modal — covers building, signing, confirming,
+            and bridge settlement for swap / bridge / bridge_then_swap flows.
+            Success keeps the existing celebratory full-card view above; the
+            modal handles in-flight, error, and cancelled states. */}
+        <RouteProgressModal
+          open={
+            status.kind !== "idle" &&
+            status.kind !== "success"
+          }
+          onOpenChange={(o) => { if (!o) resetSwap(); }}
+          plan={plan}
+          status={status}
+          fromToken={inputToken}
+          toToken={outputToken}
+          onDone={resetSwap}
+        />
       </div>
     </TooltipProvider>
   );
