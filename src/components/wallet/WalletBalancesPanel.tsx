@@ -262,7 +262,7 @@ function HoldingsList({
       {holdings.map((h) => (
         <li key={h.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
           <div className="flex min-w-0 items-center gap-2.5">
-            <TokenLogo src={h.logo ?? undefined} symbol={h.symbol} size={28} />
+            <TokenLogo logo={h.logo} symbol={h.symbol} size={28} />
             <div className="min-w-0">
               <p className="truncate text-xs text-foreground">{h.symbol}</p>
               <p className="truncate text-[10px] text-muted-foreground">{h.name}</p>
