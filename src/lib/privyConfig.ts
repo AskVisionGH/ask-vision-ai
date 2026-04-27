@@ -10,21 +10,21 @@ export const PRIVY_APP_ID = "cmogw21xh00vj0cjsefsm5fi8";
 import type { PrivyClientConfig } from "@privy-io/react-auth";
 
 export const privyConfig: PrivyClientConfig = {
-  // Login methods are managed in the Privy dashboard. We disable the
-  // built-in login UI here because Vision uses Supabase Auth as its
-  // primary identity layer — Privy is used purely as the embedded
-  // wallet provider, attached to a Supabase user.
+  // Vision uses Supabase Auth as its primary identity layer — Privy is
+  // attached purely as the embedded wallet provider. We bind to the same
+  // email via the email-OTP flow.
   loginMethods: ["email"],
   appearance: {
     theme: "dark",
     accentColor: "#ffffff",
     logo: undefined,
-    walletChainType: "solana-only",
+    // Both Solana and all EVM chains (Ethereum, Base, Arbitrum, etc.)
+    walletChainType: "ethereum-and-solana",
   },
   embeddedWallets: {
-    // Do NOT auto-create wallets on login. Users must explicitly
-    // opt in via the "Create Vision Wallet" button so we can show
-    // the recovery flow first.
+    // Do NOT auto-create wallets on login. We trigger creation explicitly
+    // from the "Create Vision Wallet" button so we can show recovery flow
+    // first and create both chains in a known order.
     showWalletUIs: false,
     ethereum: { createOnLogin: "off" },
     solana: { createOnLogin: "off" },
