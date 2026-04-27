@@ -982,6 +982,32 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
         </div>
 
         <div className="space-y-3 p-4">
+          {/* Wallet source picker — Vision Wallet recommended */}
+          <WalletSourcePicker
+            value={walletSource}
+            onChange={setWalletSource}
+            visionAvailable={
+              fromIsEvm ? !!visionWallet.evmAddress : !!visionWallet.solanaAddress
+            }
+            externalAvailable={!!externalFromAddress}
+            onCreateVision={() => {
+              visionWallet.createWallet().catch(() => { /* hook toasts */ });
+            }}
+            onConnectExternal={() => {
+              if (fromIsSvm) setVisible(true);
+              // EVM connect is handled by the inline RainbowKit button below.
+            }}
+          />
+
+          {visionEvmUnsupported && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+              <p className="font-mono text-[10px] leading-relaxed text-amber-200">
+                Vision Wallet currently only supports Solana as the source chain.
+                Switch source to Solana, or pick External wallet to bridge from EVM.
+              </p>
+            </div>
+          )}
+
           {/* From row — chain + token picker both unlocked */}
           <PanelRow
             label="From"
