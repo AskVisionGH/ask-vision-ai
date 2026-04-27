@@ -511,7 +511,9 @@ export const TradeLimit = ({ tab, onTabChange }: Props) => {
     phase.name === "building"
       ? "Building order…"
       : phase.name === "awaiting_signature"
-        ? "Approve in wallet…"
+        ? walletSource === "vision"
+          ? "Signing with Vision Wallet…"
+          : "Approve in wallet…"
         : phase.name === "submitting"
           ? "Submitting…"
           : "";
@@ -520,10 +522,16 @@ export const TradeLimit = ({ tab, onTabChange }: Props) => {
   let ctaDisabled = false;
   let ctaAction: (() => void) | null = placeOrder;
 
-  if (!connected) {
+  if (walletSource === "vision" && !visionWallet.solanaAddress) {
+    ctaLabel = visionWallet.working ? "Creating wallet…" : "Create Vision Wallet";
+    ctaDisabled = visionWallet.working;
+    ctaAction = () => {
+      visionWallet.createWallet().catch(() => { /* hook toasts */ });
+    };
+  } else if (walletSource === "external" && !connected) {
     ctaLabel = "Connect wallet";
     ctaAction = () => setVisible(true);
-  } else if (numericSell <= 0) {
+  }
     ctaLabel = "Enter an amount";
     ctaDisabled = true;
     ctaAction = null;
