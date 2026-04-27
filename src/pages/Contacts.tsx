@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { ArrowLeft, Menu, Plus, Trash2, UserRound, Wallet } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
+import { AlertBell } from "@/components/AlertBell";
+import { ConnectWalletButton } from "@/components/ConnectWalletButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
