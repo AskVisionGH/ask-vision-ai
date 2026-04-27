@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownUp,
+  ArrowDownToLine,
   ChevronDown,
   Loader2,
   Settings as SettingsIcon,
@@ -42,6 +43,7 @@ import {
   WalletSourcePicker,
   type WalletSource,
 } from "@/components/trade/WalletSourcePicker";
+import { FundVisionWalletDialog } from "@/components/wallet/FundVisionWalletDialog";
 
 const SOL_TOKEN: TokenMeta = {
   symbol: "SOL",
@@ -164,6 +166,7 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
   const [phase, setPhase] = useState<Phase>({ name: "idle" });
   const [inputBalance, setInputBalance] = useState<number | null>(null);
   const [walletSource, setWalletSource] = useState<WalletSource>("vision");
+  const [fundOpen, setFundOpen] = useState(false);
 
   const { connection } = useConnection();
   const { publicKey, connected, signTransaction } = useWallet();
@@ -749,6 +752,23 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
             readOnly={false}
           />
 
+          {/* Fund prompt — Vision Wallet exists but selected token has 0 balance */}
+          {walletSource === "vision" &&
+            visionWallet.solanaAddress &&
+            inputBalance === 0 && (
+              <button
+                type="button"
+                onClick={() => setFundOpen(true)}
+                className="ease-vision flex w-full items-center justify-between border-t border-border/60 bg-primary/5 px-4 py-2.5 text-left text-xs text-primary transition-colors hover:bg-primary/10"
+              >
+                <span className="flex items-center gap-2">
+                  <ArrowDownToLine className="h-3.5 w-3.5" />
+                  No {inputToken.symbol} in your Vision Wallet — fund it to start trading
+                </span>
+                <span className="font-medium">Deposit →</span>
+              </button>
+            )}
+
           {/* Flip */}
           <div className="relative">
             <div className="absolute inset-x-0 top-1/2 flex -translate-y-1/2 items-center justify-center">
@@ -922,6 +942,13 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
           excludeAddress={
             pickerSide === "in" ? outputToken?.address : pickerSide === "out" ? inputToken.address : undefined
           }
+        />
+
+        {/* Fund Vision Wallet */}
+        <FundVisionWalletDialog
+          open={fundOpen}
+          onOpenChange={setFundOpen}
+          defaultChain="solana"
         />
       </div>
     </TooltipProvider>

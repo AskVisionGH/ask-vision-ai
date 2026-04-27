@@ -32,6 +32,8 @@ import {
   WalletSourcePicker,
   type WalletSource,
 } from "@/components/trade/WalletSourcePicker";
+import { FundVisionWalletDialog } from "@/components/wallet/FundVisionWalletDialog";
+import { ArrowDownToLine } from "lucide-react";
 
 // CAIP-2 chain ID for Solana mainnet-beta — required by Privy's RPC.
 const SOLANA_CAIP2 = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
@@ -403,6 +405,7 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
 
   // Source-token balance — branches by chain family.
   const [fromBalance, setFromBalance] = useState<number | null>(null);
+  const [fundOpen, setFundOpen] = useState(false);
   // Native EVM balance via wagmi.
   const { data: evmNativeBalance } = useBalance({
     address: fromIsEvm && evmConnected ? (evmAddress as Hex) : undefined,
@@ -1024,6 +1027,27 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
             onMax={fromBalance != null && fromBalance > 0 ? handleMax : undefined}
           />
 
+          {/* Fund prompt — Vision Wallet selected, wallet exists, balance is 0 */}
+          {walletSource === "vision" &&
+            (fromIsSvm
+              ? !!visionWallet.solanaAddress
+              : fromIsEvm
+                ? !!visionWallet.evmAddress
+                : false) &&
+            fromBalance === 0 && (
+              <button
+                type="button"
+                onClick={() => setFundOpen(true)}
+                className="ease-vision flex w-full items-center justify-between rounded-xl border border-primary/30 bg-primary/5 px-4 py-2.5 text-left text-xs text-primary transition-colors hover:bg-primary/10"
+              >
+                <span className="flex items-center gap-2">
+                  <ArrowDownToLine className="h-3.5 w-3.5" />
+                  No {fromToken?.symbol ?? "balance"} in your Vision Wallet on {fromChain?.name ?? "this chain"} — fund it to start bridging
+                </span>
+                <span className="font-medium">Deposit →</span>
+              </button>
+            )}
+
           <div className="flex justify-center">
             <button
               type="button"
@@ -1200,6 +1224,13 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
           else setToToken(t);
           setPicker(null);
         }}
+      />
+
+      {/* Fund Vision Wallet */}
+      <FundVisionWalletDialog
+        open={fundOpen}
+        onOpenChange={setFundOpen}
+        defaultChain={fromIsEvm ? "evm" : "solana"}
       />
 
       {/* EVM bridge progress modal — only opens during the EVM source path. */}
