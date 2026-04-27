@@ -56,10 +56,14 @@ export function useVisionWallet() {
   const [loading, setLoading] = useState(!cached && Boolean(supabaseUserId));
   const [working, setWorking] = useState(false);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (opts?: { force?: boolean }) => {
     if (!supabaseUserId) {
       setRow(null);
       return;
+    }
+    if (opts?.force) {
+      cache.delete(supabaseUserId);
+      inflight.delete(supabaseUserId);
     }
     // De-dupe concurrent fetches across components
     let promise = inflight.get(supabaseUserId);
@@ -125,7 +129,7 @@ export function useVisionWallet() {
       }
       const errMsg = (data as { error?: string } | null)?.error;
       if (errMsg) throw new Error(errMsg);
-      await refresh();
+      await refresh({ force: true });
       toast.success("Vision Wallet created");
     } catch (err) {
       console.error("[useVisionWallet] createWallet failed", err);
