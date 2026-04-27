@@ -208,6 +208,18 @@ serve(async (req) => {
       });
     }
 
+    // Prefer DexScreener's live spot price over the last candle close — the
+    // candle close can lag by minutes (especially on the 1H+ intervals) while
+    // token-info already shows the real-time spot. Graft the spot onto the
+    // final candle so the chart's last-price line matches the headline.
+    const spotPrice = top.priceUsd ? Number(top.priceUsd) : null;
+    if (spotPrice && candles.length > 0) {
+      const lastCandle = candles[candles.length - 1];
+      lastCandle.c = spotPrice;
+      lastCandle.h = Math.max(lastCandle.h, spotPrice);
+      lastCandle.l = Math.min(lastCandle.l, spotPrice);
+    }
+
     const first = candles[0]?.c ?? null;
     const last = candles[candles.length - 1]?.c ?? null;
     const priceChangePct = first && last ? ((last - first) / first) * 100 : null;
@@ -223,7 +235,7 @@ serve(async (req) => {
       pairUrl: top.url ?? null,
       interval,
       candles,
-      priceUsd: top.priceUsd ? Number(top.priceUsd) : last,
+      priceUsd: spotPrice ?? last,
       priceChangePct,
       high,
       low,
