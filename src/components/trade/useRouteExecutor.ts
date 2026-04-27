@@ -27,6 +27,11 @@ import { useEvmBridge } from "@/hooks/useEvmBridge";
 import { useVisionEvmBridge } from "@/hooks/useVisionEvmBridge";
 import type { ChainKey, MultichainToken } from "@/components/trade/MultichainTokenPickerDialog";
 import type { WalletSource } from "@/components/trade/WalletSourcePicker";
+import {
+  recordStrandedRoute,
+  clearStrandedRoute,
+  makeStrandedId,
+} from "@/lib/stranded-routes";
 
 const SOLANA_CAIP2 = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
 const POLL_INTERVAL_MS = 1500;
