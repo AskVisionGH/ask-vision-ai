@@ -393,7 +393,7 @@ function DetailGrid({ item }: { item: ActivityItem }) {
     rows.push(["When", new Date(item.at).toLocaleString()]);
     if (item.signature) rows.push(["Signature", shortAddr(item.signature)]);
     const source = (item.metadata as Record<string, unknown> | null)?.source;
-    if (typeof source === "string") rows.push(["Source", source.replaceAll("_", " ")]);
+    if (typeof source === "string") rows.push(["Source", source.split("_").join(" ")]);
   }
 
   return (
