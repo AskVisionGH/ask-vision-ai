@@ -49,8 +49,11 @@ export type AppNavItem = {
 
 export const APP_NAV_ITEMS: AppNavItem[] = [
   { id: "chat", to: "/chat", label: "Chat", icon: MessageSquare },
+  { id: "contacts", to: "/contacts", label: "Contacts", icon: Users },
   { id: "trade", to: "/trade?tab=trade", label: "Trade", icon: Repeat },
   { id: "orders", to: "/orders", label: "Orders", icon: ListChecks },
+  { id: "alerts", to: "/alerts", label: "Alerts", icon: Bell },
+  { id: "wallet", to: "/wallet", label: "Wallet", icon: Wallet },
   {
     id: "tracking",
     to: "/tracked-wallets",
@@ -59,9 +62,6 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
     disabled: true,
     badge: "Soon",
   },
-  { id: "alerts", to: "/alerts", label: "Alerts", icon: Bell },
-  { id: "contacts", to: "/contacts", label: "Contacts", icon: Users },
-  { id: "wallet", to: "/wallet", label: "Wallet", icon: Wallet },
   { id: "admin", to: "/admin", label: "Admin", icon: Shield, adminOnly: true },
 ];
 
