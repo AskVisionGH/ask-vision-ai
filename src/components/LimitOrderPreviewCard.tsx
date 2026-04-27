@@ -246,6 +246,16 @@ export const LimitOrderPreviewCard = ({ data }: Props) => {
             </span>
           }
         />
+        {data.entryResolution?.avgEntryUsd != null && (
+          <div className="mt-1 rounded-md border border-primary/20 bg-primary/5 px-2.5 py-1.5">
+            <p className="font-mono text-[10px] leading-relaxed text-primary/90">
+              Based on your avg entry of{" "}
+              <span className="text-foreground">{fmtUsd(data.entryResolution.avgEntryUsd)}</span>
+              {" "}for {data.entryResolution.symbol ?? data.input.symbol} →
+              limit set at <span className="text-foreground">{fmtUsd(data.entryResolution.targetPriceUsd)}</span>
+            </p>
+          </div>
+        )}
         {data.marketPrice != null && (
           <Row
             label="Market"

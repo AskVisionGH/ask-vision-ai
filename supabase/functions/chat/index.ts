@@ -41,7 +41,7 @@ Tools (call them whenever relevant — don't ask permission, don't pretend you c
 - \`get_token_pnl\` — single-token PnL deep-dive for the wallet: how much was bought/sold, average entry, realized + unrealized P/L, current holdings. Use for "how am I doing on $BONK", "my pnl on JUP", "am I up on WIF", "show my position in X". Required: \`token\` (ticker or mint). Optional: \`address\` (defaults to connected wallet).
 - \`prepare_limit_order\` — preview a limit order. Args: \`inputToken\`, \`outputToken\`, \`sellAmount\` (decimal of inputToken), and EITHER \`limitPrice\` (output per 1 input — selling 1 SOL → USDC at 250 = 250 USDC per SOL) OR \`priceFromEntry\` for entry-relative targets, optional \`expirySeconds\` (omit = GTC). For BUY orders, set \`inputToken\` to USDC and compute \`limitPrice\` accordingly. **Entry-relative pricing — CRITICAL**: when the user says things like "sell BONK at 2x my buy", "when it doubles", "sell at 3x my entry", "+50% from my buy in", "sell at break even", "when I'm down 30%", "sell when I'm 5x up", DO NOT guess a USD price. Pass \`priceFromEntry: { multiplier: 2 }\` for "2x", \`{ multiplier: 0.5 }\` for "halves" / "down 50%", \`{ multiplier: 1 }\` for "break even", \`{ percentChange: 50 }\` for "+50% from buy", \`{ percentChange: -30 }\` for "down 30% from entry". Server resolves the absolute USD price using the user's avg buy-in for \`inputToken\`. Entry-relative limits currently require selling to a stable (USDC/USDT). NEVER execute — the card has its own confirm + sign.
 - \`prepare_dca\` — preview a DCA. Args: \`inputToken\`, \`outputToken\`, \`totalAmount\`, \`numberOfOrders\` (≥ 2, ≤ 1000), \`intervalSeconds\` (≥ 60). Optional \`minPriceUsd\`/\`maxPriceUsd\`. NEVER execute.
-- \`prepare_bracket_order\` — preview a TP+SL bracket. Args: \`inputToken\`, \`outputToken\`, \`sellAmount\`, \`tpPriceUsd\`, \`slPriceUsd\`, optional \`entryMode\` ("market"|"limit") and \`entryPriceUsd\`. Bracket needs vault — preview only, links to /trade for final signing.
+- \`prepare_bracket_order\` — preview a TP+SL bracket. Args: \`inputToken\` (asset the user holds & is selling), \`outputToken\` (usually USDC/USDT), \`sellAmount\`, and TP/SL targets — EITHER absolute USD via \`tpPriceUsd\` / \`slPriceUsd\`, OR **entry-relative** via \`tpFromEntry\` / \`slFromEntry\`. Optional \`entryMode\` ("market"|"limit") and \`entryPriceUsd\`. **Entry-relative — CRITICAL**: when the user says things like "TP at 2x my buy, SL at break even", "take profit when it doubles, stop -25% from entry", "sell BONK with TP +100% SL -30% from my buy in", DO NOT guess USD prices. Use \`tpFromEntry: { multiplier: 2 }\` for "2x", \`{ multiplier: 1 }\` for break-even, \`{ percentChange: 100 }\` for "+100%", \`slFromEntry: { percentChange: -25 }\` for "down 25%", \`{ multiplier: 0.7 }\` for "30% below buy". Server resolves the absolute USD price using the user's avg buy-in for \`inputToken\` (the asset being sold). Bracket needs vault — preview only, links to /trade for final signing.
 - \`prepare_ladder\` — preview a ladder of limit orders. Args: \`side\` ("buy"|"sell"), \`asset\`, \`quote\` (defaults USDC), \`totalAmount\`, \`rungCount\` (2–20), \`minPriceUsd\`, \`maxPriceUsd\`. Card links to /trade.
 - \`get_open_orders\` — show the connected wallet's active limit + DCA orders. Use for "open orders", "my orders", "what's pending". Optional \`address\`.
 - \`prepare_bridge\` — preview a cross-chain bridge OUT of Solana via LI.FI (Mayan, Wormhole, deBridge, etc — automatically routed). Use whenever the user says "bridge", "send X to ETH/Base/Arbitrum/Polygon/etc", "move tokens to another chain", "get my SOL onto Ethereum", or any cross-chain transfer. Args: \`inputToken\` (Solana ticker/mint they're sending), \`outputToken\` (token they want on the destination, e.g. "ETH", "USDC"), \`toChain\` (destination chain — accepts names like "ethereum"/"eth"/"base"/"arbitrum"/"polygon"/"bsc"/"avalanche"), \`amount\` (decimal of inputToken). Optional: \`toAddress\` (the user's destination-chain wallet — REQUIRED when bridging to a non-Solana chain; if missing, ask them for it before calling). Phase 1 only supports Solana as the SOURCE chain — for bridges INTO Solana, point them to /trade → Bridge tab. NEVER executes — the rendered card has its own confirm + sign.
@@ -513,7 +513,7 @@ const TOOLS = [
         "Preview a TP+SL bracket order. Final signing happens in /trade (vault required). " +
         "TP/SL prices can be expressed two ways: " +
         "(a) absolute USD via `tpPriceUsd` / `slPriceUsd`, or " +
-        "(b) **entry-relative** via `tpFromEntry` / `slFromEntry` — server resolves to absolute USD using the user's average buy-in for the **OUTPUT token** (the token they're holding). " +
+        "(b) **entry-relative** via `tpFromEntry` / `slFromEntry` — server resolves to absolute USD using the user's average buy-in for the **INPUT token** (the asset they're holding and selling). " +
         "Use entry-relative whenever the user references their cost basis: 'TP at 2x my entry', 'stop at -25% from buy', 'TP when it doubles, SL at break-even'. " +
         "Provide ONE of `tpPriceUsd` OR `tpFromEntry` (same for SL), not both.",
       parameters: {
@@ -522,11 +522,11 @@ const TOOLS = [
           inputToken: { type: "string" },
           outputToken: { type: "string" },
           sellAmount: { type: "number" },
-          tpPriceUsd: { type: "number", description: "Take-profit USD price (absolute) for the OUTPUT token." },
-          slPriceUsd: { type: "number", description: "Stop-loss USD price (absolute) for the OUTPUT token." },
+          tpPriceUsd: { type: "number", description: "Take-profit USD price (absolute) for the INPUT token (asset being sold)." },
+          slPriceUsd: { type: "number", description: "Stop-loss USD price (absolute) for the INPUT token (asset being sold)." },
           tpFromEntry: {
             type: "object",
-            description: "Entry-relative take-profit. Server uses the user's avg buy-in for OUTPUT token.",
+            description: "Entry-relative take-profit. Server uses the user's avg buy-in for the INPUT token.",
             properties: {
               multiplier: { type: "number", description: "tp = avgEntry × multiplier (e.g. 2 = '2x my buy')." },
               percentChange: { type: "number", description: "tp = avgEntry × (1 + pct/100), e.g. 50 for '+50%'." },
@@ -535,7 +535,7 @@ const TOOLS = [
           },
           slFromEntry: {
             type: "object",
-            description: "Entry-relative stop-loss. Server uses the user's avg buy-in for OUTPUT token.",
+            description: "Entry-relative stop-loss. Server uses the user's avg buy-in for the INPUT token.",
             properties: {
               multiplier: { type: "number", description: "sl = avgEntry × multiplier (e.g. 0.7 = '30% below buy')." },
               percentChange: { type: "number", description: "sl = avgEntry × (1 + pct/100), e.g. -25 for 'down 25%'." },
@@ -1145,17 +1145,16 @@ serve(async (req) => {
               eventType = "dca_quote";
             } else if (name === "prepare_bracket_order") {
               const args = safeJson(tc.function?.arguments);
-              // Bracket TP/SL are USD prices on the OUTPUT token (the asset
-              // the user holds). Resolve any entry-relative TP / SL using
-              // the user's avg buy-in for OUTPUT token. We can do both in
-              // parallel since the wallet-pnl call is on the same token.
+              // Bracket TP/SL are USD prices on the INPUT token (the asset
+              // the user holds and is selling). Resolve any entry-relative
+              // TP / SL using the user's avg buy-in for INPUT token.
               let tpPriceUsd = args.tpPriceUsd;
               let slPriceUsd = args.slPriceUsd;
               let entryResolution: EntryResolution | null = null;
               if ((args.tpFromEntry || args.slFromEntry) && walletAddress) {
                 const r = await resolveEntryRelativePrice({
                   wallet: walletAddress,
-                  token: args.outputToken,
+                  token: args.inputToken,
                   // We only need the avg entry once — pass either spec; the
                   // helper returns avgEntryUsd which we then re-apply locally.
                   priceFromEntry: args.tpFromEntry ?? args.slFromEntry,
