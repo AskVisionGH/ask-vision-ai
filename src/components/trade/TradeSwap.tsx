@@ -43,6 +43,7 @@ import {
   WalletSourcePicker,
   type WalletSource,
 } from "@/components/trade/WalletSourcePicker";
+import { FundVisionWalletDialog } from "@/components/wallet/FundVisionWalletDialog";
 
 const SOL_TOKEN: TokenMeta = {
   symbol: "SOL",
