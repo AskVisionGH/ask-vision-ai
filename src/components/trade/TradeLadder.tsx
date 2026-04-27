@@ -536,7 +536,13 @@ export const TradeLadder = ({ expirySeconds }: Props) => {
   let ctaLabel = `Place ${rungCount}-rung ${side === "buy" ? "buy" : "sell"} ladder`;
   let ctaDisabled = false;
   let ctaAction: (() => void) | null = placeLadder;
-  if (!connected) {
+  if (walletSource === "vision" && !visionWallet.solanaAddress) {
+    ctaLabel = visionWallet.working ? "Creating wallet…" : "Create Vision Wallet";
+    ctaDisabled = visionWallet.working;
+    ctaAction = () => {
+      visionWallet.createWallet().catch(() => { /* hook toasts */ });
+    };
+  } else if (walletSource === "external" && !connected) {
     ctaLabel = "Connect wallet";
     ctaAction = () => setVisible(true);
   } else if (validation) {
