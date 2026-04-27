@@ -162,7 +162,18 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
   const { address: externalEvmAddress } = useAccount();
   const visionWallet = useVisionWallet();
   const { user } = useAuth();
-  const { execute } = useRouteExecutor();
+  const { execute, resume } = useRouteExecutor();
+  // Bumped after a successful resume so the StrandedRoutesCard re-reads the
+  // registry and drops the just-completed record.
+  const [strandedRefreshKey, setStrandedRefreshKey] = useState(0);
+  // When resume() runs we display its progress in the same RouteProgressModal
+  // as a normal swap. We override the synthetic plan/tokens so the modal's
+  // step list and headers stay accurate (single destination swap leg).
+  const [resumeContext, setResumeContext] = useState<{
+    plan: RoutePlan;
+    fromToken: MultichainToken;
+    toToken: MultichainToken;
+  } | null>(null);
   const mounted = useRef(true);
 
   // Resolve the active payer address for the SOURCE chain of the trade.
