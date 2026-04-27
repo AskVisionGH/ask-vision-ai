@@ -550,7 +550,7 @@ export const useRouteExecutor = () => {
   };
 
   async function runSwapLeg(args: SwapLegArgs): Promise<{ hash: string; explorer: string }> {
-    const { legIndex, chain, quote, fromToken, toToken, walletSource, fromAddress, slippageBps, dynamicSlippage, onStatus } = args;
+    const { legIndex, chain, quote, fromToken, toToken, walletSource, fromAddress, slippageBps, dynamicSlippage, bridgeSignature, onStatus } = args;
     onStatus({ kind: "building", legIndex, legKind: "swap" });
 
     if (isSol(chain)) {
