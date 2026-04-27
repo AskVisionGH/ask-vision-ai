@@ -428,7 +428,7 @@ export const BridgePreviewCard = ({ data }: Props) => {
             <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
               <span>Completed in {(phase.durationMs / 1000).toFixed(0)}s</span>
               <a
-                href={`https://solscan.io/tx/${phase.signature}`}
+                href={phase.sourceExplorer}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="ease-vision inline-flex items-center gap-1 text-primary transition-colors hover:text-primary/80"
@@ -615,6 +615,22 @@ export const BridgePreviewCard = ({ data }: Props) => {
           />
         </div>
 
+        {phase.name === "preview" && (
+          <div className="border-t border-border/40 px-5 py-4">
+            <WalletSourcePicker
+              value={walletSource}
+              onChange={setWalletSource}
+              visionAvailable={visionReady}
+              externalAvailable={externalReady}
+            />
+            {fromIsEvm && (
+              <p className="mt-2 font-mono text-[10px] leading-relaxed text-muted-foreground">
+                Vision Wallet doesn't yet support EVM-source bridges — using your external EVM wallet.
+              </p>
+            )}
+          </div>
+        )}
+
         {isError && isCancelled && (
           <div className="flex items-start gap-2 border-t border-border/60 bg-muted/30 px-5 py-3">
             <XCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
@@ -638,7 +654,7 @@ export const BridgePreviewCard = ({ data }: Props) => {
         )}
 
         <div className="flex items-center gap-2 border-t border-border/40 bg-secondary/30 px-5 py-3">
-          {!connected ? (
+          {!activeReady ? (
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="flex-1">
@@ -650,7 +666,13 @@ export const BridgePreviewCard = ({ data }: Props) => {
                   </Button>
                 </span>
               </TooltipTrigger>
-              <TooltipContent side="top">Connect a wallet to sign.</TooltipContent>
+              <TooltipContent side="top">
+                {walletSource === "vision"
+                  ? "Create your Vision Wallet to sign."
+                  : fromIsEvm
+                    ? "Connect an EVM wallet to sign."
+                    : "Connect a Solana wallet to sign."}
+              </TooltipContent>
             </Tooltip>
           ) : (
             <Button
