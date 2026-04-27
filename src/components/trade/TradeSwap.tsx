@@ -59,6 +59,7 @@ import {
 } from "@/components/trade/WalletSourcePicker";
 import { FundVisionWalletDialog } from "@/components/wallet/FundVisionWalletDialog";
 import { useRouteExecutor, type ExecutorStatus, type RoutePlan } from "@/components/trade/useRouteExecutor";
+import { RouteProgressModal } from "@/components/trade/RouteProgressModal";
 
 const SOL_TOKEN: MultichainToken = {
   symbol: "SOL",
