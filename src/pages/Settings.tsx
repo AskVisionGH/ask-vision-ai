@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/select";
 import { UserAvatar } from "@/components/UserAvatar";
 import { DeleteAccountDialog } from "@/components/DeleteAccountDialog";
+import { VisionWalletCard } from "@/components/VisionWalletCard";
 import { Link } from "react-router-dom";
 import {
   Accordion,
@@ -480,6 +481,8 @@ const Settings = () => {
             </Accordion>
           </div>
         )}
+
+        <VisionWalletCard />
       </div>
 
       {user?.email && (
