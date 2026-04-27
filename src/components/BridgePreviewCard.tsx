@@ -148,6 +148,7 @@ export const BridgePreviewCard = ({ data }: Props) => {
   const visionWallet = useVisionWallet();
   const visionSigner = useVisionWalletSigner();
   const { sendBridgeTx } = useEvmBridge();
+  const { sendBridgeTx: sendVisionEvmBridgeTx } = useVisionEvmBridge();
 
   const fromIsEvm = data.fromChain?.chainType === "EVM";
   const fromIsSvm =
@@ -159,11 +160,6 @@ export const BridgePreviewCard = ({ data }: Props) => {
   const visionReady = fromIsEvm
     ? Boolean(visionWallet.evmAddress)
     : Boolean(visionWallet.solanaAddress);
-
-  // Vision Wallet doesn't yet drive EVM-source bridges — auto-flip to external.
-  useEffect(() => {
-    if (fromIsEvm && walletSource === "vision") setWalletSource("external");
-  }, [fromIsEvm, walletSource]);
 
   useEffect(() => {
     mounted.current = true;
@@ -256,13 +252,8 @@ export const BridgePreviewCard = ({ data }: Props) => {
       setPhase({ name: "building" });
       const built = await supaPost("bridge-build", { quote: data.raw });
 
-      // ============ EVM source path (external only) ============
+      // ============ EVM source path (Vision or external) ============
       if (fromIsEvm) {
-        if (walletSource === "vision") {
-          throw new Error(
-            "Bridging from EVM with Vision Wallet is coming soon. Switch to External wallet for now.",
-          );
-        }
         const txReq = built.transactionRequest;
         if (!txReq?.to || !txReq?.data) {
           throw new Error("Bridge route returned no EVM transaction.");
@@ -277,9 +268,11 @@ export const BridgePreviewCard = ({ data }: Props) => {
               ).toString()
             : "0");
 
+        const driver = walletSource === "vision" ? sendVisionEvmBridgeTx : sendBridgeTx;
+
         let sourceTxHash: Hex;
         try {
-          sourceTxHash = await sendBridgeTx({
+          sourceTxHash = await driver({
             fromChainId: Number(data.fromChain.id),
             fromTokenAddress: data.fromToken.address,
             fromAmount: fromAmountAtomic,
