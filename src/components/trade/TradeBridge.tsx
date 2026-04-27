@@ -478,7 +478,7 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
 
     setFromBalance(null);
   }, [
-    fromIsSvm, fromIsEvm, connected, publicKey, evmConnected, evmAddress,
+    fromIsSvm, fromIsEvm, fromAddress, evmConnected, evmAddress,
     fromToken, fromChain?.id, connection, evmNativeBalance,
   ]);
 
