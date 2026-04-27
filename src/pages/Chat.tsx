@@ -40,6 +40,8 @@ const Chat = () => {
   const { profile } = useProfile();
   const { contacts, addContact } = useContacts();
   const { connected, publicKey } = useWallet();
+  const vision = useVisionWallet();
+  const hasVision = Boolean(vision.solanaAddress || vision.evmAddress);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
