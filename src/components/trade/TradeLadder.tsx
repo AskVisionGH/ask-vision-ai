@@ -668,6 +668,24 @@ export const TradeLadder = ({ expirySeconds }: Props) => {
             </div>
           </div>
 
+          {/* Zero-balance fund prompt — only when paying with Vision Wallet */}
+          {walletSource === "vision" &&
+            visionWallet.solanaAddress &&
+            balance != null &&
+            balance <= 0 && (
+              <button
+                type="button"
+                onClick={() => setFundOpen(true)}
+                className="ease-vision flex w-full items-center justify-between gap-2 border-t border-primary/20 bg-primary/5 px-5 py-2.5 text-left hover:bg-primary/10"
+              >
+                <span className="flex items-center gap-2 font-mono text-[11px] text-primary">
+                  <ArrowDownToLine className="h-3.5 w-3.5" />
+                  No {spendToken.symbol} in your Vision Wallet
+                </span>
+                <span className="font-mono text-[11px] text-primary">Deposit →</span>
+              </button>
+            )}
+
           <div className="border-t border-border/60" />
 
           {/* Price range */}
@@ -931,6 +949,12 @@ export const TradeLadder = ({ expirySeconds }: Props) => {
                 ? assetToken.address
                 : undefined
           }
+        />
+
+        <FundVisionWalletDialog
+          open={fundOpen}
+          onOpenChange={setFundOpen}
+          defaultChain="solana"
         />
       </div>
     </TooltipProvider>
