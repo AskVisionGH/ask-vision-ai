@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   Loader2,
@@ -9,7 +9,9 @@ import {
   XCircle,
 } from "lucide-react";
 import { useWallet } from "@solana/wallet-adapter-react";
+import { useAccount } from "wagmi";
 import { VersionedTransaction } from "@solana/web3.js";
+import type { Hex } from "viem";
 import { cn } from "@/lib/utils";
 import { TokenLogo } from "@/components/TokenLogo";
 import { Button } from "@/components/ui/button";
@@ -21,6 +23,15 @@ import {
 } from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
 import type { BridgeQuoteData, BridgeTokenSide } from "@/lib/chat-stream";
+import { useVisionWallet } from "@/hooks/useVisionWallet";
+import { useVisionWalletSigner } from "@/hooks/useVisionWalletSigner";
+import { useEvmBridge } from "@/hooks/useEvmBridge";
+import {
+  WalletSourcePicker,
+  type WalletSource,
+} from "@/components/trade/WalletSourcePicker";
+
+const SOLANA_CAIP2 = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
 
 interface Props {
   data: BridgeQuoteData;
@@ -32,17 +43,21 @@ const POLL_TIMEOUT_MS = 15 * 60 * 1000;
 type Phase =
   | { name: "preview" }
   | { name: "building" }
+  | { name: "switching_chain" }
+  | { name: "approving" }
   | { name: "awaiting_signature" }
   | { name: "submitting" }
   | {
       name: "bridging";
       signature: string;
+      sourceExplorer: string;
       startedAt: number;
       estimatedSec: number | null;
     }
   | {
       name: "success";
       signature: string;
+      sourceExplorer: string;
       durationMs: number;
       toAmountUi: number;
       destExplorer: string | null;
@@ -124,8 +139,30 @@ export const BridgePreviewCard = ({ data }: Props) => {
   const [phase, setPhase] = useState<Phase>({ name: "preview" });
   const [dismissed, setDismissed] = useState(false);
   const [nowTick, setNowTick] = useState(() => Date.now());
+  const [walletSource, setWalletSource] = useState<WalletSource>("vision");
   const mounted = useRef(true);
-  const { publicKey, signTransaction, connected } = useWallet();
+
+  const { publicKey, signTransaction, connected: solConnected } = useWallet();
+  const { address: evmAddress, isConnected: evmConnected } = useAccount();
+  const visionWallet = useVisionWallet();
+  const visionSigner = useVisionWalletSigner();
+  const { sendBridgeTx } = useEvmBridge();
+
+  const fromIsEvm = data.fromChain?.chainType === "EVM";
+  const fromIsSvm =
+    data.fromChain?.chainType === "SVM" || data.fromChain?.chainType === "Solana";
+
+  const externalReady = fromIsEvm
+    ? Boolean(evmConnected && evmAddress)
+    : Boolean(solConnected && publicKey && signTransaction);
+  const visionReady = fromIsEvm
+    ? Boolean(visionWallet.evmAddress)
+    : Boolean(visionWallet.solanaAddress);
+
+  // Vision Wallet doesn't yet drive EVM-source bridges — auto-flip to external.
+  useEffect(() => {
+    if (fromIsEvm && walletSource === "vision") setWalletSource("external");
+  }, [fromIsEvm, walletSource]);
 
   useEffect(() => {
     mounted.current = true;
@@ -151,11 +188,64 @@ export const BridgePreviewCard = ({ data }: Props) => {
 
   if (dismissed) return null;
 
+  const activeReady = walletSource === "vision" ? visionReady : externalReady;
+
+  const pollUntilDone = async (
+    signature: string,
+    sourceExplorer: string,
+    startedAt: number,
+  ) => {
+    const deadline = Date.now() + POLL_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      if (!mounted.current) return;
+      await sleep(POLL_INTERVAL_MS);
+      try {
+        const status = await supaGet("bridge-status", {
+          txHash: signature,
+          fromChain: String(data.fromChain.id),
+          toChain: String(data.toChain.id),
+          bridge: data.tool ?? "",
+        });
+        if (status.status === "DONE") {
+          const recv = status.receiving;
+          const destAmountUi =
+            recv?.amount && data.toToken.decimals != null
+              ? Number(recv.amount) / Math.pow(10, data.toToken.decimals)
+              : data.toToken.amountUi;
+          const destExplorer = recv?.txLink ?? null;
+          if (!mounted.current) return;
+          setPhase({
+            name: "success",
+            signature,
+            sourceExplorer,
+            durationMs: Date.now() - startedAt,
+            toAmountUi: destAmountUi,
+            destExplorer,
+          });
+          return;
+        }
+        if (status.status === "FAILED" || status.status === "INVALID") {
+          throw new Error(status.substatus ?? "Bridge failed on-chain");
+        }
+      } catch {
+        continue;
+      }
+    }
+    throw new Error(
+      "Bridge is taking longer than expected. You can keep tracking it from the source transaction.",
+    );
+  };
+
   const handleConfirm = async () => {
-    if (!connected || !publicKey || !signTransaction) {
+    if (!activeReady) {
       setPhase({
         name: "error",
-        message: "Connect a wallet that supports signing.",
+        message:
+          walletSource === "vision"
+            ? "Create your Vision Wallet first."
+            : fromIsEvm
+              ? "Connect an EVM wallet to sign."
+              : "Connect a Solana wallet to sign.",
       });
       return;
     }
@@ -164,86 +254,138 @@ export const BridgePreviewCard = ({ data }: Props) => {
     try {
       setPhase({ name: "building" });
       const built = await supaPost("bridge-build", { quote: data.raw });
+
+      // ============ EVM source path (external only) ============
+      if (fromIsEvm) {
+        if (walletSource === "vision") {
+          throw new Error(
+            "Bridging from EVM with Vision Wallet is coming soon. Switch to External wallet for now.",
+          );
+        }
+        const txReq = built.transactionRequest;
+        if (!txReq?.to || !txReq?.data) {
+          throw new Error("Bridge route returned no EVM transaction.");
+        }
+        const approvalAddress: string | null =
+          data.raw?.estimate?.approvalAddress ?? built.step?.estimate?.approvalAddress ?? null;
+        const fromAmountAtomic =
+          data.fromToken.amountAtomic ??
+          (data.fromToken.decimals != null
+            ? BigInt(
+                Math.round(data.fromToken.amountUi * Math.pow(10, data.fromToken.decimals)),
+              ).toString()
+            : "0");
+
+        let sourceTxHash: Hex;
+        try {
+          sourceTxHash = await sendBridgeTx({
+            fromChainId: Number(data.fromChain.id),
+            fromTokenAddress: data.fromToken.address,
+            fromAmount: fromAmountAtomic,
+            approvalAddress,
+            txRequest: txReq,
+            onStatus: (s) => {
+              if (!mounted.current) return;
+              if (s === "switching") setPhase({ name: "switching_chain" });
+              else if (s === "approving") setPhase({ name: "approving" });
+              else if (s === "signing") setPhase({ name: "awaiting_signature" });
+              else if (s === "confirming") setPhase({ name: "submitting" });
+            },
+          });
+        } catch (e: any) {
+          const msg = String(e?.message ?? "").toLowerCase();
+          if (msg.includes("user rejected") || msg.includes("denied") || msg.includes("rejected")) {
+            if (mounted.current) {
+              setPhase({
+                name: "error",
+                message: "Cancelled — try again or adjust the amount.",
+                cancelled: true,
+              });
+            }
+            return;
+          }
+          throw e;
+        }
+
+        const sourceExplorer = buildEvmExplorer(Number(data.fromChain.id), sourceTxHash);
+        setPhase({
+          name: "bridging",
+          signature: sourceTxHash,
+          sourceExplorer,
+          startedAt,
+          estimatedSec: data.executionDurationSec ?? null,
+        });
+        await pollUntilDone(sourceTxHash, sourceExplorer, startedAt);
+        return;
+      }
+
+      // ============ Solana source path ============
       const txB64: string | null =
         built.solanaTransaction ?? built.transactionRequest?.data ?? null;
       if (!txB64) throw new Error("Bridge route returned no Solana transaction");
 
-      setPhase({ name: "awaiting_signature" });
-      const txBytes = Uint8Array.from(atob(txB64), (c) => c.charCodeAt(0));
-      const tx = VersionedTransaction.deserialize(txBytes);
-      let signed: VersionedTransaction;
-      try {
-        signed = await signTransaction(tx);
-      } catch {
-        if (mounted.current) {
-          setPhase({
-            name: "error",
-            message: "Cancelled — try again or adjust the amount.",
-            cancelled: true,
-          });
+      let signature: string;
+
+      if (walletSource === "vision") {
+        if (!visionWallet.solanaAddress) {
+          throw new Error("Create your Vision Wallet first.");
         }
-        return;
+        setPhase({ name: "awaiting_signature" });
+        const result = await visionSigner.signAndSend({
+          chain: "solana",
+          caip2: SOLANA_CAIP2,
+          transaction: txB64,
+          method: "signAndSendTransaction",
+        });
+        if (!result.hash) throw new Error("No signature returned from Vision Wallet");
+        signature = result.hash;
+      } else {
+        if (!signTransaction || !publicKey) {
+          throw new Error("Connect your Solana wallet first.");
+        }
+        setPhase({ name: "awaiting_signature" });
+        const txBytes = Uint8Array.from(atob(txB64), (c) => c.charCodeAt(0));
+        const tx = VersionedTransaction.deserialize(txBytes);
+        let signed: VersionedTransaction;
+        try {
+          signed = await signTransaction(tx);
+        } catch {
+          if (mounted.current) {
+            setPhase({
+              name: "error",
+              message: "Cancelled — try again or adjust the amount.",
+              cancelled: true,
+            });
+          }
+          return;
+        }
+
+        setPhase({ name: "submitting" });
+        const signedB64 = btoa(String.fromCharCode(...signed.serialize()));
+        const submitted = await supaPost("tx-submit", {
+          signedTransaction: signedB64,
+          kind: "bridge",
+          valueUsd: data.fromAmountUsd ?? data.toAmountUsd ?? null,
+          inputMint: data.fromToken.address,
+          outputMint: data.toToken.address,
+          inputAmount: data.fromToken.amountUi,
+          outputAmount: data.toToken.amountUi,
+          walletAddress: publicKey.toBase58(),
+        });
+        const sig = submitted.signature as string;
+        if (!sig) throw new Error("No signature returned from submit");
+        signature = sig;
       }
 
-      setPhase({ name: "submitting" });
-      const signedB64 = btoa(String.fromCharCode(...signed.serialize()));
-      const submitted = await supaPost("tx-submit", {
-        signedTransaction: signedB64,
-        kind: "bridge",
-        valueUsd: data.fromAmountUsd ?? data.toAmountUsd ?? null,
-        inputMint: data.fromToken.address,
-        outputMint: data.toToken.address,
-        inputAmount: data.fromToken.amountUi,
-        outputAmount: data.toToken.amountUi,
-        walletAddress: publicKey.toBase58(),
-      });
-      const signature = submitted.signature as string;
-      if (!signature) throw new Error("No signature returned from submit");
-
+      const sourceExplorer = `https://solscan.io/tx/${signature}`;
       setPhase({
         name: "bridging",
         signature,
+        sourceExplorer,
         startedAt,
         estimatedSec: data.executionDurationSec ?? null,
       });
-      const deadline = Date.now() + POLL_TIMEOUT_MS;
-      while (Date.now() < deadline) {
-        if (!mounted.current) return;
-        await sleep(POLL_INTERVAL_MS);
-        try {
-          const status = await supaGet("bridge-status", {
-            txHash: signature,
-            fromChain: String(data.fromChain.id),
-            toChain: String(data.toChain.id),
-            bridge: data.tool ?? "",
-          });
-          if (status.status === "DONE") {
-            const recv = status.receiving;
-            const destAmountUi =
-              recv?.amount && data.toToken.decimals != null
-                ? Number(recv.amount) / Math.pow(10, data.toToken.decimals)
-                : data.toToken.amountUi;
-            const destExplorer = recv?.txLink ?? null;
-            if (!mounted.current) return;
-            setPhase({
-              name: "success",
-              signature,
-              durationMs: Date.now() - startedAt,
-              toAmountUi: destAmountUi,
-              destExplorer,
-            });
-            return;
-          }
-          if (status.status === "FAILED" || status.status === "INVALID") {
-            throw new Error(status.substatus ?? "Bridge failed on-chain");
-          }
-        } catch {
-          continue;
-        }
-      }
-      throw new Error(
-        "Bridge is taking longer than expected. You can keep tracking it from the source transaction.",
-      );
+      await pollUntilDone(signature, sourceExplorer, startedAt);
     } catch (e) {
       if (!mounted.current) return;
       const message = e instanceof Error ? e.message : "Something went wrong.";
@@ -286,7 +428,7 @@ export const BridgePreviewCard = ({ data }: Props) => {
             <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
               <span>Completed in {(phase.durationMs / 1000).toFixed(0)}s</span>
               <a
-                href={`https://solscan.io/tx/${phase.signature}`}
+                href={phase.sourceExplorer}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="ease-vision inline-flex items-center gap-1 text-primary transition-colors hover:text-primary/80"
@@ -314,6 +456,8 @@ export const BridgePreviewCard = ({ data }: Props) => {
 
   const isBusy =
     phase.name === "building" ||
+    phase.name === "switching_chain" ||
+    phase.name === "approving" ||
     phase.name === "awaiting_signature" ||
     phase.name === "submitting" ||
     phase.name === "bridging";
@@ -324,13 +468,19 @@ export const BridgePreviewCard = ({ data }: Props) => {
   const busyLabel =
     phase.name === "building"
       ? "Building transaction…"
-      : phase.name === "awaiting_signature"
-        ? "Approve in wallet…"
-        : phase.name === "submitting"
-          ? "Submitting on Solana…"
-          : phase.name === "bridging"
-            ? bridgingLabel(phase, nowTick)
-            : "";
+      : phase.name === "switching_chain"
+        ? "Switching network…"
+        : phase.name === "approving"
+          ? "Approving token…"
+          : phase.name === "awaiting_signature"
+            ? "Approve in wallet…"
+            : phase.name === "submitting"
+              ? fromIsEvm
+                ? "Confirming on source chain…"
+                : "Submitting on Solana…"
+              : phase.name === "bridging"
+                ? bridgingLabel(phase, nowTick)
+                : "";
 
   return (
     <TooltipProvider delayDuration={150}>
@@ -473,6 +623,22 @@ export const BridgePreviewCard = ({ data }: Props) => {
           />
         </div>
 
+        {phase.name === "preview" && (
+          <div className="border-t border-border/40 px-5 py-4">
+            <WalletSourcePicker
+              value={walletSource}
+              onChange={setWalletSource}
+              visionAvailable={visionReady}
+              externalAvailable={externalReady}
+            />
+            {fromIsEvm && (
+              <p className="mt-2 font-mono text-[10px] leading-relaxed text-muted-foreground">
+                Vision Wallet doesn't yet support EVM-source bridges — using your external EVM wallet.
+              </p>
+            )}
+          </div>
+        )}
+
         {isError && isCancelled && (
           <div className="flex items-start gap-2 border-t border-border/60 bg-muted/30 px-5 py-3">
             <XCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
@@ -496,7 +662,7 @@ export const BridgePreviewCard = ({ data }: Props) => {
         )}
 
         <div className="flex items-center gap-2 border-t border-border/40 bg-secondary/30 px-5 py-3">
-          {!connected ? (
+          {!activeReady ? (
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="flex-1">
@@ -508,7 +674,13 @@ export const BridgePreviewCard = ({ data }: Props) => {
                   </Button>
                 </span>
               </TooltipTrigger>
-              <TooltipContent side="top">Connect a wallet to sign.</TooltipContent>
+              <TooltipContent side="top">
+                {walletSource === "vision"
+                  ? "Create your Vision Wallet to sign."
+                  : fromIsEvm
+                    ? "Connect an EVM wallet to sign."
+                    : "Connect a Solana wallet to sign."}
+              </TooltipContent>
             </Tooltip>
           ) : (
             <Button
@@ -594,3 +766,22 @@ const Row = ({ label, value }: { label: string; value: React.ReactNode }) => (
     {value}
   </div>
 );
+
+// Minimal EVM explorer URL — mirrors the Trade tab's helper so chat success
+// links go to the right scanner per source chain.
+function buildEvmExplorer(chainId: number, hash: string): string {
+  const map: Record<number, string> = {
+    1: "https://etherscan.io/tx/",
+    10: "https://optimistic.etherscan.io/tx/",
+    56: "https://bscscan.com/tx/",
+    137: "https://polygonscan.com/tx/",
+    250: "https://ftmscan.com/tx/",
+    8453: "https://basescan.org/tx/",
+    42161: "https://arbiscan.io/tx/",
+    43114: "https://snowscan.xyz/tx/",
+    59144: "https://lineascan.build/tx/",
+    534352: "https://scrollscan.com/tx/",
+  };
+  const base = map[chainId] ?? "https://etherscan.io/tx/";
+  return `${base}${hash}`;
+}

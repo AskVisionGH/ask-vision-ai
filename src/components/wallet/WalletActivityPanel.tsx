@@ -59,8 +59,23 @@ type DepositItem = {
 type ActivityItem = TxEventItem | DepositItem;
 
 type ChainFilter = "all" | "solana" | "evm";
+type KindFilter = "all" | "swap" | "bridge" | "transfer" | "deposit";
 
 const PAGE_SIZE = 30;
+
+const itemKind = (item: ActivityItem): KindFilter => {
+  if (item.kind === "deposit") return "deposit";
+  switch (item.subKind) {
+    case "swap":
+      return "swap";
+    case "bridge":
+      return "bridge";
+    case "transfer":
+      return "transfer";
+    default:
+      return "transfer";
+  }
+};
 
 const fmtAmount = (n: number | null | undefined) => {
   if (n == null || !Number.isFinite(n)) return "—";
@@ -130,6 +145,7 @@ const itemChainId = (item: ActivityItem): number | null => {
 export function WalletActivityPanel() {
   const [items, setItems] = useState<ActivityItem[]>([]);
   const [chainFilter, setChainFilter] = useState<ChainFilter>("all");
+  const [kindFilter, setKindFilter] = useState<KindFilter>("all");
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -201,9 +217,14 @@ export function WalletActivityPanel() {
   }, [loadMore]);
 
   const filtered = useMemo(() => {
-    if (chainFilter === "all") return items;
-    return items.filter((i) => itemChain(i) === chainFilter);
-  }, [items, chainFilter]);
+    return items.filter((i) => {
+      if (chainFilter !== "all" && itemChain(i) !== chainFilter) return false;
+      if (kindFilter !== "all" && itemKind(i) !== kindFilter) return false;
+      return true;
+    });
+  }, [items, chainFilter, kindFilter]);
+
+  const filtersActive = chainFilter !== "all" || kindFilter !== "all";
 
   const toggleExpand = (id: string) => {
     setExpanded((prev) => {
@@ -215,7 +236,7 @@ export function WalletActivityPanel() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex flex-wrap gap-1.5">
           {(["all", "solana", "evm"] as const).map((f) => (
@@ -248,6 +269,23 @@ export function WalletActivityPanel() {
         </Button>
       </div>
 
+      <div className="flex flex-wrap gap-1.5">
+        {(["all", "swap", "bridge", "transfer", "deposit"] as const).map((k) => (
+          <button
+            key={k}
+            onClick={() => setKindFilter(k)}
+            className={cn(
+              "ease-vision rounded-full border px-2.5 py-0.5 text-[10px] uppercase tracking-wider",
+              kindFilter === k
+                ? "border-primary/60 bg-primary/10 text-foreground"
+                : "border-border/60 bg-secondary/30 text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {k}
+          </button>
+        ))}
+      </div>
+
       {error && <p className="text-xs text-destructive">{error}</p>}
 
       {loading && items.length === 0 ? (
@@ -272,7 +310,7 @@ export function WalletActivityPanel() {
       )}
 
       {/* Infinite-scroll sentinel + manual fallback */}
-      {hasMore && chainFilter === "all" && (
+      {hasMore && !filtersActive && (
         <div ref={sentinelRef} className="flex items-center justify-center py-4">
           {loadingMore ? (
             <span className="flex items-center gap-2 text-[11px] text-muted-foreground">
@@ -288,9 +326,9 @@ export function WalletActivityPanel() {
           )}
         </div>
       )}
-      {hasMore && chainFilter !== "all" && (
+      {hasMore && filtersActive && (
         <p className="py-4 text-center text-[10px] text-muted-foreground/70">
-          Filter is on — switch to All to load older events.
+          Filter is on — clear filters to load older events.
         </p>
       )}
     </div>
