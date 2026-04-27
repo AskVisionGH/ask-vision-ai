@@ -11,6 +11,7 @@
 import { forwardRef } from "react";
 import { TrendingDown, TrendingUp, Globe } from "lucide-react";
 import { TokenLogo } from "@/components/TokenLogo";
+import { VisionLogo } from "@/components/VisionLogo";
 import { cn } from "@/lib/utils";
 import type { TokenPnL, TokenPnLData, WalletPnLData } from "@/lib/chat-stream";
 
