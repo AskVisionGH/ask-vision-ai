@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   Loader2,
@@ -9,7 +9,9 @@ import {
   XCircle,
 } from "lucide-react";
 import { useWallet } from "@solana/wallet-adapter-react";
+import { useAccount } from "wagmi";
 import { VersionedTransaction } from "@solana/web3.js";
+import type { Hex } from "viem";
 import { cn } from "@/lib/utils";
 import { TokenLogo } from "@/components/TokenLogo";
 import { Button } from "@/components/ui/button";
@@ -21,6 +23,15 @@ import {
 } from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
 import type { BridgeQuoteData, BridgeTokenSide } from "@/lib/chat-stream";
+import { useVisionWallet } from "@/hooks/useVisionWallet";
+import { useVisionWalletSigner } from "@/hooks/useVisionWalletSigner";
+import { useEvmBridge } from "@/hooks/useEvmBridge";
+import {
+  WalletSourcePicker,
+  type WalletSource,
+} from "@/components/trade/WalletSourcePicker";
+
+const SOLANA_CAIP2 = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
 
 interface Props {
   data: BridgeQuoteData;
