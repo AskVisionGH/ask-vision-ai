@@ -26,6 +26,7 @@ import type { BridgeQuoteData, BridgeTokenSide } from "@/lib/chat-stream";
 import { useVisionWallet } from "@/hooks/useVisionWallet";
 import { useVisionWalletSigner } from "@/hooks/useVisionWalletSigner";
 import { useEvmBridge } from "@/hooks/useEvmBridge";
+import { useVisionEvmBridge } from "@/hooks/useVisionEvmBridge";
 import {
   WalletSourcePicker,
   type WalletSource,
