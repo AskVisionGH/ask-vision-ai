@@ -327,8 +327,13 @@ serve(async (req) => {
   } catch (e) {
     console.error("evm-wallet-balance error:", e);
     return json(
-      { error: e instanceof Error ? e.message : "Unknown error" },
-      500,
+      {
+        holdings: [],
+        scanned: 0,
+        rpcError: e instanceof Error ? e.message : "Unknown error",
+        fallback: true,
+      },
+      200,
     );
   }
 });
