@@ -445,17 +445,41 @@ const TOOLS = [
     type: "function",
     function: {
       name: "prepare_limit_order",
-      description: "Preview a limit order. NEVER executes — user signs in the rendered card.",
+      description:
+        "Preview a limit order. NEVER executes — user signs in the rendered card. " +
+        "Supports two ways of expressing the target price: " +
+        "(a) absolute via `limitPrice` (output tokens per 1 input token), or " +
+        "(b) **entry-relative** via `priceFromEntry` for sell orders — pass an object describing how the user phrased the target relative to their average buy-in price for the INPUT token (the one they own). " +
+        "Use `priceFromEntry` whenever the user references their own cost basis: '2x my buy', 'when it doubles', 'sell at 3x entry', 'sell at +50% from average', 'break even', 'when I'm down 30%', etc. " +
+        "The server fetches the user's average entry price and computes the absolute limit. Provide ONE of `limitPrice` OR `priceFromEntry`, not both.",
       parameters: {
         type: "object",
         properties: {
           inputToken: { type: "string", description: "Ticker or mint of the token to sell." },
           outputToken: { type: "string", description: "Ticker or mint of the token to receive." },
           sellAmount: { type: "number", description: "Decimal amount of inputToken to sell." },
-          limitPrice: { type: "number", description: "Output tokens per 1 input token." },
+          limitPrice: { type: "number", description: "Output tokens per 1 input token (absolute)." },
+          priceFromEntry: {
+            type: "object",
+            description:
+              "Entry-relative target. Server resolves to an absolute USD price using the user's avg buy-in for `inputToken`. Use ONE field below.",
+            properties: {
+              multiplier: {
+                type: "number",
+                description:
+                  "Final price = avgEntry × multiplier. e.g. 2 means '2x my entry / when it doubles', 0.5 means 'when it halves', 1 means 'break even'.",
+              },
+              percentChange: {
+                type: "number",
+                description:
+                  "Final price = avgEntry × (1 + percentChange/100). e.g. 50 = '+50% from buy', -30 = '30% below my entry / when I'm down 30%'.",
+              },
+            },
+            additionalProperties: false,
+          },
           expirySeconds: { type: "number", description: "Optional expiry in seconds. Omit for GTC." },
         },
-        required: ["inputToken", "outputToken", "sellAmount", "limitPrice"],
+        required: ["inputToken", "outputToken", "sellAmount"],
         additionalProperties: false,
       },
     },
