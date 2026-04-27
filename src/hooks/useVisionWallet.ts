@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePrivy, useLoginWithEmail } from "@privy-io/react-auth";
-import {
-  useWallets as useSolanaWallets,
-  useCreateWallet as useCreateSolanaWallet,
-} from "@privy-io/react-auth/solana";
+import { useCreateWallet as useCreateSolanaWallet } from "@privy-io/react-auth/solana";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
@@ -21,13 +18,38 @@ type VisionWalletRow = {
 };
 
 /**
+ * Pull the embedded Solana wallet address out of the Privy user object.
+ * Privy stores embedded wallets as linked accounts of type "wallet" with
+ * walletClientType === "privy" and chainType === "solana".
+ */
+function getEmbeddedSolanaAddress(privyUser: unknown): string | null {
+  if (!privyUser || typeof privyUser !== "object") return null;
+  const accounts = (privyUser as { linkedAccounts?: unknown[] })
+    .linkedAccounts;
+  if (!Array.isArray(accounts)) return null;
+  for (const acc of accounts) {
+    if (!acc || typeof acc !== "object") continue;
+    const a = acc as Record<string, unknown>;
+    if (
+      a.type === "wallet" &&
+      a.walletClientType === "privy" &&
+      a.chainType === "solana" &&
+      typeof a.address === "string"
+    ) {
+      return a.address;
+    }
+  }
+  return null;
+}
+
+/**
  * useVisionWallet — single source of truth for the user's Vision-managed
  * (Privy embedded) wallet. Trade flows should use this hook instead of
  * touching Privy directly, so we can centralise:
  *   - Privy <-> Supabase user binding
  *   - vision_wallets row sync
  *   - Solana address resolution
- *   - Signing API
+ *   - Signing API (added in Phase 2)
  */
 export function useVisionWallet() {
   const { session } = useAuth();
@@ -39,18 +61,16 @@ export function useVisionWallet() {
     user: privyUser,
     logout: privyLogout,
   } = usePrivy();
-  const { wallets: solanaWallets, createWallet: createSolanaWallet } =
-    useSolanaWallets();
+  const { createWallet: createSolanaWallet } = useCreateSolanaWallet();
   const { sendCode, loginWithCode } = useLoginWithEmail();
 
   const [row, setRow] = useState<VisionWalletRow | null>(null);
   const [loadingRow, setLoadingRow] = useState(false);
   const [working, setWorking] = useState(false);
 
-  // Pick the embedded Solana wallet (not an external one).
-  const embeddedSolana = useMemo(
-    () => solanaWallets.find((w) => w.walletClientType === "privy") ?? null,
-    [solanaWallets],
+  const embeddedSolanaAddress = useMemo(
+    () => getEmbeddedSolanaAddress(privyUser),
+    [privyUser],
   );
 
   // Load existing row whenever the Supabase user changes.
@@ -83,11 +103,11 @@ export function useVisionWallet() {
   // Persist (upsert) the wallet record once Privy + Supabase + an
   // embedded Solana address are all available.
   useEffect(() => {
-    if (!supabaseUserId || !privyUser?.id || !embeddedSolana?.address) return;
+    if (!supabaseUserId || !privyUser?.id || !embeddedSolanaAddress) return;
     if (
       row &&
       row.privy_user_id === privyUser.id &&
-      row.solana_address === embeddedSolana.address
+      row.solana_address === embeddedSolanaAddress
     ) {
       return; // already in sync
     }
@@ -99,7 +119,7 @@ export function useVisionWallet() {
           {
             user_id: supabaseUserId,
             privy_user_id: privyUser.id,
-            solana_address: embeddedSolana.address,
+            solana_address: embeddedSolanaAddress,
             origin: row?.origin ?? "created",
             is_active: true,
           },
@@ -117,29 +137,25 @@ export function useVisionWallet() {
     return () => {
       cancelled = true;
     };
-  }, [supabaseUserId, privyUser?.id, embeddedSolana?.address, row]);
+  }, [supabaseUserId, privyUser?.id, embeddedSolanaAddress, row]);
 
   /**
-   * Ensure the user is logged in to Privy. We bind Privy to the same
-   * email used in Supabase by sending a one-time code. If Privy already
-   * has a session, this is a no-op.
+   * Step 1 of Privy login: send a one-time code to the user's Supabase
+   * email. Caller should then prompt for the code and call submitPrivyCode.
    */
-  const ensurePrivyLogin = useCallback(async () => {
+  const sendPrivyLoginCode = useCallback(async () => {
     if (!ready) throw new Error("Wallet system not ready");
-    if (authenticated) return;
     const email = session?.user?.email;
     if (!email) throw new Error("No Supabase email to bind to Privy");
     await sendCode({ email });
     toast.message("Check your email", {
-      description: `We sent a code to ${email} to set up your Vision Wallet.`,
+      description: `We sent a 6-digit code to ${email}.`,
     });
-    // The actual code-entry UI will be wired in Phase 2; for now we
-    // throw so callers can show a "code sent" state.
-    throw new Error("PRIVY_CODE_SENT");
-  }, [ready, authenticated, session?.user?.email, sendCode]);
+    return email;
+  }, [ready, session?.user?.email, sendCode]);
 
   /**
-   * Submit the 6-digit code the user got via email to complete Privy login.
+   * Step 2 of Privy login: submit the 6-digit code.
    */
   const submitPrivyCode = useCallback(
     async (code: string) => {
@@ -150,12 +166,11 @@ export function useVisionWallet() {
 
   /**
    * Create a brand-new embedded Solana wallet. Caller must already be
-   * Privy-authenticated (call ensurePrivyLogin first).
+   * Privy-authenticated (sendPrivyLoginCode + submitPrivyCode).
    */
   const createWallet = useCallback(async () => {
     if (!authenticated) {
-      await ensurePrivyLogin();
-      return;
+      throw new Error("Must be logged into Privy first");
     }
     setWorking(true);
     try {
@@ -164,11 +179,12 @@ export function useVisionWallet() {
     } finally {
       setWorking(false);
     }
-  }, [authenticated, createSolanaWallet, ensurePrivyLogin]);
+  }, [authenticated, createSolanaWallet]);
 
   /**
    * Disconnect this device from Privy. The on-chain wallet is preserved
-   * — user can recover via email + Privy.
+   * — the user can recover it on any device by logging in with the same
+   * email.
    */
   const disconnect = useCallback(async () => {
     await privyLogout();
@@ -183,16 +199,13 @@ export function useVisionWallet() {
 
     // data
     row,
-    solanaAddress: embeddedSolana?.address ?? row?.solana_address ?? null,
+    solanaAddress: embeddedSolanaAddress ?? row?.solana_address ?? null,
     privyUserId: privyUser?.id ?? null,
 
     // actions
-    ensurePrivyLogin,
+    sendPrivyLoginCode,
     submitPrivyCode,
     createWallet,
     disconnect,
-
-    // raw handles for advanced flows (signing, etc.)
-    embeddedSolana,
   };
 }
