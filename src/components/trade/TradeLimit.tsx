@@ -788,6 +788,13 @@ export const TradeLimit = ({ tab, onTabChange }: Props) => {
             pickerSide === "in" ? outputToken.address : pickerSide === "out" ? inputToken.address : undefined
           }
         />
+
+        {/* Fund Vision Wallet */}
+        <FundVisionWalletDialog
+          open={fundOpen}
+          onOpenChange={setFundOpen}
+          defaultChain="solana"
+        />
       </div>
     </TooltipProvider>
   );
