@@ -98,6 +98,20 @@ Deno.serve(async (req) => {
       auth: { persistSession: false },
     });
 
+    // Parse pagination params from body (best-effort).
+    let before: string | null = null;
+    let limit = 30;
+    try {
+      const body = await req.json().catch(() => null);
+      if (body && typeof body === "object") {
+        const b = body as Record<string, unknown>;
+        if (typeof b.before === "string" && b.before.length > 0) before = b.before;
+        if (typeof b.limit === "number" && b.limit > 0 && b.limit <= 100) {
+          limit = Math.floor(b.limit);
+        }
+      }
+    } catch { /* default */ }
+
     // 1. Look up Vision Wallet addresses
     const { data: walletRow } = await admin
       .from("vision_wallets")
@@ -109,17 +123,26 @@ Deno.serve(async (req) => {
     const solanaAddress = walletRow?.solana_address ?? null;
     const evmAddress = walletRow?.evm_address ?? null;
 
-    // 2. Query tx_events for the user (server-recorded actions)
-    const { data: txRows } = await admin
+    // 2. Query tx_events for the user (server-recorded actions). We fetch
+    //    `limit + 1` so we know if there's a next page.
+    let txQuery = admin
       .from("tx_events")
       .select(
-        "id, created_at, signature, kind, value_usd, input_mint, output_mint, input_amount, output_amount, recipient, wallet_address",
+        "id, created_at, signature, kind, value_usd, input_mint, output_mint, input_amount, output_amount, recipient, wallet_address, metadata",
       )
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
-      .limit(50);
+      .limit(limit + 1);
+    if (before) txQuery = txQuery.lt("created_at", before);
+    const { data: txRows } = await txQuery;
 
-    const txItems: ActivityItem[] = (txRows ?? []).map((r) => ({
+    const rowsForPage = (txRows ?? []).slice(0, limit);
+    const hasMore = (txRows ?? []).length > limit;
+    const nextCursor = hasMore && rowsForPage.length > 0
+      ? rowsForPage[rowsForPage.length - 1].created_at
+      : null;
+
+    const txItems: ActivityItem[] = rowsForPage.map((r) => ({
       id: `tx:${r.id}`,
       kind: "tx_event",
       subKind: String(r.kind),
@@ -132,6 +155,7 @@ Deno.serve(async (req) => {
       inputAmount: r.input_amount,
       outputAmount: r.output_amount,
       recipient: r.recipient,
+      metadata: (r as { metadata?: unknown }).metadata ?? null,
       explorerUrl: r.signature && r.signature.length >= 64
         ? r.signature.startsWith("0x")
           ? null // EVM tx hash — we'd need the chain to build URL; skip for now
@@ -139,18 +163,24 @@ Deno.serve(async (req) => {
         : null,
     }));
 
-    // 3. Fetch on-chain deposits in parallel
-    const [solanaDeposits, evmDeposits] = await Promise.all([
-      solanaAddress ? fetchSolanaDeposits(solanaAddress).catch(() => []) : Promise.resolve([]),
-      evmAddress ? fetchEvmDeposits(evmAddress).catch(() => []) : Promise.resolve([]),
-    ]);
+    // 3. Fetch on-chain deposits ONLY on the first page (when no cursor).
+    //    Deposits are inherently a "latest snapshot" feed — paging them
+    //    alongside tx_events would cause weird overlaps.
+    const [solanaDeposits, evmDeposits] = before
+      ? [[], []]
+      : await Promise.all([
+          solanaAddress ? fetchSolanaDeposits(solanaAddress).catch(() => []) : Promise.resolve([]),
+          evmAddress ? fetchEvmDeposits(evmAddress).catch(() => []) : Promise.resolve([]),
+        ]);
 
     // 4. Merge + sort (newest first)
     const all = [...txItems, ...solanaDeposits, ...evmDeposits];
     all.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
 
     return json({
-      items: all.slice(0, 100),
+      items: all,
+      nextCursor,
+      hasMore,
       counts: {
         tx_events: txItems.length,
         solana_deposits: solanaDeposits.length,
