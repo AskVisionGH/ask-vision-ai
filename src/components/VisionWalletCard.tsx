@@ -116,8 +116,16 @@ export const VisionWalletCard = () => {
                 </div>
               </div>
             )}
-            {!isComplete && (
-              <div className="flex justify-end">
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button
+                onClick={() => setFundOpen(true)}
+                variant="outline"
+                size="sm"
+              >
+                <ArrowDownToLine className="mr-2 h-3.5 w-3.5" />
+                Deposit
+              </Button>
+              {!isComplete && (
                 <Button
                   onClick={handleCreate}
                   disabled={working}
@@ -129,8 +137,8 @@ export const VisionWalletCard = () => {
                   )}
                   Finish wallet setup
                 </Button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         ) : (
           <div className="flex justify-end">
@@ -141,6 +149,7 @@ export const VisionWalletCard = () => {
           </div>
         )}
       </AccordionContent>
+      <FundVisionWalletDialog open={fundOpen} onOpenChange={setFundOpen} />
     </AccordionItem>
   );
 };
