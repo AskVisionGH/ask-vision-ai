@@ -808,10 +808,7 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
             Success keeps the existing celebratory full-card view above; the
             modal handles in-flight, error, and cancelled states. */}
         <RouteProgressModal
-          open={
-            status.kind !== "idle" &&
-            status.kind !== "success"
-          }
+          open={status.kind !== "idle"}
           onOpenChange={(o) => { if (!o) resetSwap(); }}
           plan={plan}
           status={status}
