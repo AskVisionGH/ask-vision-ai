@@ -22,16 +22,14 @@ import { cn } from "@/lib/utils";
  *   - icon-only rail (w-14) for desktop collapse
  *
  * Active highlighting matches the `activePath` prop (supply `location.pathname`).
- * Bridge lives at `/trade?tab=bridge` — we use <Link state> so it doesn't do a
- * full page reload and Trade picks up the tab change via its `location.search`
- * effect.
+ * Cross-chain swaps are handled inside the Swap tab via the unified router.
  */
 interface Props {
   collapsed: boolean;
   onToggleCollapsed?: () => void;
   /** location.pathname — used to highlight the active entry. */
   activePath: string;
-  /** For the Trade page: which sub-tab is active. Used to highlight Bridge vs Trade. */
+  /** For the Trade page: which sub-tab is active. Reserved for future per-tab highlighting. */
   activeTradeTab?: string | null;
   isAdmin: boolean;
   user: { email?: string | null } | null;

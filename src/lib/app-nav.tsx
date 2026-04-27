@@ -20,8 +20,8 @@ import {
  *
  * If you add/remove/reorder a nav item, do it HERE only.
  *
- * Note: Bridge intentionally has no top-level entry — it lives as a tab
- * inside the Trade page (`/trade?tab=bridge`) to keep the sidebar lean.
+ * Note: Cross-chain bridging is now folded into the Swap tab via the unified
+ * router — there is no separate Bridge tab.
  */
 export type AppNavItem = {
   /** Stable id used for active highlighting + React keys. */
@@ -76,8 +76,7 @@ export const getAppNavItems = (isAdmin: boolean): AppNavItem[] =>
  * Resolve which nav item is "active" for the current route. Used by both
  * sidebars to keep highlighting logic identical.
  *
- * - On `/trade`, both the Trade and Bridge tabs highlight the Trade entry,
- *   since Bridge no longer has its own sidebar item.
+ * - On `/trade`, all sub-tabs highlight the Trade entry. 
  * - Otherwise we match on pathname.
  */
 export const getActiveNavId = (
