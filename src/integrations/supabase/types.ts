@@ -863,33 +863,39 @@ export type Database = {
         Row: {
           created_at: string
           evm_address: string | null
+          evm_wallet_id: string | null
           id: string
           is_active: boolean
           origin: Database["public"]["Enums"]["vision_wallet_origin"]
-          privy_user_id: string
+          privy_user_id: string | null
           solana_address: string | null
+          solana_wallet_id: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           created_at?: string
           evm_address?: string | null
+          evm_wallet_id?: string | null
           id?: string
           is_active?: boolean
           origin?: Database["public"]["Enums"]["vision_wallet_origin"]
-          privy_user_id: string
+          privy_user_id?: string | null
           solana_address?: string | null
+          solana_wallet_id?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
           created_at?: string
           evm_address?: string | null
+          evm_wallet_id?: string | null
           id?: string
           is_active?: boolean
           origin?: Database["public"]["Enums"]["vision_wallet_origin"]
-          privy_user_id?: string
+          privy_user_id?: string | null
           solana_address?: string | null
+          solana_wallet_id?: string | null
           updated_at?: string
           user_id?: string
         }
