@@ -831,6 +831,13 @@ export const TradeDca = () => {
                 : undefined
           }
         />
+
+        {/* Fund Vision Wallet */}
+        <FundVisionWalletDialog
+          open={fundOpen}
+          onOpenChange={setFundOpen}
+          defaultChain="solana"
+        />
       </div>
     </TooltipProvider>
   );
