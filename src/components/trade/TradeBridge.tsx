@@ -24,6 +24,7 @@ import { TokenLogo } from "@/components/TokenLogo";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useEvmBridge } from "@/hooks/useEvmBridge";
+import { useVisionEvmBridge } from "@/hooks/useVisionEvmBridge";
 import { findEvmChain } from "@/lib/evm-chains";
 import { BridgeProgressModal } from "@/components/trade/BridgeProgressModal";
 import { useVisionWallet } from "@/hooks/useVisionWallet";
@@ -310,6 +311,7 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
   // EVM hooks (active whenever source is an EVM chain AND user picked external).
   const { address: evmAddress, isConnected: evmConnected } = useAccount();
   const { sendBridgeTx } = useEvmBridge();
+  const { sendBridgeTx: sendVisionEvmBridgeTx } = useVisionEvmBridge();
   const visionWallet = useVisionWallet();
   const visionSigner = useVisionWalletSigner();
 
