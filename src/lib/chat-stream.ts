@@ -440,7 +440,18 @@ export interface LimitOrderQuoteData {
   receiveValueUsd: number | null;
   /** Will fill instantly because limit is too aggressive. */
   willFillInstantly: boolean;
+  /** Server-resolved entry-relative pricing — present when user said "2x my buy" etc. */
+  entryResolution?: EntryResolution | null;
   error?: string;
+}
+
+export interface EntryResolution {
+  avgEntryUsd: number | null;
+  targetPriceUsd: number | null;
+  symbol: string | null;
+  unitsBought: number | null;
+  costUsd: number | null;
+  error: string | null;
 }
 
 export interface DcaQuoteData {
@@ -472,6 +483,8 @@ export interface BracketQuoteData {
   marketPriceUsd: number | null;
   /** URL with prefilled state for /trade */
   tradeUrl: string;
+  /** Server-resolved entry-relative pricing — present when user said "2x my buy" etc. */
+  entryResolution?: EntryResolution | null;
   error?: string;
 }
 
