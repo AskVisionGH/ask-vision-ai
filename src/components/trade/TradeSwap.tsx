@@ -46,6 +46,7 @@ import { TradeTabs, type TradeTab } from "@/components/trade/TradeTabs";
 import {
   MultichainTokenPickerDialog,
   pushRecentMultichainToken,
+  chainOption,
   type MultichainToken,
   type ChainKey,
 } from "@/components/trade/MultichainTokenPickerDialog";
@@ -923,7 +924,7 @@ const SwapSide = ({
   loading?: boolean;
 }) => {
   const chainLabel = token
-    ? (isSol(token.chainId) ? "Solana" : `Chain ${token.chainId}`)
+    ? chainOption(token.chainId)?.label ?? (isSol(token.chainId) ? "Solana" : `Chain ${token.chainId}`)
     : null;
   return (
     <div className="px-5 py-4">
