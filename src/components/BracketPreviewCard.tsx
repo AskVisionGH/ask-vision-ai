@@ -76,6 +76,17 @@ export const BracketPreviewCard = ({ data }: Props) => {
       </div>
 
       <div className="border-t border-border/40 px-5 py-3">
+        {data.entryResolution?.avgEntryUsd != null && (
+          <div className="mb-2 rounded-md border border-primary/20 bg-primary/5 px-2.5 py-1.5">
+            <p className="font-mono text-[10px] leading-relaxed text-primary/90">
+              Based on your avg entry of{" "}
+              <span className="text-foreground">{fmtUsd(data.entryResolution.avgEntryUsd)}</span>
+              {" "}for {data.entryResolution.symbol ?? data.input.symbol} →
+              TP <span className="text-foreground">{fmtUsd(data.tpPriceUsd)}</span>
+              {" "}/ SL <span className="text-foreground">{fmtUsd(data.slPriceUsd)}</span>
+            </p>
+          </div>
+        )}
         {data.entryMode === "limit" && data.entryPriceUsd != null && (
           <Row
             label={`Entry ${data.entrySide ?? ""}`}
