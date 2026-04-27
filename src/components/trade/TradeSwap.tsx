@@ -887,10 +887,10 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
         <RouteProgressModal
           open={status.kind !== "idle"}
           onOpenChange={(o) => { if (!o) resetSwap(); }}
-          plan={plan}
+          plan={resumeContext?.plan ?? plan}
           status={status}
-          fromToken={inputToken}
-          toToken={outputToken}
+          fromToken={resumeContext?.fromToken ?? inputToken}
+          toToken={resumeContext?.toToken ?? outputToken}
           onDone={resetSwap}
         />
       </div>
