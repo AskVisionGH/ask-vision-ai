@@ -1416,6 +1416,8 @@ async function resolveEntryRelativePrice(opts: {
     error: targetPriceUsd == null ? "priceFromEntry needs `multiplier` (>0) or `percentChange`." : null,
   };
 }
+
+async function invokeFn(name: string, body: unknown, req: Request) {
   const supaUrl = Deno.env.get("SUPABASE_URL");
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
   if (!supaUrl || !anonKey) return { error: "Backend misconfigured" };
