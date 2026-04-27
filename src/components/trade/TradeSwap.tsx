@@ -480,10 +480,17 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
           </div>
           <div>
             <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-              {plan?.strategy === "swap" ? "Swap confirmed" : "Cross-chain swap confirmed"}
+              {resumeContext
+                ? "Rescue swap confirmed"
+                : plan?.strategy === "swap"
+                  ? "Swap confirmed"
+                  : "Cross-chain swap confirmed"}
             </p>
             <p className="mt-2 font-mono text-sm text-foreground">
-              {fmtAmount(numericAmount)} {inputToken.symbol} → {fmtAmount(status.finalAmountUi)} {status.finalSymbol}
+              {resumeContext
+                ? <>{fmtAmount(resumeContext.plan.summary.fromAmountUi)} {resumeContext.fromToken.symbol} → {fmtAmount(status.finalAmountUi)} {status.finalSymbol}</>
+                : <>{fmtAmount(numericAmount)} {inputToken.symbol} → {fmtAmount(status.finalAmountUi)} {status.finalSymbol}</>
+              }
             </p>
             <p className="mt-1 font-mono text-[10px] text-muted-foreground">
               in {(status.durationMs / 1000).toFixed(1)}s · {status.legHashes.length} {status.legHashes.length === 1 ? "leg" : "legs"}
