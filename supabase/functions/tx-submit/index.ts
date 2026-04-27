@@ -23,6 +23,19 @@ serve(async (req) => {
   try {
     const body = await req.json();
     const signedTransaction: string = body.signedTransaction ?? "";
+    const preBroadcastSignature: string = body.signature ?? "";
+
+    // Log-only mode: caller already broadcast the tx (e.g. Vision Wallet
+    // via Privy) and just wants the tx_event recorded for accounting.
+    if (!signedTransaction && preBroadcastSignature) {
+      try {
+        await logTxEvent(req, preBroadcastSignature, body);
+      } catch (e) {
+        console.error("tx event log failed:", e);
+      }
+      return json({ signature: preBroadcastSignature, logged: true });
+    }
+
     if (!signedTransaction) return json({ error: "signedTransaction required" }, 400);
 
     const HELIUS_API_KEY = Deno.env.get("HELIUS_API_KEY");
