@@ -1363,7 +1363,16 @@ const TreasuryTab = () => {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="text-xs capitalize">{f.chain}</Badge>
+                      <div className="flex items-center gap-1">
+                        <Badge variant="outline" className="text-xs capitalize">
+                          {f.chain === "ethereum" && evmChainId ? `EVM · ${evmChainId}` : f.chain}
+                        </Badge>
+                        {bridgeSig && (
+                          <Badge variant="outline" className="text-[10px] text-muted-foreground" title={`Bridge tx: ${bridgeSig}`}>
+                            via bridge
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <Badge variant="secondary" className="text-xs">{SOURCE_LABELS[f.source_kind]}</Badge>
