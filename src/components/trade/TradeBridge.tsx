@@ -782,7 +782,7 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
     }
   }, [
     quote, fromToken, toToken, fromChain, fromAddress, fromIsEvm,
-    sendBridgeTx, signTransaction, publicKey, numericAmount,
+    sendBridgeTx, sendVisionEvmBridgeTx, signTransaction, publicKey, numericAmount,
     walletSource, visionWallet.solanaAddress, visionSigner,
   ]);
 
