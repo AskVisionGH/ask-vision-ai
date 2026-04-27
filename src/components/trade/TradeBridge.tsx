@@ -403,6 +403,7 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
 
   // Source-token balance — branches by chain family.
   const [fromBalance, setFromBalance] = useState<number | null>(null);
+  const [fundOpen, setFundOpen] = useState(false);
   // Native EVM balance via wagmi.
   const { data: evmNativeBalance } = useBalance({
     address: fromIsEvm && evmConnected ? (evmAddress as Hex) : undefined,
