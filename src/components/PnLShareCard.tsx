@@ -525,8 +525,11 @@ const WalletShare = ({ data, theme }: { data: WalletPnLData; theme: Theme }) => 
   const totalPnl = totals.totalRealizedUsd + totals.totalUnrealizedUsd;
   const pct = pnlPct(totalPnl, totals.totalCostUsd);
 
-  // Top 3 movers fits the landscape height nicely.
+  // Top 3 movers fits the landscape height nicely. Filter out tokens
+  // without a recognizable symbol — those render as "$?" and look broken
+  // on a shareable poster. Better to show fewer rows than mystery rows.
   const top = [...tokens]
+    .filter((t) => t.symbol && t.symbol !== "?" && t.symbol.trim().length > 0)
     .sort(
       (a, b) =>
         Math.abs(b.realizedUsd + b.unrealizedUsd) -
