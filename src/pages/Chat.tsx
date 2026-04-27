@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Menu } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useVisionWallet } from "@/hooks/useVisionWallet";
 import { useProfile } from "@/hooks/useProfile";
 import { supabase } from "@/integrations/supabase/client";
 import { useContacts } from "@/hooks/useContacts";
@@ -32,7 +33,7 @@ import {
   type ShareMode,
 } from "@/hooks/useConversations";
 import { streamChat, type ChatMessage, type ToolEvent } from "@/lib/chat-stream";
-import { pickSuggestions } from "@/lib/chat-suggestions";
+
 import { cn } from "@/lib/utils";
 
 const Chat = () => {
@@ -40,6 +41,8 @@ const Chat = () => {
   const { profile } = useProfile();
   const { contacts, addContact } = useContacts();
   const { connected, publicKey } = useWallet();
+  const vision = useVisionWallet();
+  const hasVision = Boolean(vision.solanaAddress || vision.evmAddress);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -60,10 +63,6 @@ const Chat = () => {
   // the user lands on the empty-chat screen (no activeId). useMemo with these
   // deps gives us a stable list within a single empty-state render but a
   // fresh draw whenever they start a new chat.
-  const suggestions = useMemo(
-    () => pickSuggestions(4),
-    [user?.id, activeId],
-  );
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loadingThread, setLoadingThread] = useState(false);
   const [input, setInput] = useState("");
@@ -558,30 +557,15 @@ const Chat = () => {
                   )}
                 </h2>
                 <p className="mt-2 max-w-sm text-xs text-muted-foreground sm:mt-3 sm:text-sm">
-                  Ask anything about Solana — your wallet, tokens, protocols, or how something works.
+                  Ask anything about crypto — wallets, tokens, protocols, or how something works.
                 </p>
-                {!connected && (
+                {!hasVision && !connected && (
                   <p className="mt-2 max-w-sm text-xs text-muted-foreground/70">
-                    Connect a wallet to unlock balance, swap, and transfer actions.
+                    Connect a wallet — or create a Vision Wallet — to unlock balance, swap, and transfer actions.
                   </p>
                 )}
 
                 <VisionWalletReadyBanner />
-
-                <div className="mt-5 grid w-full max-w-md grid-cols-1 gap-2 sm:mt-10 sm:grid-cols-2">
-                  {suggestions.map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => send(s)}
-                      className={cn(
-                        "rounded-xl border border-border bg-card/40 px-4 py-3 text-left text-xs text-muted-foreground ease-vision",
-                        "hover:border-primary/30 hover:bg-card hover:text-foreground",
-                      )}
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
               </div>
             ) : (
               messages.map((m, i) => (
