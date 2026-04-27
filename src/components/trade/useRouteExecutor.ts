@@ -357,6 +357,7 @@ export const useRouteExecutor = () => {
           fromAddress: toAddress,
           slippageBps,
           dynamicSlippage,
+          bridgeSignature: bridgeHash,
           onStatus,
         });
         legHashes.push({ chain: intermediate.chain, hash: swapHash, explorer: swapExplorer });
@@ -495,6 +496,7 @@ export const useRouteExecutor = () => {
           fromAddress: route.recipientAddress,
           slippageBps,
           dynamicSlippage,
+          bridgeSignature: route.bridgeHash,
           onStatus,
         });
 
