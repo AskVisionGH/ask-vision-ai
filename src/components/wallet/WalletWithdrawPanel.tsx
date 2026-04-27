@@ -29,6 +29,8 @@ import { toast } from "sonner";
  */
 
 const SOLANA_CAIP2 = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
+const WSOL_MINT = "So11111111111111111111111111111111111111112";
+const isSolMint = (m: string) => m === "SOL" || m === WSOL_MINT;
 
 interface SolHolding {
   mint: string;
