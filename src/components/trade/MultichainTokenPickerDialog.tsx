@@ -96,8 +96,15 @@ const SOLANA_POPULAR: MultichainToken[] = [
   { symbol: "SOL", name: "Solana", address: "So11111111111111111111111111111111111111112", decimals: 9, logo: "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png", priceUsd: null, chainId: "SOL" },
   { symbol: "USDC", name: "USD Coin", address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", decimals: 6, logo: "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/logo.png", priceUsd: 1, chainId: "SOL" },
   { symbol: "USDT", name: "Tether", address: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", decimals: 6, logo: "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB/logo.svg", priceUsd: 1, chainId: "SOL" },
-  { symbol: "JUP", name: "Jupiter", address: "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN", decimals: 6, logo: null, priceUsd: null, chainId: "SOL" },
-  { symbol: "BONK", name: "Bonk", address: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", decimals: 5, logo: null, priceUsd: null, chainId: "SOL" },
+  { symbol: "JUP", name: "Jupiter", address: "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN", decimals: 6, logo: "https://static.jup.ag/jup/icon.png", priceUsd: null, chainId: "SOL" },
+  { symbol: "BONK", name: "Bonk", address: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", decimals: 5, logo: "https://arweave.net/hQiPZOsRZXGXBJd_82PhVdlM_hACsT_q6wqwf5cSY7I", priceUsd: null, chainId: "SOL" },
+  { symbol: "WIF", name: "dogwifhat", address: "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm", decimals: 6, logo: "https://bafkreibk3covs5ltyqxa272uodhculbr6kea6betidfwy3ajsav2vjzyum.ipfs.nftstorage.link", priceUsd: null, chainId: "SOL" },
+  { symbol: "JTO", name: "Jito", address: "jtojtomepa8beP8AuQc6eXt5FriJwfFMwQx2v2f9mCL", decimals: 9, logo: "https://metadata.jito.network/token/jto/image", priceUsd: null, chainId: "SOL" },
+  { symbol: "PYTH", name: "Pyth Network", address: "HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3", decimals: 6, logo: "https://pyth.network/token.svg", priceUsd: null, chainId: "SOL" },
+  { symbol: "JLP", name: "Jupiter LP", address: "27G8MtK7VtTcCHkpASjSDdkWWYfoqT6ggEuKidVJidD4", decimals: 6, logo: "https://static.jup.ag/jlp/icon.png", priceUsd: null, chainId: "SOL" },
+  { symbol: "mSOL", name: "Marinade SOL", address: "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So", decimals: 9, logo: "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So/logo.png", priceUsd: null, chainId: "SOL" },
+  { symbol: "RAY", name: "Raydium", address: "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R", decimals: 6, logo: "https://img.raydium.io/icon/4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R.png", priceUsd: null, chainId: "SOL" },
+  { symbol: "ORCA", name: "Orca", address: "orcaEKTdK7LKz57vaAYr9QeNsVEPfiu6QeMU1kektZE", decimals: 6, logo: "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/orcaEKTdK7LKz57vaAYr9QeNsVEPfiu6QeMU1kektZE/logo.png", priceUsd: null, chainId: "SOL" },
 ];
 
 // EVM popular tokens — kept tiny because each chain has its own native + USDC
@@ -108,23 +115,36 @@ const EVM_POPULAR: MultichainToken[] = [
   { symbol: "ETH", name: "Ethereum", address: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE", decimals: 18, logo: "https://icons.llamao.fi/icons/chains/rsz_ethereum.jpg", priceUsd: null, chainId: 1 },
   { symbol: "USDC", name: "USD Coin", address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6, logo: null, priceUsd: 1, chainId: 1 },
   { symbol: "USDT", name: "Tether", address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6, logo: null, priceUsd: 1, chainId: 1 },
+  { symbol: "WBTC", name: "Wrapped BTC", address: "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599", decimals: 8, logo: null, priceUsd: null, chainId: 1 },
+  { symbol: "DAI", name: "Dai", address: "0x6B175474E89094C44Da98b954EedeAC495271d0F", decimals: 18, logo: null, priceUsd: 1, chainId: 1 },
+  { symbol: "LINK", name: "Chainlink", address: "0x514910771AF9Ca656af840dff83E8264EcF986CA", decimals: 18, logo: null, priceUsd: null, chainId: 1 },
   // Base
   { symbol: "ETH", name: "Ethereum", address: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE", decimals: 18, logo: "https://icons.llamao.fi/icons/chains/rsz_base.jpg", priceUsd: null, chainId: 8453 },
   { symbol: "USDC", name: "USD Coin", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6, logo: null, priceUsd: 1, chainId: 8453 },
+  { symbol: "cbBTC", name: "Coinbase BTC", address: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf", decimals: 8, logo: null, priceUsd: null, chainId: 8453 },
+  { symbol: "AERO", name: "Aerodrome", address: "0x940181a94A35A4569E4529A3CDfB74e38FD98631", decimals: 18, logo: null, priceUsd: null, chainId: 8453 },
   // Arbitrum
   { symbol: "ETH", name: "Ethereum", address: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE", decimals: 18, logo: "https://icons.llamao.fi/icons/chains/rsz_arbitrum.jpg", priceUsd: null, chainId: 42161 },
   { symbol: "USDC", name: "USD Coin", address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", decimals: 6, logo: null, priceUsd: 1, chainId: 42161 },
+  { symbol: "ARB", name: "Arbitrum", address: "0x912CE59144191C1204E64559FE8253a0e49E6548", decimals: 18, logo: null, priceUsd: null, chainId: 42161 },
   // Optimism
   { symbol: "ETH", name: "Ethereum", address: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE", decimals: 18, logo: "https://icons.llamao.fi/icons/chains/rsz_optimism.jpg", priceUsd: null, chainId: 10 },
   { symbol: "USDC", name: "USD Coin", address: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85", decimals: 6, logo: null, priceUsd: 1, chainId: 10 },
+  { symbol: "OP", name: "Optimism", address: "0x4200000000000000000000000000000000000042", decimals: 18, logo: null, priceUsd: null, chainId: 10 },
   // Polygon
   { symbol: "MATIC", name: "Polygon", address: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE", decimals: 18, logo: "https://icons.llamao.fi/icons/chains/rsz_polygon.jpg", priceUsd: null, chainId: 137 },
   { symbol: "USDC", name: "USD Coin", address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", decimals: 6, logo: null, priceUsd: 1, chainId: 137 },
   // BNB Chain
   { symbol: "BNB", name: "BNB", address: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE", decimals: 18, logo: "https://icons.llamao.fi/icons/chains/rsz_binance.jpg", priceUsd: null, chainId: 56 },
   { symbol: "USDC", name: "USD Coin", address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", decimals: 18, logo: null, priceUsd: 1, chainId: 56 },
+  { symbol: "CAKE", name: "PancakeSwap", address: "0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82", decimals: 18, logo: null, priceUsd: null, chainId: 56 },
   // Avalanche
   { symbol: "AVAX", name: "Avalanche", address: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE", decimals: 18, logo: "https://icons.llamao.fi/icons/chains/rsz_avalanche.jpg", priceUsd: null, chainId: 43114 },
+  { symbol: "USDC", name: "USD Coin", address: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E", decimals: 6, logo: null, priceUsd: 1, chainId: 43114 },
+  // Linea
+  { symbol: "ETH", name: "Ethereum", address: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE", decimals: 18, logo: "https://icons.llamao.fi/icons/chains/rsz_linea.jpg", priceUsd: null, chainId: 59144 },
+  // Scroll
+  { symbol: "ETH", name: "Ethereum", address: "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE", decimals: 18, logo: "https://icons.llamao.fi/icons/chains/rsz_scroll.jpg", priceUsd: null, chainId: 534352 },
 ];
 
 const RECENT_KEY = "vision:recent-multichain-tokens";
