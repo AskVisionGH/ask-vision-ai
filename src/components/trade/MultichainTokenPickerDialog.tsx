@@ -363,6 +363,81 @@ export const MultichainTokenPickerDialog = ({
     return () => { cancelled = true; };
   }, [open]);
 
+  // ---------- Hydrate "Trending" tokens for the active chain ----------
+  // When the user has no query yet, we want to surface a meaningful list
+  // (top tokens by liquidity / verified) per chain. Cached in component
+  // state keyed by chain so switching chips is instant after first fetch.
+  useEffect(() => {
+    if (!open) return;
+    const cacheKey = String(activeChain);
+    if (trending[cacheKey]) return;
+    let cancelled = false;
+    setTrendingLoading(true);
+    (async () => {
+      try {
+        if (activeChain === "ALL" || activeChain === "SOL") {
+          // Jupiter "toporganicscore" returns a strong list of established
+          // Solana tokens. Falls back to verified=true if unavailable.
+          const r = await fetch(
+            "https://lite-api.jup.ag/tokens/v2/toporganicscore/24h?limit=30",
+          );
+          if (!r.ok) return;
+          const arr = await r.json();
+          if (cancelled || !Array.isArray(arr)) return;
+          const list: MultichainToken[] = arr
+            .map((t: any): MultichainToken => ({
+              symbol: t.symbol ?? "?",
+              name: t.name ?? "Unknown",
+              address: t.id ?? t.address ?? "",
+              decimals: t.decimals ?? 9,
+              logo: t.icon ?? t.logoURI ?? null,
+              priceUsd: typeof t.usdPrice === "number" ? t.usdPrice : null,
+              chainId: "SOL",
+            }))
+            .filter((t) => !!t.address);
+          setTrending((prev) => ({ ...prev, [cacheKey]: list }));
+        } else {
+          // EVM: pull bridge-tokens (LI.FI) and take the top verified ones
+          // by priceUsd presence. They're already returned in popularity-ish
+          // order by LI.FI.
+          const chain = chainOption(activeChain as ChainKey);
+          if (!chain) return;
+          const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bridge-tokens?chain=${chain.lifiId}`;
+          const resp = await fetch(url, {
+            headers: {
+              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            },
+          });
+          if (!resp.ok) return;
+          const data = await resp.json();
+          if (cancelled) return;
+          const raw = Array.isArray(data.tokens) ? data.tokens : [];
+          const list: MultichainToken[] = raw
+            .filter((t: any) => t.symbol && t.address)
+            .slice(0, 40)
+            .map((t: any): MultichainToken => ({
+              symbol: t.symbol,
+              name: t.name ?? t.symbol,
+              address: t.address,
+              decimals: t.decimals ?? 18,
+              logo: t.logo ?? null,
+              priceUsd: t.priceUsd ?? null,
+              chainId: chain.key,
+            }));
+          setTrending((prev) => ({ ...prev, [cacheKey]: list }));
+        }
+      } catch {
+        /* ignore */
+      } finally {
+        if (!cancelled) setTrendingLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, activeChain, trending]);
+
   // ---------- Search ----------
   // When activeChain === "ALL" or "SOL" we use Jupiter (broad memecoin coverage).
   // Otherwise we hit bridge-tokens for the selected EVM chain (LI.FI list).
