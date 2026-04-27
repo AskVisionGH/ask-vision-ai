@@ -159,6 +159,7 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
   const { setVisible } = useWalletModal();
   const { address: externalEvmAddress } = useAccount();
   const visionWallet = useVisionWallet();
+  const { user } = useAuth();
   const { execute } = useRouteExecutor();
   const mounted = useRef(true);
 
@@ -391,9 +392,10 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
       toAddress,
       slippageBps,
       dynamicSlippage,
+      userId: user?.id ?? null,
       onStatus: (s) => { if (mounted.current) setStatus(s); },
     });
-  }, [plan, outputToken, fromAddress, toAddress, inputToken, walletSource, slippageBps, dynamicSlippage, execute]);
+  }, [plan, outputToken, fromAddress, toAddress, inputToken, walletSource, slippageBps, dynamicSlippage, execute, user?.id]);
 
   const resetSwap = () => {
     setAmount("");
