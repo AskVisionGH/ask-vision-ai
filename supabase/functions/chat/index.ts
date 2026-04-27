@@ -1145,17 +1145,16 @@ serve(async (req) => {
               eventType = "dca_quote";
             } else if (name === "prepare_bracket_order") {
               const args = safeJson(tc.function?.arguments);
-              // Bracket TP/SL are USD prices on the OUTPUT token (the asset
-              // the user holds). Resolve any entry-relative TP / SL using
-              // the user's avg buy-in for OUTPUT token. We can do both in
-              // parallel since the wallet-pnl call is on the same token.
+              // Bracket TP/SL are USD prices on the INPUT token (the asset
+              // the user holds and is selling). Resolve any entry-relative
+              // TP / SL using the user's avg buy-in for INPUT token.
               let tpPriceUsd = args.tpPriceUsd;
               let slPriceUsd = args.slPriceUsd;
               let entryResolution: EntryResolution | null = null;
               if ((args.tpFromEntry || args.slFromEntry) && walletAddress) {
                 const r = await resolveEntryRelativePrice({
                   wallet: walletAddress,
-                  token: args.outputToken,
+                  token: args.inputToken,
                   // We only need the avg entry once — pass either spec; the
                   // helper returns avgEntryUsd which we then re-apply locally.
                   priceFromEntry: args.tpFromEntry ?? args.slFromEntry,
