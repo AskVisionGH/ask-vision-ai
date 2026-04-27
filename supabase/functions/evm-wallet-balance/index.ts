@@ -58,6 +58,68 @@ const CHAIN_BY_ID: Record<number, Chain> = {
   [zksync.id]: zksync,
 };
 
+// Reliable public RPC endpoints per chain. The viem default transports use
+// providers (cloudflare-eth, polygon-rpc.com) that frequently 401/5xx — we
+// stack multiple alternatives so a single bad upstream doesn't kill the call.
+const RPC_URLS: Record<number, string[]> = {
+  [mainnet.id]: [
+    "https://eth.llamarpc.com",
+    "https://rpc.ankr.com/eth",
+    "https://ethereum-rpc.publicnode.com",
+    "https://eth.drpc.org",
+  ],
+  [arbitrum.id]: [
+    "https://arb1.arbitrum.io/rpc",
+    "https://rpc.ankr.com/arbitrum",
+    "https://arbitrum-one-rpc.publicnode.com",
+    "https://arbitrum.drpc.org",
+  ],
+  [optimism.id]: [
+    "https://mainnet.optimism.io",
+    "https://rpc.ankr.com/optimism",
+    "https://optimism-rpc.publicnode.com",
+    "https://optimism.drpc.org",
+  ],
+  [base.id]: [
+    "https://mainnet.base.org",
+    "https://base.llamarpc.com",
+    "https://base-rpc.publicnode.com",
+    "https://base.drpc.org",
+  ],
+  [polygon.id]: [
+    "https://polygon.llamarpc.com",
+    "https://rpc.ankr.com/polygon",
+    "https://polygon-bor-rpc.publicnode.com",
+    "https://polygon.drpc.org",
+  ],
+  [bsc.id]: [
+    "https://bsc-dataseed.bnbchain.org",
+    "https://rpc.ankr.com/bsc",
+    "https://bsc-rpc.publicnode.com",
+    "https://bsc.drpc.org",
+  ],
+  [avalanche.id]: [
+    "https://api.avax.network/ext/bc/C/rpc",
+    "https://rpc.ankr.com/avalanche",
+    "https://avalanche-c-chain-rpc.publicnode.com",
+    "https://avalanche.drpc.org",
+  ],
+  [linea.id]: [
+    "https://rpc.linea.build",
+    "https://linea-rpc.publicnode.com",
+    "https://linea.drpc.org",
+  ],
+  [scroll.id]: [
+    "https://rpc.scroll.io",
+    "https://scroll-rpc.publicnode.com",
+    "https://scroll.drpc.org",
+  ],
+  [zksync.id]: [
+    "https://mainnet.era.zksync.io",
+    "https://zksync.drpc.org",
+  ],
+};
+
 const TOP_N = 80;
 const MIN_USD = 0.5;
 const NATIVE_ADDRESS = "0x0000000000000000000000000000000000000000";
