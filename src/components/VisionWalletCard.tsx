@@ -18,6 +18,7 @@ export const VisionWalletCard = () => {
     working,
     row,
     solanaAddress,
+    evmAddress,
     sendPrivyLoginCode,
     submitPrivyCode,
     createWallet,
