@@ -29,10 +29,4 @@ export const privyConfig: PrivyClientConfig = {
     ethereum: { createOnLogin: "off" },
     solana: { createOnLogin: "off" },
   },
-  solanaClusters: [
-    {
-      name: "mainnet-beta",
-      rpcUrl: "https://api.mainnet-beta.solana.com",
-    },
-  ],
 };
