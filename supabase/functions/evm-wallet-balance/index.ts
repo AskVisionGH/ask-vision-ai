@@ -253,10 +253,21 @@ serve(async (req) => {
       allowFailure: true,
     });
 
-    const [nativeRaw, balanceResults] = await Promise.all([
-      nativePromise,
-      balanceCalls,
-    ]);
+    let nativeRaw = 0n;
+    let balanceResults: Array<{ status: string; result?: unknown; error?: unknown }> = [];
+    let rpcError: string | null = null;
+    try {
+      const settled = await Promise.allSettled([nativePromise, balanceCalls]);
+      if (settled[0].status === "fulfilled") nativeRaw = settled[0].value as bigint;
+      else rpcError = String((settled[0].reason as Error)?.message ?? settled[0].reason);
+      if (settled[1].status === "fulfilled") {
+        balanceResults = settled[1].value as typeof balanceResults;
+      } else if (!rpcError) {
+        rpcError = String((settled[1].reason as Error)?.message ?? settled[1].reason);
+      }
+    } catch (e) {
+      rpcError = e instanceof Error ? e.message : String(e);
+    }
 
     type Holding = {
       address: string;
