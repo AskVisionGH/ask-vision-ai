@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import {
+  ArrowLeft,
   Bell,
   Inbox,
   Laptop,
@@ -128,6 +129,13 @@ const Alerts = () => {
                 Vision
               </span>
             </div>
+            <Link
+              to="/chat"
+              className="hidden md:flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/60 ease-vision"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Back to chat
+            </Link>
           </div>
           <div className="flex items-center gap-1.5">
             <AlertBell />
