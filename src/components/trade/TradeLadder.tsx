@@ -28,6 +28,14 @@ import {
   type TokenMeta,
 } from "@/components/trade/TokenPickerDialog";
 import { OpenOrdersList } from "@/components/trade/OpenOrdersList";
+import {
+  WalletSourcePicker,
+  type WalletSource,
+} from "@/components/trade/WalletSourcePicker";
+import { FundVisionWalletDialog } from "@/components/wallet/FundVisionWalletDialog";
+import { ArrowDownToLine } from "lucide-react";
+import { useTradeSigner } from "@/hooks/useTradeSigner";
+import { useVisionWallet } from "@/hooks/useVisionWallet";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 
