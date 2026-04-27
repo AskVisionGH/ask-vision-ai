@@ -60,6 +60,8 @@ import {
 import { FundVisionWalletDialog } from "@/components/wallet/FundVisionWalletDialog";
 import { useRouteExecutor, type ExecutorStatus, type RoutePlan } from "@/components/trade/useRouteExecutor";
 import { RouteProgressModal } from "@/components/trade/RouteProgressModal";
+import { StrandedRoutesCard } from "@/components/trade/StrandedRoutesCard";
+import type { StrandedRoute } from "@/lib/stranded-routes";
 
 const SOL_TOKEN: MultichainToken = {
   symbol: "SOL",
@@ -160,7 +162,18 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
   const { address: externalEvmAddress } = useAccount();
   const visionWallet = useVisionWallet();
   const { user } = useAuth();
-  const { execute } = useRouteExecutor();
+  const { execute, resume } = useRouteExecutor();
+  // Bumped after a successful resume so the StrandedRoutesCard re-reads the
+  // registry and drops the just-completed record.
+  const [strandedRefreshKey, setStrandedRefreshKey] = useState(0);
+  // When resume() runs we display its progress in the same RouteProgressModal
+  // as a normal swap. We override the synthetic plan/tokens so the modal's
+  // step list and headers stay accurate (single destination swap leg).
+  const [resumeContext, setResumeContext] = useState<{
+    plan: RoutePlan;
+    fromToken: MultichainToken;
+    toToken: MultichainToken;
+  } | null>(null);
   const mounted = useRef(true);
 
   // Resolve the active payer address for the SOURCE chain of the trade.
@@ -401,7 +414,60 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
     setAmount("");
     setPlan(null);
     setStatus({ kind: "idle" });
+    setResumeContext(null);
+    // Bump so StrandedRoutesCard re-reads (cleared records will disappear).
+    setStrandedRefreshKey((k) => k + 1);
   };
+
+  // Kick off a destination-chain swap to rescue stranded intermediate funds.
+  // We synthesize a single-leg `RoutePlan` so RouteProgressModal renders the
+  // right step list ("Building swap → Sign → Confirm") and label the
+  // before/after tokens correctly.
+  const handleResumeStranded = useCallback((route: StrandedRoute, availableUi: number) => {
+    const intermediateToken: MultichainToken = {
+      address: route.intermediateAddress,
+      symbol: route.intermediateSymbol,
+      decimals: route.intermediateDecimals,
+      name: route.intermediateSymbol,
+      logo: null,
+      priceUsd: 1,
+      chainId: route.toChain,
+    };
+    const targetToken: MultichainToken = {
+      address: route.toAddress,
+      symbol: route.toSymbol,
+      decimals: route.toDecimals,
+      name: route.toSymbol,
+      logo: null,
+      priceUsd: null,
+      chainId: route.toChain,
+    };
+    const syntheticPlan: RoutePlan = {
+      strategy: "swap",
+      legs: [{
+        kind: "swap",
+        chain: route.toChain,
+        quote: { input: { amountUi: availableUi }, output: { amountUi: 0 } },
+      }],
+      summary: {
+        fromAmountUi: availableUi,
+        fromAmountUsd: null,
+        toAmountUi: null,
+        toAmountUsd: null,
+        gasUsd: null,
+        platformFeeUsd: null,
+        executionDurationSec: null,
+      },
+    };
+    setResumeContext({ plan: syntheticPlan, fromToken: intermediateToken, toToken: targetToken });
+    void resume({
+      route,
+      availableUi,
+      slippageBps,
+      dynamicSlippage,
+      onStatus: (s) => { if (mounted.current) setStatus(s); },
+    });
+  }, [resume, slippageBps, dynamicSlippage]);
 
   // ---------- Success view ----------
   if (status.kind === "success") {
@@ -414,10 +480,17 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
           </div>
           <div>
             <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-              {plan?.strategy === "swap" ? "Swap confirmed" : "Cross-chain swap confirmed"}
+              {resumeContext
+                ? "Rescue swap confirmed"
+                : plan?.strategy === "swap"
+                  ? "Swap confirmed"
+                  : "Cross-chain swap confirmed"}
             </p>
             <p className="mt-2 font-mono text-sm text-foreground">
-              {fmtAmount(numericAmount)} {inputToken.symbol} → {fmtAmount(status.finalAmountUi)} {status.finalSymbol}
+              {resumeContext
+                ? <>{fmtAmount(resumeContext.plan.summary.fromAmountUi)} {resumeContext.fromToken.symbol} → {fmtAmount(status.finalAmountUi)} {status.finalSymbol}</>
+                : <>{fmtAmount(numericAmount)} {inputToken.symbol} → {fmtAmount(status.finalAmountUi)} {status.finalSymbol}</>
+              }
             </p>
             <p className="mt-1 font-mono text-[10px] text-muted-foreground">
               in {(status.durationMs / 1000).toFixed(1)}s · {status.legHashes.length} {status.legHashes.length === 1 ? "leg" : "legs"}
@@ -632,6 +705,15 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
           onConnectExternal={() => setVisible(true)}
         />
 
+        {/* Stranded routes — surfaces if the user has a bridge_then_swap
+            with leg 2 unfinished. Hidden entirely when none exist. */}
+        <StrandedRoutesCard
+          userId={user?.id}
+          refreshKey={strandedRefreshKey}
+          onResume={handleResumeStranded}
+          busy={isBusy}
+        />
+
         {/* Card */}
         <div className="overflow-hidden rounded-2xl border border-border bg-card/60 backdrop-blur-sm shadow-soft">
           <SwapSide
@@ -812,10 +894,10 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
         <RouteProgressModal
           open={status.kind !== "idle"}
           onOpenChange={(o) => { if (!o) resetSwap(); }}
-          plan={plan}
+          plan={resumeContext?.plan ?? plan}
           status={status}
-          fromToken={inputToken}
-          toToken={outputToken}
+          fromToken={resumeContext?.fromToken ?? inputToken}
+          toToken={resumeContext?.toToken ?? outputToken}
           onDone={resetSwap}
         />
       </div>

@@ -31,6 +31,7 @@ import {
   recordStrandedRoute,
   clearStrandedRoute,
   makeStrandedId,
+  type StrandedRoute,
 } from "@/lib/stranded-routes";
 
 const SOLANA_CAIP2 = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
@@ -419,6 +420,118 @@ export const useRouteExecutor = () => {
     ],
   );
 
+  /**
+   * Resume a stranded bridge_then_swap by re-quoting and executing only the
+   * destination-chain swap leg. The actual on-chain balance of the
+   * intermediate token is the source of truth — pass `availableUi` (what the
+   * caller saw on-chain just before invoking) so we re-quote against the real
+   * amount, not the optimistic `expectedIntermediateUi` from the original
+   * plan. Clears the stranded record on success.
+   */
+  const resume = useCallback(
+    async (args: {
+      route: StrandedRoute;
+      availableUi: number;
+      slippageBps: number;
+      dynamicSlippage: boolean;
+      onStatus: (s: ExecutorStatus) => void;
+    }): Promise<void> => {
+      cancelled.current = false;
+      const { route, availableUi, slippageBps, dynamicSlippage, onStatus } = args;
+      const startedAt = Date.now();
+
+      try {
+        if (availableUi <= 0) {
+          throw new Error(
+            `No ${route.intermediateSymbol} balance found on the destination chain. The funds may have already moved.`,
+          );
+        }
+
+        const fresh = await supaPost("route-quote", {
+          fromChain: route.toChain,
+          toChain: route.toChain,
+          fromToken: route.intermediateAddress,
+          toToken: route.toAddress,
+          fromAddress: route.recipientAddress,
+          toAddress: route.recipientAddress,
+          amount: availableUi,
+          fromDecimals: route.intermediateDecimals,
+          toDecimals: route.toDecimals,
+          fromSymbol: route.intermediateSymbol,
+          toSymbol: route.toSymbol,
+          slippageBps,
+        });
+        const swapLeg = fresh?.legs?.[0];
+        if (!swapLeg || swapLeg.kind !== "swap") {
+          throw new Error("Couldn't fetch a route for the rescued funds.");
+        }
+
+        const intermediateToken: MultichainToken = {
+          address: route.intermediateAddress,
+          symbol: route.intermediateSymbol,
+          decimals: route.intermediateDecimals,
+          name: route.intermediateSymbol,
+          logo: null,
+          priceUsd: 1,
+          chainId: route.toChain,
+        };
+        const targetToken: MultichainToken = {
+          address: route.toAddress,
+          symbol: route.toSymbol,
+          decimals: route.toDecimals,
+          name: route.toSymbol,
+          logo: null,
+          priceUsd: null,
+          chainId: route.toChain,
+        };
+
+        const { hash, explorer } = await runSwapLeg({
+          legIndex: 0,
+          chain: route.toChain,
+          quote: swapLeg.quote,
+          fromToken: intermediateToken,
+          toToken: targetToken,
+          walletSource: route.walletSource,
+          fromAddress: route.recipientAddress,
+          slippageBps,
+          dynamicSlippage,
+          onStatus,
+        });
+
+        clearStrandedRoute(route.id);
+
+        onStatus({
+          kind: "success",
+          legHashes: [{ chain: route.toChain, hash, explorer }],
+          finalAmountUi: swapLeg.quote.output?.amountUi ?? 0,
+          finalSymbol: route.toSymbol,
+          durationMs: Date.now() - startedAt,
+        });
+      } catch (e: any) {
+        if (cancelled.current) return;
+        const msg = String(e?.message ?? e ?? "Resume failed");
+        const lower = msg.toLowerCase();
+        const isUserCancel =
+          lower.includes("user rejected") ||
+          lower.includes("user denied") ||
+          lower.includes("rejected the request") ||
+          lower.includes("user cancelled");
+        onStatus(isUserCancel ? { kind: "cancelled" } : { kind: "error", message: msg });
+      }
+    },
+    [
+      connection,
+      publicKey,
+      signTransaction,
+      externalEvmAddress,
+      visionWallet.solanaAddress,
+      visionWallet.evmAddress,
+      visionSigner,
+      evmBridge,
+      visionEvmBridge,
+    ],
+  );
+
   type SwapLegArgs = {
     legIndex: number;
     chain: ChainKey;
@@ -671,5 +784,5 @@ export const useRouteExecutor = () => {
     throw new Error("Confirmation timed out. Check Solscan for status.");
   }
 
-  return { execute, cancel };
+  return { execute, resume, cancel };
 };
