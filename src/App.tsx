@@ -22,6 +22,7 @@ import Contacts from "./pages/Contacts.tsx";
 // TrackedWallets page kept in the codebase for future re-enable; route is hidden for now.
 import Admin from "./pages/Admin.tsx";
 import Trade from "./pages/Trade.tsx";
+import Wallet from "./pages/Wallet.tsx";
 import Alerts from "./pages/Alerts.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import DesktopOnlyGate from "./components/DesktopOnlyGate";
@@ -120,6 +121,14 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute>
             <Alerts />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/wallet"
+        element={
+          <ProtectedRoute>
+            <Wallet />
           </ProtectedRoute>
         }
       />
