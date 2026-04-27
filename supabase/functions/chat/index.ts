@@ -39,7 +39,7 @@ Tools (call them whenever relevant — don't ask permission, don't pretend you c
 - \`get_wallet_pnl\` — full 30-day PnL dashboard for a wallet: per-token realized/unrealized profit, total cost basis, total proceeds, current portfolio value, and recent activity. **MUST CALL** for ANY of: "how am I doing", "my pnl", "show my pnl", "show me my pnl", "port pnl", "portfolio pnl", "show my port", "wallet pnl", "what's my profit", "show my performance", "am I up or down", "how's my portfolio". "port" / "portfolio" without further qualifier ALWAYS means the connected wallet's PnL — call this tool, do NOT answer from prior context or summary text. If no \`address\` argument, defaults to the connected wallet. NEVER reply with a sentence like "you are up $X realized and $Y unrealized" without first calling this tool — that text MUST come from the rendered card.
 - \`get_recent_txs\` — last 30 days of parsed transactions for a wallet (swaps, transfers in/out) with USD values + Solscan links. Use for "recent transactions", "what did I trade", "show my activity", "tx history", "what have I done lately". If no \`address\` argument, defaults to the connected wallet.
 - \`get_token_pnl\` — single-token PnL deep-dive for the wallet: how much was bought/sold, average entry, realized + unrealized P/L, current holdings. Use for "how am I doing on $BONK", "my pnl on JUP", "am I up on WIF", "show my position in X". Required: \`token\` (ticker or mint). Optional: \`address\` (defaults to connected wallet).
-- \`prepare_limit_order\` — preview a limit order. Args: \`inputToken\`, \`outputToken\`, \`sellAmount\` (decimal of inputToken), \`limitPrice\` (output per 1 input — selling 1 SOL → USDC at 250 = 250 USDC per SOL), optional \`expirySeconds\` (omit = GTC). For BUY orders, set \`inputToken\` to USDC and compute \`limitPrice\` accordingly. NEVER execute — the card has its own confirm + sign.
+- \`prepare_limit_order\` — preview a limit order. Args: \`inputToken\`, \`outputToken\`, \`sellAmount\` (decimal of inputToken), and EITHER \`limitPrice\` (output per 1 input — selling 1 SOL → USDC at 250 = 250 USDC per SOL) OR \`priceFromEntry\` for entry-relative targets, optional \`expirySeconds\` (omit = GTC). For BUY orders, set \`inputToken\` to USDC and compute \`limitPrice\` accordingly. **Entry-relative pricing — CRITICAL**: when the user says things like "sell BONK at 2x my buy", "when it doubles", "sell at 3x my entry", "+50% from my buy in", "sell at break even", "when I'm down 30%", "sell when I'm 5x up", DO NOT guess a USD price. Pass \`priceFromEntry: { multiplier: 2 }\` for "2x", \`{ multiplier: 0.5 }\` for "halves" / "down 50%", \`{ multiplier: 1 }\` for "break even", \`{ percentChange: 50 }\` for "+50% from buy", \`{ percentChange: -30 }\` for "down 30% from entry". Server resolves the absolute USD price using the user's avg buy-in for \`inputToken\`. Entry-relative limits currently require selling to a stable (USDC/USDT). NEVER execute — the card has its own confirm + sign.
 - \`prepare_dca\` — preview a DCA. Args: \`inputToken\`, \`outputToken\`, \`totalAmount\`, \`numberOfOrders\` (≥ 2, ≤ 1000), \`intervalSeconds\` (≥ 60). Optional \`minPriceUsd\`/\`maxPriceUsd\`. NEVER execute.
 - \`prepare_bracket_order\` — preview a TP+SL bracket. Args: \`inputToken\`, \`outputToken\`, \`sellAmount\`, \`tpPriceUsd\`, \`slPriceUsd\`, optional \`entryMode\` ("market"|"limit") and \`entryPriceUsd\`. Bracket needs vault — preview only, links to /trade for final signing.
 - \`prepare_ladder\` — preview a ladder of limit orders. Args: \`side\` ("buy"|"sell"), \`asset\`, \`quote\` (defaults USDC), \`totalAmount\`, \`rungCount\` (2–20), \`minPriceUsd\`, \`maxPriceUsd\`. Card links to /trade.
@@ -445,17 +445,41 @@ const TOOLS = [
     type: "function",
     function: {
       name: "prepare_limit_order",
-      description: "Preview a limit order. NEVER executes — user signs in the rendered card.",
+      description:
+        "Preview a limit order. NEVER executes — user signs in the rendered card. " +
+        "Supports two ways of expressing the target price: " +
+        "(a) absolute via `limitPrice` (output tokens per 1 input token), or " +
+        "(b) **entry-relative** via `priceFromEntry` for sell orders — pass an object describing how the user phrased the target relative to their average buy-in price for the INPUT token (the one they own). " +
+        "Use `priceFromEntry` whenever the user references their own cost basis: '2x my buy', 'when it doubles', 'sell at 3x entry', 'sell at +50% from average', 'break even', 'when I'm down 30%', etc. " +
+        "The server fetches the user's average entry price and computes the absolute limit. Provide ONE of `limitPrice` OR `priceFromEntry`, not both.",
       parameters: {
         type: "object",
         properties: {
           inputToken: { type: "string", description: "Ticker or mint of the token to sell." },
           outputToken: { type: "string", description: "Ticker or mint of the token to receive." },
           sellAmount: { type: "number", description: "Decimal amount of inputToken to sell." },
-          limitPrice: { type: "number", description: "Output tokens per 1 input token." },
+          limitPrice: { type: "number", description: "Output tokens per 1 input token (absolute)." },
+          priceFromEntry: {
+            type: "object",
+            description:
+              "Entry-relative target. Server resolves to an absolute USD price using the user's avg buy-in for `inputToken`. Use ONE field below.",
+            properties: {
+              multiplier: {
+                type: "number",
+                description:
+                  "Final price = avgEntry × multiplier. e.g. 2 means '2x my entry / when it doubles', 0.5 means 'when it halves', 1 means 'break even'.",
+              },
+              percentChange: {
+                type: "number",
+                description:
+                  "Final price = avgEntry × (1 + percentChange/100). e.g. 50 = '+50% from buy', -30 = '30% below my entry / when I'm down 30%'.",
+              },
+            },
+            additionalProperties: false,
+          },
           expirySeconds: { type: "number", description: "Optional expiry in seconds. Omit for GTC." },
         },
-        required: ["inputToken", "outputToken", "sellAmount", "limitPrice"],
+        required: ["inputToken", "outputToken", "sellAmount"],
         additionalProperties: false,
       },
     },
@@ -485,19 +509,43 @@ const TOOLS = [
     type: "function",
     function: {
       name: "prepare_bracket_order",
-      description: "Preview a TP+SL bracket order. Final signing happens in /trade (vault required).",
+      description:
+        "Preview a TP+SL bracket order. Final signing happens in /trade (vault required). " +
+        "TP/SL prices can be expressed two ways: " +
+        "(a) absolute USD via `tpPriceUsd` / `slPriceUsd`, or " +
+        "(b) **entry-relative** via `tpFromEntry` / `slFromEntry` — server resolves to absolute USD using the user's average buy-in for the **OUTPUT token** (the token they're holding). " +
+        "Use entry-relative whenever the user references their cost basis: 'TP at 2x my entry', 'stop at -25% from buy', 'TP when it doubles, SL at break-even'. " +
+        "Provide ONE of `tpPriceUsd` OR `tpFromEntry` (same for SL), not both.",
       parameters: {
         type: "object",
         properties: {
           inputToken: { type: "string" },
           outputToken: { type: "string" },
           sellAmount: { type: "number" },
-          tpPriceUsd: { type: "number", description: "Take-profit price for the OUTPUT token in USD." },
-          slPriceUsd: { type: "number", description: "Stop-loss price for the OUTPUT token in USD." },
+          tpPriceUsd: { type: "number", description: "Take-profit USD price (absolute) for the OUTPUT token." },
+          slPriceUsd: { type: "number", description: "Stop-loss USD price (absolute) for the OUTPUT token." },
+          tpFromEntry: {
+            type: "object",
+            description: "Entry-relative take-profit. Server uses the user's avg buy-in for OUTPUT token.",
+            properties: {
+              multiplier: { type: "number", description: "tp = avgEntry × multiplier (e.g. 2 = '2x my buy')." },
+              percentChange: { type: "number", description: "tp = avgEntry × (1 + pct/100), e.g. 50 for '+50%'." },
+            },
+            additionalProperties: false,
+          },
+          slFromEntry: {
+            type: "object",
+            description: "Entry-relative stop-loss. Server uses the user's avg buy-in for OUTPUT token.",
+            properties: {
+              multiplier: { type: "number", description: "sl = avgEntry × multiplier (e.g. 0.7 = '30% below buy')." },
+              percentChange: { type: "number", description: "sl = avgEntry × (1 + pct/100), e.g. -25 for 'down 25%'." },
+            },
+            additionalProperties: false,
+          },
           entryMode: { type: "string", enum: ["market", "limit"] },
           entryPriceUsd: { type: "number" },
         },
-        required: ["inputToken", "outputToken", "sellAmount", "tpPriceUsd", "slPriceUsd"],
+        required: ["inputToken", "outputToken", "sellAmount"],
         additionalProperties: false,
       },
     },
@@ -1030,18 +1078,53 @@ serve(async (req) => {
               eventType = "wallet_token_history";
             } else if (name === "prepare_limit_order") {
               const args = safeJson(tc.function?.arguments);
-              result = await invokeFn(
-                "chat-order-quote",
-                {
-                  kind: "limit",
-                  inputToken: args.inputToken ?? "",
-                  outputToken: args.outputToken ?? "",
-                  sellAmount: args.sellAmount,
-                  limitPrice: args.limitPrice,
-                  expirySeconds: args.expirySeconds ?? null,
-                },
-                req,
-              );
+              // Entry-relative pricing: if the user said "sell at 2x my buy",
+              // resolve their avg entry for the INPUT token (the one they're
+              // selling) and convert to an absolute limitPrice (output per 1
+              // input). For limit orders we assume the OUTPUT side is a stable
+              // quote (USDC/USDT) — the most common phrasing — so the avg
+              // entry USD price = limitPrice in USDC terms. If the output
+              // isn't a stable, we surface an error rather than guess.
+              let limitPrice = args.limitPrice;
+              let entryResolution: EntryResolution | null = null;
+              if (args.priceFromEntry && walletAddress) {
+                const r = await resolveEntryRelativePrice({
+                  wallet: walletAddress,
+                  token: args.inputToken,
+                  priceFromEntry: args.priceFromEntry,
+                  req,
+                });
+                entryResolution = r;
+                if (r.targetPriceUsd != null) {
+                  if (!isStableTicker(args.outputToken)) {
+                    result = {
+                      error:
+                        "Entry-relative limit prices currently work when selling to a stable (USDC/USDT). Try 'sell X to USDC at 2x my entry'.",
+                    };
+                  } else {
+                    limitPrice = r.targetPriceUsd;
+                  }
+                } else if (r.error) {
+                  result = { error: r.error };
+                }
+              }
+              if (!result) {
+                result = await invokeFn(
+                  "chat-order-quote",
+                  {
+                    kind: "limit",
+                    inputToken: args.inputToken ?? "",
+                    outputToken: args.outputToken ?? "",
+                    sellAmount: args.sellAmount,
+                    limitPrice,
+                    expirySeconds: args.expirySeconds ?? null,
+                  },
+                  req,
+                );
+                if (entryResolution && result && typeof result === "object") {
+                  (result as Record<string, unknown>).entryResolution = entryResolution;
+                }
+              }
               eventType = "limit_quote";
             } else if (name === "prepare_dca") {
               const args = safeJson(tc.function?.arguments);
@@ -1062,20 +1145,53 @@ serve(async (req) => {
               eventType = "dca_quote";
             } else if (name === "prepare_bracket_order") {
               const args = safeJson(tc.function?.arguments);
-              result = await invokeFn(
-                "chat-order-quote",
-                {
-                  kind: "bracket",
-                  inputToken: args.inputToken ?? "",
-                  outputToken: args.outputToken ?? "",
-                  sellAmount: args.sellAmount,
-                  tpPriceUsd: args.tpPriceUsd,
-                  slPriceUsd: args.slPriceUsd,
-                  entryMode: args.entryMode ?? "market",
-                  entryPriceUsd: args.entryPriceUsd ?? null,
-                },
-                req,
-              );
+              // Bracket TP/SL are USD prices on the OUTPUT token (the asset
+              // the user holds). Resolve any entry-relative TP / SL using
+              // the user's avg buy-in for OUTPUT token. We can do both in
+              // parallel since the wallet-pnl call is on the same token.
+              let tpPriceUsd = args.tpPriceUsd;
+              let slPriceUsd = args.slPriceUsd;
+              let entryResolution: EntryResolution | null = null;
+              if ((args.tpFromEntry || args.slFromEntry) && walletAddress) {
+                const r = await resolveEntryRelativePrice({
+                  wallet: walletAddress,
+                  token: args.outputToken,
+                  // We only need the avg entry once — pass either spec; the
+                  // helper returns avgEntryUsd which we then re-apply locally.
+                  priceFromEntry: args.tpFromEntry ?? args.slFromEntry,
+                  req,
+                });
+                entryResolution = r;
+                if (r.avgEntryUsd != null) {
+                  if (args.tpFromEntry) {
+                    tpPriceUsd = applyFromEntry(r.avgEntryUsd, args.tpFromEntry);
+                  }
+                  if (args.slFromEntry) {
+                    slPriceUsd = applyFromEntry(r.avgEntryUsd, args.slFromEntry);
+                  }
+                } else if (r.error) {
+                  result = { error: r.error };
+                }
+              }
+              if (!result) {
+                result = await invokeFn(
+                  "chat-order-quote",
+                  {
+                    kind: "bracket",
+                    inputToken: args.inputToken ?? "",
+                    outputToken: args.outputToken ?? "",
+                    sellAmount: args.sellAmount,
+                    tpPriceUsd,
+                    slPriceUsd,
+                    entryMode: args.entryMode ?? "market",
+                    entryPriceUsd: args.entryPriceUsd ?? null,
+                  },
+                  req,
+                );
+                if (entryResolution && result && typeof result === "object") {
+                  (result as Record<string, unknown>).entryResolution = entryResolution;
+                }
+              }
               eventType = "bracket_quote";
             } else if (name === "prepare_ladder") {
               const args = safeJson(tc.function?.arguments);
@@ -1216,6 +1332,89 @@ function safeJson(s: unknown): any {
   } catch {
     return {};
   }
+}
+
+// ----------------------------------------------------------------------------
+// Entry-relative price resolution
+// ----------------------------------------------------------------------------
+//
+// Users naturally express trade targets relative to their cost basis: "sell at
+// 2x my buy", "+50% from entry", "stop at break-even", "when I'm down 30%".
+// We resolve these on the server by calling wallet-pnl with `slice: token_pnl`
+// (which already returns `costUsd` and `unitsBought` for the matched token)
+// and computing the absolute USD target. Centralising here keeps the per-tool
+// handlers small.
+
+interface FromEntrySpec {
+  multiplier?: number;
+  percentChange?: number;
+}
+
+interface EntryResolution {
+  avgEntryUsd: number | null;
+  targetPriceUsd: number | null;
+  symbol: string | null;
+  unitsBought: number | null;
+  costUsd: number | null;
+  error: string | null;
+}
+
+function isStableTicker(t: unknown): boolean {
+  if (typeof t !== "string") return false;
+  const upper = t.trim().replace(/^\$/, "").toUpperCase();
+  return upper === "USDC" || upper === "USDT";
+}
+
+/** Convert a `{ multiplier?, percentChange? }` spec into an absolute USD price. */
+function applyFromEntry(avgEntryUsd: number, spec: FromEntrySpec): number | null {
+  if (spec.multiplier != null && Number.isFinite(spec.multiplier) && spec.multiplier > 0) {
+    return avgEntryUsd * spec.multiplier;
+  }
+  if (spec.percentChange != null && Number.isFinite(spec.percentChange)) {
+    const v = avgEntryUsd * (1 + spec.percentChange / 100);
+    return v > 0 ? v : null;
+  }
+  return null;
+}
+
+async function resolveEntryRelativePrice(opts: {
+  wallet: string;
+  token: string;
+  priceFromEntry: FromEntrySpec;
+  req: Request;
+}): Promise<EntryResolution> {
+  const { wallet, token, priceFromEntry, req } = opts;
+  const empty: EntryResolution = {
+    avgEntryUsd: null, targetPriceUsd: null, symbol: null,
+    unitsBought: null, costUsd: null, error: null,
+  };
+  if (!wallet || !token) {
+    return { ...empty, error: "Need both a connected wallet and a token to resolve entry price." };
+  }
+  const isEvm = /^0x[a-fA-F0-9]{40}$/.test(wallet);
+  const fnName = isEvm ? "evm-wallet-pnl" : "wallet-pnl";
+  const body: Record<string, unknown> = { address: wallet, slice: "token_pnl", tokenFilter: token };
+  if (isEvm) body.chainId = 1;
+  const data = await invokeFn(fnName, body, req);
+  if (!data || typeof data !== "object" || (data as any).error) {
+    return { ...empty, error: (data as any)?.error ?? "Couldn't load PnL for that token." };
+  }
+  const tk = (data as any).token;
+  if (!tk) {
+    return { ...empty, error: `No PnL history found for ${token} in the last 30 days — I can't resolve "from my entry" without a buy on record. Use an absolute price instead.` };
+  }
+  const costUsd = Number(tk.costUsd ?? 0);
+  const unitsBought = Number(tk.unitsBought ?? 0);
+  if (!(costUsd > 0) || !(unitsBought > 0)) {
+    return { ...empty, symbol: tk.symbol ?? null, error: `I don't have a recorded buy for ${tk.symbol ?? token} (it may have been transferred in). Use an absolute price instead.` };
+  }
+  const avgEntryUsd = costUsd / unitsBought;
+  const targetPriceUsd = applyFromEntry(avgEntryUsd, priceFromEntry);
+  return {
+    avgEntryUsd, targetPriceUsd,
+    symbol: tk.symbol ?? null, unitsBought, costUsd,
+    error: targetPriceUsd == null ? "priceFromEntry needs `multiplier` (>0) or `percentChange`." : null,
+  };
 }
 
 async function invokeFn(name: string, body: unknown, req: Request) {
