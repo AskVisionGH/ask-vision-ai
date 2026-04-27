@@ -36,6 +36,12 @@ import {
 } from "@/components/trade/TokenPickerDialog";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { useVisionWallet } from "@/hooks/useVisionWallet";
+import { useVisionWalletSigner } from "@/hooks/useVisionWalletSigner";
+import {
+  WalletSourcePicker,
+  type WalletSource,
+} from "@/components/trade/WalletSourcePicker";
 
 const SOL_TOKEN: TokenMeta = {
   symbol: "SOL",
