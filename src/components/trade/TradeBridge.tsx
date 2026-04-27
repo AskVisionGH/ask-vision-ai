@@ -299,17 +299,41 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
   // tight (single signature) so it keeps the inline CTA label.
   const [evmProgress, setEvmProgress] = useState<EvmProgressState | null>(null);
 
-  // EVM hooks (active whenever source is an EVM chain).
+  // Wallet source — Vision Wallet is the recommended default. External is
+  // available for users who want full self-custody control, or who need EVM
+  // source bridges (Vision Wallet doesn't yet support EVM source bridges due
+  // to the per-chain switching + ERC-20 approval flow).
+  const [walletSource, setWalletSource] = useState<WalletSource>("vision");
+
+  // EVM hooks (active whenever source is an EVM chain AND user picked external).
   const { address: evmAddress, isConnected: evmConnected } = useAccount();
   const { sendBridgeTx } = useEvmBridge();
+  const visionWallet = useVisionWallet();
+  const visionSigner = useVisionWalletSigner();
 
   const fromIsEvm = fromChain?.chainType === "EVM";
   const fromIsSvm = fromChain?.chainType === "SVM" || fromChain?.id === SOLANA_CHAIN_ID;
-  const fromAddress = useMemo(() => {
+
+  // External-wallet source address (the original behaviour).
+  const externalFromAddress = useMemo(() => {
     if (fromIsEvm) return evmConnected && evmAddress ? evmAddress : null;
     if (fromIsSvm) return connected && publicKey ? publicKey.toBase58() : null;
     return null;
   }, [fromIsEvm, fromIsSvm, evmConnected, evmAddress, connected, publicKey]);
+
+  // Vision Wallet source address on the right chain family.
+  const visionFromAddress = useMemo(() => {
+    if (fromIsEvm) return visionWallet.evmAddress ?? null;
+    if (fromIsSvm) return visionWallet.solanaAddress ?? null;
+    return null;
+  }, [fromIsEvm, fromIsSvm, visionWallet.evmAddress, visionWallet.solanaAddress]);
+
+  // Vision Wallet currently does NOT support EVM source bridges (ERC-20
+  // approval + per-chain switch flow not yet wired through Privy RPC).
+  const visionEvmUnsupported = walletSource === "vision" && fromIsEvm;
+
+  // The address we'll actually quote/build/sign against.
+  const fromAddress = walletSource === "vision" ? visionFromAddress : externalFromAddress;
 
   // 1s ticker while bridging so the countdown label re-renders every second.
   const [nowTick, setNowTick] = useState(() => Date.now());
