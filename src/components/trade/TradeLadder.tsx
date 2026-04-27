@@ -182,14 +182,20 @@ export const TradeLadder = ({ expirySeconds }: Props) => {
   const spendToken = side === "buy" ? quoteToken : assetToken;
   const recvToken = side === "buy" ? assetToken : quoteToken;
 
-  // Balance for the spend-side token
+  // Balance for the spend-side token (scoped to active wallet source)
   useEffect(() => {
-    if (!connected || !publicKey) {
+    if (!activePayerAddress) {
       setBalance(null);
       return;
     }
     let cancelled = false;
-    const owner = new PublicKey(publicKey.toBase58());
+    let owner: PublicKey;
+    try {
+      owner = new PublicKey(activePayerAddress);
+    } catch {
+      setBalance(null);
+      return;
+    }
     setBalance(null);
     (async () => {
       try {
@@ -211,7 +217,7 @@ export const TradeLadder = ({ expirySeconds }: Props) => {
       }
     })();
     return () => { cancelled = true; };
-  }, [connected, publicKey, connection, spendToken.address, phase.name]);
+  }, [activePayerAddress, connection, spendToken.address, phase.name]);
 
   // Live USD price of the asset token
   useEffect(() => {
