@@ -531,7 +531,7 @@ export const TradeLimit = ({ tab, onTabChange }: Props) => {
   } else if (walletSource === "external" && !connected) {
     ctaLabel = "Connect wallet";
     ctaAction = () => setVisible(true);
-  }
+  } else if (numericSell <= 0) {
     ctaLabel = "Enter an amount";
     ctaDisabled = true;
     ctaAction = null;
