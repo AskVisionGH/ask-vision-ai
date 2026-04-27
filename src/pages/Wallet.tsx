@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Helmet } from "react-helmet-async";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { ArrowLeft, Menu } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AlertBell } from "@/components/AlertBell";
@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils";
  * `wallet-activity`, which are already deployed).
  */
 const WalletPage = () => {
-  const navigate = useNavigate();
+  
   const location = useLocation();
   const { user, signOut } = useAuth();
   const { profile } = useProfile();
