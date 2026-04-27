@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { ArrowLeft, Menu, Plus, Trash2, UserRound, Wallet } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -36,7 +36,7 @@ import { cn } from "@/lib/utils";
 const truncate = (a: string) => (a.length > 12 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a);
 
 const Contacts = () => {
-  const navigate = useNavigate();
+  
   const location = useLocation();
   const { user, signOut } = useAuth();
   const { profile } = useProfile();
