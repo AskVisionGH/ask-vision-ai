@@ -410,11 +410,18 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
   });
 
   useEffect(() => {
-    // Solana balance branch (RPC parsed token accounts).
-    if (fromIsSvm && connected && publicKey && fromToken && fromToken.chainId === SOLANA_CHAIN_ID) {
+    // Solana balance branch (RPC parsed token accounts) — scoped to whichever
+    // wallet is selected (Vision Wallet OR external).
+    if (fromIsSvm && fromAddress && fromToken && fromToken.chainId === SOLANA_CHAIN_ID) {
       let cancelled = false;
       setFromBalance(null);
-      const owner = new PublicKey(publicKey.toBase58());
+      let owner: PublicKey;
+      try {
+        owner = new PublicKey(fromAddress);
+      } catch {
+        setFromBalance(null);
+        return;
+      }
       (async () => {
         try {
           const isNative =
