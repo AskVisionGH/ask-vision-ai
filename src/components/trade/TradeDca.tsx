@@ -269,7 +269,7 @@ export const TradeDca = () => {
 
   // ---- Submit ----
   const placeDca = useCallback(async () => {
-    if (!connected || !publicKey || !signTransaction) return;
+    if (!signer.ready || !activePayerAddress) return;
     if (validation) return;
     try {
       setPhase({ name: "preparing" });
@@ -277,8 +277,11 @@ export const TradeDca = () => {
       if (inAmountAtomic <= 0) throw new Error("Amount too small");
 
       // ---- Step 1: Collect 1% upfront platform fee ----
+      // For Vision Wallet: sign + broadcast in one shot via Privy.
+      // For external wallets: sign locally, then submit via tx-submit so
+      // we get the existing fee accounting / treasury hooks.
       const feeBuilt = await supaPost("dca-fee-build", {
-        user: publicKey.toBase58(),
+        user: activePayerAddress,
         inputMint: inputToken.address,
         totalAmountAtomic: String(inAmountAtomic),
         decimals: inputToken.decimals,
@@ -289,30 +292,50 @@ export const TradeDca = () => {
       setPhase({ name: "awaiting_fee_signature" });
       const feeBytes = Uint8Array.from(atob(feeTxB64), (c) => c.charCodeAt(0));
       const feeTx = Transaction.from(feeBytes);
-      let signedFee: Transaction;
+
       try {
-        signedFee = await signTransaction(feeTx);
+        if (walletSource === "vision") {
+          // Privy signs + broadcasts. We still log the transfer via tx-submit
+          // for treasury accounting parity.
+          setPhase({ name: "submitting_fee" });
+          const res = await visionSigner.signAndSend({
+            chain: "solana",
+            caip2: SOLANA_CAIP2,
+            transaction: feeTxB64,
+            method: "signAndSendTransaction",
+          });
+          const feeSig = res.hash ?? res.signature ?? null;
+          if (feeSig) {
+            // Best-effort treasury logging (don't fail the whole flow).
+            await supaPost("tx-submit", {
+              signature: feeSig,
+              kind: "transfer",
+              inputMint: inputToken.address,
+              recipient: "treasury",
+              walletAddress: activePayerAddress,
+              metadata: { source: "dca_platform_fee", wallet_source: "vision" },
+            }).catch(() => { /* logging is best-effort */ });
+          }
+        } else {
+          const signedFee = await signer.signOnly(feeTx);
+          setPhase({ name: "submitting_fee" });
+          await supaPost("tx-submit", {
+            signedTransaction: signedFee,
+            kind: "transfer",
+            inputMint: inputToken.address,
+            recipient: "treasury",
+            walletAddress: activePayerAddress,
+            metadata: { source: "dca_platform_fee" },
+          });
+        }
       } catch {
         if (mounted.current) setPhase({ name: "cancelled" });
         return;
       }
-      const signedFeeB64 = btoa(
-        String.fromCharCode(...signedFee.serialize({ requireAllSignatures: true })),
-      );
-
-      setPhase({ name: "submitting_fee" });
-      await supaPost("tx-submit", {
-        signedTransaction: signedFeeB64,
-        kind: "transfer",
-        inputMint: inputToken.address,
-        recipient: "treasury",
-        walletAddress: publicKey.toBase58(),
-        metadata: { source: "dca_platform_fee" },
-      });
 
       // ---- Step 2: Build the Jupiter recurring create transaction ----
       const created = await supaPost("recurring-create", {
-        user: publicKey.toBase58(),
+        user: activePayerAddress,
         inputMint: inputToken.address,
         outputMint: outputToken.address,
         inAmount: String(inAmountAtomic),
@@ -328,14 +351,16 @@ export const TradeDca = () => {
       setPhase({ name: "awaiting_signature" });
       const txBytes = Uint8Array.from(atob(txB64), (c) => c.charCodeAt(0));
       const tx = VersionedTransaction.deserialize(txBytes);
-      let signed: VersionedTransaction;
+
+      // Jupiter Recurring requires execute-via-Jupiter, so we sign-only
+      // for both wallet sources and POST to recurring-execute.
+      let signedB64: string;
       try {
-        signed = await signTransaction(tx);
+        signedB64 = await signer.signOnly(tx);
       } catch {
         if (mounted.current) setPhase({ name: "cancelled" });
         return;
       }
-      const signedB64 = btoa(String.fromCharCode(...signed.serialize()));
 
       setPhase({ name: "submitting" });
       const executed = await supaPost("recurring-execute", {
@@ -355,9 +380,10 @@ export const TradeDca = () => {
       });
     }
   }, [
-    connected,
-    publicKey,
-    signTransaction,
+    signer,
+    visionSigner,
+    walletSource,
+    activePayerAddress,
     validation,
     numericTotal,
     inputToken,
