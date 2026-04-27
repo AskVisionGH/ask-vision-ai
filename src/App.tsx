@@ -23,6 +23,7 @@ import Contacts from "./pages/Contacts.tsx";
 import Admin from "./pages/Admin.tsx";
 import Trade from "./pages/Trade.tsx";
 import Wallet from "./pages/Wallet.tsx";
+import Orders from "./pages/Orders.tsx";
 import Alerts from "./pages/Alerts.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import DesktopOnlyGate from "./components/DesktopOnlyGate";
@@ -129,6 +130,14 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute>
             <Wallet />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/orders"
+        element={
+          <ProtectedRoute>
+            <Orders />
           </ProtectedRoute>
         }
       />
