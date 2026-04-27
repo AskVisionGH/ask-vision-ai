@@ -20,6 +20,7 @@ export const VisionWalletCard = () => {
   const { loading, working, solanaAddress, evmAddress, createWallet } =
     useVisionWallet();
   const [copied, setCopied] = useState<"solana" | "evm" | null>(null);
+  const [fundOpen, setFundOpen] = useState(false);
 
   const handleCreate = async () => {
     try {
