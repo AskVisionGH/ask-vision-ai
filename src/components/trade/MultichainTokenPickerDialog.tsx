@@ -289,12 +289,13 @@ export const MultichainTokenPickerDialog = ({
                     name: h.name ?? h.symbol ?? "Unknown",
                     address: isNative ? "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE" : rawAddr,
                     decimals: h.decimals ?? 18,
-                  logo: h.logo ?? h.logoURI ?? null,
-                  priceUsd: typeof h.priceUsd === "number" ? h.priceUsd : null,
-                  amount: typeof h.amount === "number" ? h.amount : 0,
-                  valueUsd: typeof h.valueUsd === "number" ? h.valueUsd : null,
-                  chainId: chain.key,
-                }))
+                    logo: h.logo ?? h.logoURI ?? null,
+                    priceUsd: typeof h.priceUsd === "number" ? h.priceUsd : null,
+                    amount: typeof h.amount === "number" ? h.amount : 0,
+                    valueUsd: typeof h.valueUsd === "number" ? h.valueUsd : null,
+                    chainId: chain.key,
+                  };
+                })
                 .filter((t: MultichainToken) => !!t.address);
             })
             .catch(() => []),
