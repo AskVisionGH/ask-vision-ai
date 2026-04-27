@@ -950,6 +950,12 @@ export const TradeLadder = ({ expirySeconds }: Props) => {
                 : undefined
           }
         />
+
+        <FundVisionWalletDialog
+          open={fundOpen}
+          onOpenChange={setFundOpen}
+          defaultChain="solana"
+        />
       </div>
     </TooltipProvider>
   );
