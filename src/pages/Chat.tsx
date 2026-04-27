@@ -568,6 +568,23 @@ const Chat = () => {
 
                 <VisionWalletReadyBanner />
               </div>
+            ) : (
+              messages.map((m, i) => (
+                <ChatBubble key={m.id ?? i} message={m} onEdit={handleEdit} />
+              ))
+            )}
+
+            {isThinking && (
+              <div
+                className="flex items-center gap-2 px-1 text-foreground"
+                aria-label="Vision is thinking"
+                role="status"
+              >
+                <VisionLoader variant="self-draw" size={22} />
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* Composer */}
         <div className="shrink-0 border-t border-border/60 bg-background/80 px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3 backdrop-blur-md sm:px-6 sm:py-4">
