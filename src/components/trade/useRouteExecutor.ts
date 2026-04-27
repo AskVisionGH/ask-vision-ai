@@ -164,6 +164,10 @@ export interface ExecuteParams {
   toAddress: string;
   slippageBps: number;
   dynamicSlippage: boolean;
+  /** Authed user id — needed so we can scope stranded-route recovery records.
+   *  Optional because not every caller (e.g. anonymous chat preview cards) has
+   *  one; when missing we just skip persistence. */
+  userId?: string | null;
   /**
    * UI-driven status updates. The hook never sets React state — callers
    * decide what to do (modal step, inline label, etc.).
