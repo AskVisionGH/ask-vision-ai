@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { VisionLogo } from "@/components/VisionLogo";
 import { WalletBalancesPanel } from "@/components/wallet/WalletBalancesPanel";
 import { WalletWithdrawPanel } from "@/components/wallet/WalletWithdrawPanel";
+import { WalletActivityPanel } from "@/components/wallet/WalletActivityPanel";
 import { FundVisionWalletDialog } from "@/components/wallet/FundVisionWalletDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
@@ -163,10 +164,7 @@ const WalletPage = () => {
                   </TabsContent>
 
                   <TabsContent value="activity" className="pt-6">
-                    <ComingSoon
-                      title="Activity"
-                      body="Unified feed of swaps, transfers, and incoming deposits across Solana and EVM. Edge function is deployed — UI lands in the next update."
-                    />
+                    <WalletActivityPanel />
                   </TabsContent>
                 </Tabs>
               )}
@@ -179,12 +177,5 @@ const WalletPage = () => {
     </>
   );
 };
-
-const ComingSoon = ({ title, body }: { title: string; body: string }) => (
-  <div className="rounded-2xl border border-dashed border-border bg-card/30 p-8 text-center backdrop-blur-md">
-    <p className="text-sm text-foreground">{title}</p>
-    <p className="mt-2 text-xs text-muted-foreground">{body}</p>
-  </div>
-);
 
 export default WalletPage;
