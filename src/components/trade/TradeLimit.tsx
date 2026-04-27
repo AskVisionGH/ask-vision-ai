@@ -332,7 +332,7 @@ export const TradeLimit = ({ tab, onTabChange }: Props) => {
   const tooSmall = sellUsd != null && sellUsd > 0 && sellUsd < MIN_USD_VALUE;
 
   const placeOrder = useCallback(async () => {
-    if (!connected || !publicKey || !signTransaction) return;
+    if (!signer.ready || !activePayerAddress) return;
     if (numericSell <= 0 || numericPrice <= 0) return;
     const startedAt = Date.now();
     try {
@@ -347,7 +347,7 @@ export const TradeLimit = ({ tab, onTabChange }: Props) => {
       const expiredAt = expirySeconds ? Math.floor(Date.now() / 1000) + expirySeconds : null;
 
       const built = await supaPost("limit-order-build", {
-        maker: publicKey.toBase58(),
+        maker: activePayerAddress,
         inputMint: inputToken.address,
         outputMint: outputToken.address,
         makingAmount: String(makingAmountAtomic),
@@ -362,9 +362,11 @@ export const TradeLimit = ({ tab, onTabChange }: Props) => {
       const txBytes = Uint8Array.from(atob(txB64), (c) => c.charCodeAt(0));
       const tx = VersionedTransaction.deserialize(txBytes);
 
-      let signed: VersionedTransaction;
+      // Sign — Vision Wallet uses Privy server-side, external uses adapter.
+      // Both return base64 signed tx that Jupiter Trigger /execute accepts.
+      let signedB64: string;
       try {
-        signed = await signTransaction(tx);
+        signedB64 = await signer.signOnly(tx);
       } catch {
         if (mounted.current) setPhase({
           name: "cancelled",
@@ -377,7 +379,6 @@ export const TradeLimit = ({ tab, onTabChange }: Props) => {
       }
 
       setPhase({ name: "submitting" });
-      const signedB64 = btoa(String.fromCharCode(...signed.serialize()));
       const exec = await supaPost("limit-order-execute", {
         requestId,
         signedTransaction: signedB64,
@@ -408,9 +409,8 @@ export const TradeLimit = ({ tab, onTabChange }: Props) => {
       setPhase({ name: "error", message: e instanceof Error ? e.message : "Something went wrong." });
     }
   }, [
-    connected,
-    publicKey,
-    signTransaction,
+    signer,
+    activePayerAddress,
     numericSell,
     numericPrice,
     buyAmount,
