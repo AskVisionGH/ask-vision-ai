@@ -558,48 +558,16 @@ const Chat = () => {
                   )}
                 </h2>
                 <p className="mt-2 max-w-sm text-xs text-muted-foreground sm:mt-3 sm:text-sm">
-                  Ask anything about Solana — your wallet, tokens, protocols, or how something works.
+                  Ask anything about crypto — wallets, tokens, protocols, or how something works.
                 </p>
-                {!connected && (
+                {!hasVision && !connected && (
                   <p className="mt-2 max-w-sm text-xs text-muted-foreground/70">
-                    Connect a wallet to unlock balance, swap, and transfer actions.
+                    Connect a wallet — or create a Vision Wallet — to unlock balance, swap, and transfer actions.
                   </p>
                 )}
 
                 <VisionWalletReadyBanner />
-
-                <div className="mt-5 grid w-full max-w-md grid-cols-1 gap-2 sm:mt-10 sm:grid-cols-2">
-                  {suggestions.map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => send(s)}
-                      className={cn(
-                        "rounded-xl border border-border bg-card/40 px-4 py-3 text-left text-xs text-muted-foreground ease-vision",
-                        "hover:border-primary/30 hover:bg-card hover:text-foreground",
-                      )}
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
               </div>
-            ) : (
-              messages.map((m, i) => (
-                <ChatBubble key={m.id ?? i} message={m} onEdit={handleEdit} />
-              ))
-            )}
-
-            {isThinking && (
-              <div
-                className="flex items-center gap-2 px-1 text-foreground"
-                aria-label="Vision is thinking"
-                role="status"
-              >
-                <VisionLoader variant="self-draw" size={22} />
-              </div>
-            )}
-          </div>
-        </div>
 
         {/* Composer */}
         <div className="shrink-0 border-t border-border/60 bg-background/80 px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3 backdrop-blur-md sm:px-6 sm:py-4">
