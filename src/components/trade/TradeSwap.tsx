@@ -187,15 +187,22 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
     };
   }, []);
 
-  // Load balance for whichever token is selected on the input side.
+  // Load balance for whichever token is selected on the input side, scoped to
+  // the active payer (Vision Wallet OR external wallet).
   // SOL → native lamports; SPL → sum of parsed token accounts for that mint.
   useEffect(() => {
-    if (!connected || !publicKey) {
+    if (!activePayerAddress) {
       setInputBalance(null);
       return;
     }
     let cancelled = false;
-    const owner = new PublicKey(publicKey.toBase58());
+    let owner: PublicKey;
+    try {
+      owner = new PublicKey(activePayerAddress);
+    } catch {
+      setInputBalance(null);
+      return;
+    }
     setInputBalance(null);
     (async () => {
       try {
@@ -219,7 +226,7 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
     return () => {
       cancelled = true;
     };
-  }, [connected, publicKey, connection, inputToken.address, phase.name]);
+  }, [activePayerAddress, connection, inputToken.address, phase.name]);
 
 
   const numericAmount = useMemo(() => {
