@@ -32,6 +32,8 @@ import {
   WalletSourcePicker,
   type WalletSource,
 } from "@/components/trade/WalletSourcePicker";
+import { FundVisionWalletDialog } from "@/components/wallet/FundVisionWalletDialog";
+import { ArrowDownToLine } from "lucide-react";
 
 // CAIP-2 chain ID for Solana mainnet-beta — required by Privy's RPC.
 const SOLANA_CAIP2 = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
