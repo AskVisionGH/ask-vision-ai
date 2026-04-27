@@ -542,6 +542,10 @@ export const useRouteExecutor = () => {
     fromAddress: string;
     slippageBps: number;
     dynamicSlippage: boolean;
+    /** When this swap is the destination leg of a bridge_then_swap (or a
+     *  resume of one), pass the bridge tx hash so the recorded fee row can
+     *  be grouped with its bridge in the admin view. */
+    bridgeSignature?: string;
     onStatus: (s: ExecutorStatus) => void;
   };
 
