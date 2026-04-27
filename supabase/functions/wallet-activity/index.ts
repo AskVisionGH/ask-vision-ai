@@ -43,6 +43,7 @@ type ActivityItem =
       inputAmount: number | null;
       outputAmount: number | null;
       recipient: string | null;
+      metadata: unknown;
       explorerUrl: string | null;
     }
   | {
