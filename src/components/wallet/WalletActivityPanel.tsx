@@ -145,6 +145,7 @@ const itemChainId = (item: ActivityItem): number | null => {
 export function WalletActivityPanel() {
   const [items, setItems] = useState<ActivityItem[]>([]);
   const [chainFilter, setChainFilter] = useState<ChainFilter>("all");
+  const [kindFilter, setKindFilter] = useState<KindFilter>("all");
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -216,9 +217,14 @@ export function WalletActivityPanel() {
   }, [loadMore]);
 
   const filtered = useMemo(() => {
-    if (chainFilter === "all") return items;
-    return items.filter((i) => itemChain(i) === chainFilter);
-  }, [items, chainFilter]);
+    return items.filter((i) => {
+      if (chainFilter !== "all" && itemChain(i) !== chainFilter) return false;
+      if (kindFilter !== "all" && itemKind(i) !== kindFilter) return false;
+      return true;
+    });
+  }, [items, chainFilter, kindFilter]);
+
+  const filtersActive = chainFilter !== "all" || kindFilter !== "all";
 
   const toggleExpand = (id: string) => {
     setExpanded((prev) => {
