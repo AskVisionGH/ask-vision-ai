@@ -51,6 +51,7 @@ import {
 } from "@/components/trade/MultichainTokenPickerDialog";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { useVisionWallet } from "@/hooks/useVisionWallet";
 import {
   WalletSourcePicker,
