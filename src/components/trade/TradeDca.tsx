@@ -25,8 +25,18 @@ import {
   type TokenMeta,
 } from "@/components/trade/TokenPickerDialog";
 import { DcaOpenOrders } from "@/components/trade/DcaOpenOrders";
+import {
+  WalletSourcePicker,
+  type WalletSource,
+} from "@/components/trade/WalletSourcePicker";
+import { FundVisionWalletDialog } from "@/components/wallet/FundVisionWalletDialog";
+import { useTradeSigner } from "@/hooks/useTradeSigner";
+import { useVisionWallet } from "@/hooks/useVisionWallet";
+import { useVisionWalletSigner } from "@/hooks/useVisionWalletSigner";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+
+const SOLANA_CAIP2 = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
 
 // Time-based DCA via Jupiter Recurring v1.
 // User signs the create transaction with their own wallet (no vault).
