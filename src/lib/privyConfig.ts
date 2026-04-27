@@ -25,12 +25,9 @@ export const privyConfig: PrivyClientConfig = {
     // Do NOT auto-create wallets on login. Users must explicitly
     // opt in via the "Create Vision Wallet" button so we can show
     // the recovery flow first.
-    createOnLogin: "off",
-    requireUserPasswordOnCreate: false,
     showWalletUIs: false,
-    solana: {
-      createOnLogin: "off",
-    },
+    ethereum: { createOnLogin: "off" },
+    solana: { createOnLogin: "off" },
   },
   solanaClusters: [
     {
