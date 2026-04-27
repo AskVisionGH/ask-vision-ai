@@ -288,6 +288,37 @@ export const useRouteExecutor = () => {
           (Number(swapLeg.quote.input?.amountAtomic ?? "0") /
             Math.pow(10, swapLeg.quote.input?.decimals ?? intermediate.decimals)) || 0;
 
+        // Bridge leg has settled — funds now sit on the destination chain as
+        // `intermediate`. From this point until leg 2 confirms is the
+        // "stranding window": any failure leaves the user holding the
+        // intermediate token. We persist a recovery record now so a Resume
+        // card can surface on the next mount if leg 2 doesn't land.
+        if (userId) {
+          strandedId = makeStrandedId(bridgeHash);
+          recordStrandedRoute({
+            id: strandedId,
+            userId,
+            fromSymbol: fromToken.symbol,
+            fromAddress: fromToken.address,
+            fromChain: fromToken.chainId,
+            fromAmountUi: plan.summary.fromAmountUi,
+            toSymbol: toToken.symbol,
+            toAddress: toToken.address,
+            toChain: toToken.chainId,
+            toDecimals: toToken.decimals,
+            intermediateSymbol: intermediate.symbol,
+            intermediateAddress: intermediate.address,
+            intermediateDecimals: intermediate.decimals,
+            expectedIntermediateUi: intermediateAmountUi,
+            recipientAddress: toAddress,
+            walletSource,
+            bridgeHash,
+            bridgeExplorer,
+            reason: "interrupted",
+            createdAt: Date.now(),
+          });
+        }
+
         const fresh = await supaPost("route-quote", {
           fromChain: intermediate.chain,
           toChain: intermediate.chain,
