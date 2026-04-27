@@ -1,10 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  usePrivy,
-  useLoginWithEmail,
-  useCreateWallet as useCreateEvmWallet,
-} from "@privy-io/react-auth";
-import { useCreateWallet as useCreateSolanaWallet } from "@privy-io/react-auth/solana";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
@@ -12,211 +6,77 @@ import { toast } from "sonner";
 type VisionWalletRow = {
   id: string;
   user_id: string;
-  privy_user_id: string;
+  privy_user_id: string | null;
   solana_address: string | null;
   evm_address: string | null;
+  solana_wallet_id: string | null;
+  evm_wallet_id: string | null;
   origin: "created" | "imported_seed" | "imported_key";
   is_active: boolean;
   created_at: string;
   updated_at: string;
 };
 
-type EmbeddedAddresses = {
-  solana: string | null;
-  evm: string | null;
-};
-
 /**
- * Pull embedded wallet addresses out of the Privy user object.
- * Privy stores embedded wallets as linked accounts of type "wallet" with
- * walletClientType === "privy". chainType is "solana" or "ethereum".
- * Note: a single EVM address works for ALL EVM chains (Ethereum, Base,
- * Arbitrum, Polygon, BSC, etc.).
- */
-function getEmbeddedAddresses(privyUser: unknown): EmbeddedAddresses {
-  const out: EmbeddedAddresses = { solana: null, evm: null };
-  if (!privyUser || typeof privyUser !== "object") return out;
-  const accounts = (privyUser as { linkedAccounts?: unknown[] })
-    .linkedAccounts;
-  if (!Array.isArray(accounts)) return out;
-  for (const acc of accounts) {
-    if (!acc || typeof acc !== "object") continue;
-    const a = acc as Record<string, unknown>;
-    if (
-      a.type !== "wallet" ||
-      a.walletClientType !== "privy" ||
-      typeof a.address !== "string"
-    )
-      continue;
-    if (a.chainType === "solana" && !out.solana) out.solana = a.address;
-    if (a.chainType === "ethereum" && !out.evm) out.evm = a.address;
-  }
-  return out;
-}
-
-/**
- * useVisionWallet — single source of truth for the user's Vision-managed
- * (Privy embedded) wallet. Each user gets BOTH a Solana and an EVM
- * embedded wallet under one Privy login, so trade flows can route to the
- * right chain (and bridge cross-chain via LiFi).
+ * useVisionWallet — single source of truth for the user's Vision Wallet.
+ *
+ * Vision Wallet is a fully managed (custodial) wallet provisioned by our
+ * backend via Privy Server Wallets. Each user gets one Solana + one EVM
+ * wallet under the hood, presented to the user as a single "Vision Wallet".
+ *
+ * No Privy SDK runs in the browser — wallet creation is a single call to
+ * the `create-vision-wallet` edge function.
  */
 export function useVisionWallet() {
   const { session } = useAuth();
   const supabaseUserId = session?.user?.id ?? null;
 
-  const {
-    ready,
-    authenticated,
-    user: privyUser,
-    logout: privyLogout,
-  } = usePrivy();
-  const { createWallet: createSolanaWallet } = useCreateSolanaWallet();
-  const { createWallet: createEvmWallet } = useCreateEvmWallet();
-  const { sendCode, loginWithCode } = useLoginWithEmail();
-
   const [row, setRow] = useState<VisionWalletRow | null>(null);
-  const [loadingRow, setLoadingRow] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [working, setWorking] = useState(false);
 
-  const addresses = useMemo(
-    () => getEmbeddedAddresses(privyUser),
-    [privyUser],
-  );
-
-  // Load existing row whenever the Supabase user changes.
-  useEffect(() => {
+  const refresh = useCallback(async () => {
     if (!supabaseUserId) {
       setRow(null);
       return;
     }
-    let cancelled = false;
-    setLoadingRow(true);
-    supabase
+    setLoading(true);
+    const { data, error } = await supabase
       .from("vision_wallets")
       .select("*")
       .eq("user_id", supabaseUserId)
       .eq("is_active", true)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (cancelled) return;
-        if (error && error.code !== "PGRST116") {
-          console.warn("[useVisionWallet] load failed", error);
-        }
-        setRow((data as VisionWalletRow | null) ?? null);
-        setLoadingRow(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+      .maybeSingle();
+    if (error && error.code !== "PGRST116") {
+      console.warn("[useVisionWallet] load failed", error);
+    }
+    setRow((data as VisionWalletRow | null) ?? null);
+    setLoading(false);
   }, [supabaseUserId]);
 
-  // Persist (upsert) the wallet record once at least one embedded
-  // address is available. We re-upsert if either address changes.
   useEffect(() => {
-    if (!supabaseUserId || !privyUser?.id) return;
-    if (!addresses.solana && !addresses.evm) return;
-    if (
-      row &&
-      row.privy_user_id === privyUser.id &&
-      row.solana_address === addresses.solana &&
-      row.evm_address === addresses.evm
-    ) {
-      return; // already in sync
-    }
-    let cancelled = false;
-    (async () => {
-      const { data, error } = await supabase
-        .from("vision_wallets")
-        .upsert(
-          {
-            user_id: supabaseUserId,
-            privy_user_id: privyUser.id,
-            solana_address: addresses.solana,
-            evm_address: addresses.evm,
-            origin: row?.origin ?? "created",
-            is_active: true,
-          },
-          { onConflict: "user_id" },
-        )
-        .select()
-        .single();
-      if (cancelled) return;
-      if (error) {
-        console.error("[useVisionWallet] upsert failed", error);
-        return;
-      }
-      setRow(data as VisionWalletRow);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [supabaseUserId, privyUser?.id, addresses.solana, addresses.evm, row]);
+    void refresh();
+  }, [refresh]);
 
   /**
-   * Step 1 of Privy login: send a one-time code to the user's Supabase
-   * email. Caller should then prompt for the code and call submitPrivyCode.
-   */
-  const sendPrivyLoginCode = useCallback(async () => {
-    if (!ready) throw new Error("Wallet system not ready");
-    const email = session?.user?.email;
-    if (!email) throw new Error("No Supabase email to bind to Privy");
-    await sendCode({ email });
-    toast.message("Check your email", {
-      description: `We sent a 6-digit code to ${email}.`,
-    });
-    return email;
-  }, [ready, session?.user?.email, sendCode]);
-
-  /**
-   * Step 2 of Privy login: submit the 6-digit code.
-   */
-  const submitPrivyCode = useCallback(
-    async (code: string) => {
-      await loginWithCode({ code });
-    },
-    [loginWithCode],
-  );
-
-  /**
-   * Create the Vision Wallet — both Solana and EVM embedded wallets.
-   * If one already exists, only the missing one is created. The DB
-   * sync effect picks up the new addresses and upserts the row.
+   * Create the Vision Wallet (or finish creating any missing chain).
+   * Calls our backend, which provisions the wallet via Privy Server
+   * Wallets and persists the addresses.
    */
   const createWallet = useCallback(async () => {
-    if (!authenticated) {
-      throw new Error("Must be logged into Privy first");
-    }
-    if (addresses.solana && addresses.evm) {
-      toast.info("Vision Wallet already exists");
-      return;
-    }
+    if (!supabaseUserId) throw new Error("Not signed in");
     setWorking(true);
-    // Wrap each create call in a timeout so a hung Privy iframe doesn't
-    // leave the UI spinning forever.
-    const withTimeout = <T,>(p: Promise<T>, label: string, ms = 30_000) =>
-      Promise.race<T>([
-        p,
-        new Promise<T>((_, reject) =>
-          setTimeout(
-            () =>
-              reject(
-                new Error(
-                  `${label} timed out — Privy may be blocked. Check your network or try again.`,
-                ),
-              ),
-            ms,
-          ),
-        ),
-      ]);
     try {
-      // Privy SDK requires sequential creation (each wallet bumps the
-      // user record), so we await one at a time.
-      if (!addresses.solana) {
-        await withTimeout(createSolanaWallet(), "Solana wallet creation");
+      const { data, error } = await supabase.functions.invoke(
+        "create-vision-wallet",
+        { body: {} },
+      );
+      if (error) {
+        throw new Error(error.message || "Wallet creation failed");
       }
-      if (!addresses.evm) {
-        await withTimeout(createEvmWallet(), "EVM wallet creation");
-      }
+      const errMsg = (data as { error?: string } | null)?.error;
+      if (errMsg) throw new Error(errMsg);
+      await refresh();
       toast.success("Vision Wallet created");
     } catch (err) {
       console.error("[useVisionWallet] createWallet failed", err);
@@ -224,40 +84,21 @@ export function useVisionWallet() {
     } finally {
       setWorking(false);
     }
-  }, [
-    authenticated,
-    addresses.solana,
-    addresses.evm,
-    createSolanaWallet,
-    createEvmWallet,
-  ]);
-
-  /**
-   * Disconnect this device from Privy. The on-chain wallets are
-   * preserved — the user can recover them on any device by logging
-   * back in with the same email.
-   */
-  const disconnect = useCallback(async () => {
-    await privyLogout();
-  }, [privyLogout]);
+  }, [supabaseUserId, refresh]);
 
   return {
     // status
-    ready,
-    authenticated,
-    loading: loadingRow,
+    ready: true,
+    loading,
     working,
 
     // data
     row,
-    solanaAddress: addresses.solana ?? row?.solana_address ?? null,
-    evmAddress: addresses.evm ?? row?.evm_address ?? null,
-    privyUserId: privyUser?.id ?? null,
+    solanaAddress: row?.solana_address ?? null,
+    evmAddress: row?.evm_address ?? null,
 
     // actions
-    sendPrivyLoginCode,
-    submitPrivyCode,
     createWallet,
-    disconnect,
+    refresh,
   };
 }
