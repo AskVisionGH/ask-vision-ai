@@ -414,7 +414,60 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
     setAmount("");
     setPlan(null);
     setStatus({ kind: "idle" });
+    setResumeContext(null);
+    // Bump so StrandedRoutesCard re-reads (cleared records will disappear).
+    setStrandedRefreshKey((k) => k + 1);
   };
+
+  // Kick off a destination-chain swap to rescue stranded intermediate funds.
+  // We synthesize a single-leg `RoutePlan` so RouteProgressModal renders the
+  // right step list ("Building swap → Sign → Confirm") and label the
+  // before/after tokens correctly.
+  const handleResumeStranded = useCallback((route: StrandedRoute, availableUi: number) => {
+    const intermediateToken: MultichainToken = {
+      address: route.intermediateAddress,
+      symbol: route.intermediateSymbol,
+      decimals: route.intermediateDecimals,
+      name: route.intermediateSymbol,
+      logo: null,
+      priceUsd: 1,
+      chainId: route.toChain,
+    };
+    const targetToken: MultichainToken = {
+      address: route.toAddress,
+      symbol: route.toSymbol,
+      decimals: route.toDecimals,
+      name: route.toSymbol,
+      logo: null,
+      priceUsd: null,
+      chainId: route.toChain,
+    };
+    const syntheticPlan: RoutePlan = {
+      strategy: "swap",
+      legs: [{
+        kind: "swap",
+        chain: route.toChain,
+        quote: { input: { amountUi: availableUi }, output: { amountUi: 0 } },
+      }],
+      summary: {
+        fromAmountUi: availableUi,
+        fromAmountUsd: null,
+        toAmountUi: null,
+        toAmountUsd: null,
+        gasUsd: null,
+        platformFeeUsd: null,
+        executionDurationSec: null,
+      },
+    };
+    setResumeContext({ plan: syntheticPlan, fromToken: intermediateToken, toToken: targetToken });
+    void resume({
+      route,
+      availableUi,
+      slippageBps,
+      dynamicSlippage,
+      onStatus: (s) => { if (mounted.current) setStatus(s); },
+    });
+  }, [resume, slippageBps, dynamicSlippage]);
 
   // ---------- Success view ----------
   if (status.kind === "success") {
