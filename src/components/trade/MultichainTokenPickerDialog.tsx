@@ -277,11 +277,18 @@ export const MultichainTokenPickerDialog = ({
               const list = Array.isArray(data.holdings) ? data.holdings : [];
               return list
                 .filter((h: any) => (h.valueUsd ?? 0) >= HOLDINGS_MIN_USD)
-                .map((h: any): MultichainToken => ({
-                  symbol: h.symbol ?? "?",
-                  name: h.name ?? h.symbol ?? "Unknown",
-                  address: h.address ?? h.mint,
-                  decimals: h.decimals ?? 18,
+                .map((h: any): MultichainToken => {
+                  // evm-wallet-balance reports the native asset as 0x0000…0000.
+                  // 0x's swap API + route-quote want the EIP-7528 placeholder
+                  // 0xEeeE… for native, so normalize here once instead of
+                  // every consumer handling it.
+                  const rawAddr = h.address ?? h.mint;
+                  const isNative = typeof rawAddr === "string" && /^0x0{40}$/i.test(rawAddr);
+                  return {
+                    symbol: h.symbol ?? "?",
+                    name: h.name ?? h.symbol ?? "Unknown",
+                    address: isNative ? "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE" : rawAddr,
+                    decimals: h.decimals ?? 18,
                   logo: h.logo ?? h.logoURI ?? null,
                   priceUsd: typeof h.priceUsd === "number" ? h.priceUsd : null,
                   amount: typeof h.amount === "number" ? h.amount : 0,
