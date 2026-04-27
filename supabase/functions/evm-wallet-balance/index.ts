@@ -323,7 +323,7 @@ serve(async (req) => {
       .filter((h) => (h.valueUsd ?? 0) >= MIN_USD || h.priceUsd == null)
       .sort((a, b) => (b.valueUsd ?? -1) - (a.valueUsd ?? -1));
 
-    return json({ holdings: filtered, scanned: candidates.length });
+    return json({ holdings: filtered, scanned: candidates.length, rpcError });
   } catch (e) {
     console.error("evm-wallet-balance error:", e);
     return json(
