@@ -784,5 +784,5 @@ export const useRouteExecutor = () => {
     throw new Error("Confirmation timed out. Check Solscan for status.");
   }
 
-  return { execute, cancel };
+  return { execute, resume, cancel };
 };
