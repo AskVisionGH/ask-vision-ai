@@ -1,5 +1,4 @@
 import {
-  ArrowLeftRight,
   Bell,
   ListChecks,
   MessageSquare,
@@ -20,10 +19,21 @@ import {
  * entry that was added to the other.
  *
  * If you add/remove/reorder a nav item, do it HERE only.
+ *
+ * Note: Bridge intentionally has no top-level entry — it lives as a tab
+ * inside the Trade page (`/trade?tab=bridge`) to keep the sidebar lean.
  */
 export type AppNavItem = {
   /** Stable id used for active highlighting + React keys. */
-  id: "chat" | "trade" | "bridge" | "tracking" | "alerts" | "contacts" | "wallet" | "orders" | "admin";
+  id:
+    | "chat"
+    | "trade"
+    | "orders"
+    | "tracking"
+    | "alerts"
+    | "contacts"
+    | "wallet"
+    | "admin";
   /** Route to navigate to. */
   to: string;
   /** Visible label. */
@@ -40,7 +50,7 @@ export type AppNavItem = {
 export const APP_NAV_ITEMS: AppNavItem[] = [
   { id: "chat", to: "/chat", label: "Chat", icon: MessageSquare },
   { id: "trade", to: "/trade?tab=trade", label: "Trade", icon: Repeat },
-  { id: "bridge", to: "/trade?tab=bridge", label: "Bridge", icon: ArrowLeftRight },
+  { id: "orders", to: "/orders", label: "Orders", icon: ListChecks },
   {
     id: "tracking",
     to: "/tracked-wallets",
@@ -52,7 +62,6 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
   { id: "alerts", to: "/alerts", label: "Alerts", icon: Bell },
   { id: "contacts", to: "/contacts", label: "Contacts", icon: Users },
   { id: "wallet", to: "/wallet", label: "Wallet", icon: Wallet },
-  { id: "orders", to: "/orders", label: "Orders", icon: ListChecks },
   { id: "admin", to: "/admin", label: "Admin", icon: Shield, adminOnly: true },
 ];
 
@@ -67,18 +76,16 @@ export const getAppNavItems = (isAdmin: boolean): AppNavItem[] =>
  * Resolve which nav item is "active" for the current route. Used by both
  * sidebars to keep highlighting logic identical.
  *
- * - On `/trade`, the active item depends on the `tab` query param so Trade
- *   and Bridge highlight independently.
+ * - On `/trade`, both the Trade and Bridge tabs highlight the Trade entry,
+ *   since Bridge no longer has its own sidebar item.
  * - Otherwise we match on pathname.
  */
 export const getActiveNavId = (
   pathname: string,
-  activeTradeTab?: string | null,
+  _activeTradeTab?: string | null,
 ): AppNavItem["id"] | null => {
   if (pathname === "/chat") return "chat";
-  if (pathname === "/trade") {
-    return activeTradeTab === "bridge" ? "bridge" : "trade";
-  }
+  if (pathname === "/trade") return "trade";
   if (pathname === "/alerts") return "alerts";
   if (pathname === "/contacts") return "contacts";
   if (pathname === "/wallet") return "wallet";
