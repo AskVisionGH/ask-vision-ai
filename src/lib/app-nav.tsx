@@ -6,6 +6,7 @@ import {
   Repeat,
   Shield,
   Users,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 
@@ -21,7 +22,7 @@ import {
  */
 export type AppNavItem = {
   /** Stable id used for active highlighting + React keys. */
-  id: "chat" | "trade" | "bridge" | "tracking" | "alerts" | "contacts" | "admin";
+  id: "chat" | "trade" | "bridge" | "tracking" | "alerts" | "contacts" | "wallet" | "admin";
   /** Route to navigate to. */
   to: string;
   /** Visible label. */
@@ -49,6 +50,7 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
   },
   { id: "alerts", to: "/alerts", label: "Alerts", icon: Bell },
   { id: "contacts", to: "/contacts", label: "Contacts", icon: Users },
+  { id: "wallet", to: "/wallet", label: "Wallet", icon: Wallet },
   { id: "admin", to: "/admin", label: "Admin", icon: Shield, adminOnly: true },
 ];
 
@@ -77,6 +79,7 @@ export const getActiveNavId = (
   }
   if (pathname === "/alerts") return "alerts";
   if (pathname === "/contacts") return "contacts";
+  if (pathname === "/wallet") return "wallet";
   if (pathname === "/admin") return "admin";
   if (pathname === "/tracked-wallets") return "tracking";
   return null;
