@@ -235,6 +235,10 @@ export const MultichainTokenPickerDialog = ({
   const [holdings, setHoldings] = useState<MultichainToken[]>([]);
   const [holdingsLoading, setHoldingsLoading] = useState(false);
   const [livePrices, setLivePrices] = useState<Record<string, number>>({});
+  // Pre-loaded "trending" tokens for the active chain shown when there's no
+  // search query yet, so users always see a meaningful list of choices.
+  const [trending, setTrending] = useState<Record<string, MultichainToken[]>>({});
+  const [trendingLoading, setTrendingLoading] = useState(false);
   const debounceRef = useRef<number | null>(null);
   const recent = useMemo(() => (open ? getRecent() : []), [open]);
 
