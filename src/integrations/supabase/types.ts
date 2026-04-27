@@ -859,6 +859,42 @@ export type Database = {
         }
         Relationships: []
       }
+      vision_wallets: {
+        Row: {
+          created_at: string
+          evm_address: string | null
+          id: string
+          is_active: boolean
+          origin: Database["public"]["Enums"]["vision_wallet_origin"]
+          privy_user_id: string
+          solana_address: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          evm_address?: string | null
+          id?: string
+          is_active?: boolean
+          origin?: Database["public"]["Enums"]["vision_wallet_origin"]
+          privy_user_id: string
+          solana_address?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          evm_address?: string | null
+          id?: string
+          is_active?: boolean
+          origin?: Database["public"]["Enums"]["vision_wallet_origin"]
+          privy_user_id?: string
+          solana_address?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       wallet_links: {
         Row: {
           created_at: string
@@ -1041,6 +1077,7 @@ export type Database = {
       risk_tolerance: "cautious" | "balanced" | "aggressive"
       share_mode: "read_only" | "importable"
       tx_event_kind: "swap" | "transfer" | "bridge"
+      vision_wallet_origin: "created" | "imported_seed" | "imported_key"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1180,6 +1217,7 @@ export const Constants = {
       risk_tolerance: ["cautious", "balanced", "aggressive"],
       share_mode: ["read_only", "importable"],
       tx_event_kind: ["swap", "transfer", "bridge"],
+      vision_wallet_origin: ["created", "imported_seed", "imported_key"],
     },
   },
 } as const
