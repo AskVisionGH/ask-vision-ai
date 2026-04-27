@@ -8,6 +8,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { VisionLogo } from "@/components/VisionLogo";
 import { WalletBalancesPanel } from "@/components/wallet/WalletBalancesPanel";
+import { WalletWithdrawPanel } from "@/components/wallet/WalletWithdrawPanel";
 import { FundVisionWalletDialog } from "@/components/wallet/FundVisionWalletDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
@@ -158,10 +159,7 @@ const WalletPage = () => {
                   </TabsContent>
 
                   <TabsContent value="withdraw" className="pt-6">
-                    <ComingSoon
-                      title="Withdraw"
-                      body="Send SOL, SPL tokens, ETH, and ERC-20s out of your Vision Wallet. Edge function is deployed — UI lands in the next update."
-                    />
+                    <WalletWithdrawPanel />
                   </TabsContent>
 
                   <TabsContent value="activity" className="pt-6">
