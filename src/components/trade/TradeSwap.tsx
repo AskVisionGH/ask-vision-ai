@@ -347,12 +347,15 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
 
 
   const handleSwap = useCallback(async () => {
-    if (!connected || !publicKey || !signTransaction || !quote || !outputToken) return;
+    if (!quote || !outputToken) return;
+    if (!activePayerAddress) return;
+    if (walletSource === "external" && (!connected || !publicKey || !signTransaction)) return;
+
     const startedAt = Date.now();
     try {
       setPhase({ name: "building" });
       const built = await supaPost("swap-build", {
-        userPublicKey: publicKey.toBase58(),
+        userPublicKey: activePayerAddress,
         inputMint: quote.input.address,
         outputMint: quote.output.address,
         amount: quote.input.amountAtomic,
@@ -361,41 +364,66 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
       });
       if (!built.swapTransaction) throw new Error("No transaction returned");
 
-      setPhase({ name: "awaiting_signature" });
-      const txBytes = Uint8Array.from(atob(built.swapTransaction), (c) => c.charCodeAt(0));
-      const tx = VersionedTransaction.deserialize(txBytes);
+      let signature: string;
 
-      let signed: VersionedTransaction;
-      try {
-        signed = await signTransaction(tx);
-      } catch {
-        if (mounted.current) setPhase({
-          name: "cancelled",
-          inUi: quote.input.amountUi,
-          inSymbol: quote.input.symbol,
-          outUi: quote.output.amountUi,
-          outSymbol: quote.output.symbol,
+      if (walletSource === "vision") {
+        // ---- Vision Wallet path: server signs + broadcasts via Privy.
+        // 1% platform fee is already baked into the swap tx via the
+        // referral feeAccount in `swap-build` — do NOT bypass it.
+        setPhase({ name: "awaiting_signature" });
+        try {
+          const result = await visionSigner.signAndSend({
+            chain: "solana",
+            caip2: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp", // Solana mainnet-beta
+            transaction: built.swapTransaction, // already base64-serialized
+            method: "signAndSendTransaction",
+          });
+          if (!result.hash) throw new Error("No signature returned from Vision Wallet");
+          signature = result.hash;
+        } catch (e: any) {
+          // User-style cancellation isn't really possible server-side, so
+          // treat anything thrown here as a real failure.
+          throw e instanceof Error ? e : new Error("Vision Wallet sign failed");
+        }
+      } else {
+        // ---- External wallet path: user signs in-browser, we submit.
+        setPhase({ name: "awaiting_signature" });
+        const txBytes = Uint8Array.from(atob(built.swapTransaction), (c) => c.charCodeAt(0));
+        const tx = VersionedTransaction.deserialize(txBytes);
+
+        let signed: VersionedTransaction;
+        try {
+          signed = await signTransaction!(tx);
+        } catch {
+          if (mounted.current) setPhase({
+            name: "cancelled",
+            inUi: quote.input.amountUi,
+            inSymbol: quote.input.symbol,
+            outUi: quote.output.amountUi,
+            outSymbol: quote.output.symbol,
+          });
+          return;
+        }
+
+        setPhase({ name: "submitting" });
+        const signedB64 = btoa(String.fromCharCode(...signed.serialize()));
+        const submitted = await supaPost("tx-submit", {
+          signedTransaction: signedB64,
+          kind: "swap",
+          valueUsd: quote.input.valueUsd ?? quote.output.valueUsd ?? null,
+          inputMint: quote.input.address,
+          outputMint: quote.output.address,
+          inputAmount: quote.input.amountUi,
+          outputAmount: quote.output.amountUi,
+          walletAddress: activePayerAddress,
         });
-        return;
+        if (submitted?.fallback && submitted?.error) {
+          throw new Error(submitted.error as string);
+        }
+        const sig = submitted.signature as string;
+        if (!sig) throw new Error("No signature returned from submit");
+        signature = sig;
       }
-
-      setPhase({ name: "submitting" });
-      const signedB64 = btoa(String.fromCharCode(...signed.serialize()));
-      const submitted = await supaPost("tx-submit", {
-        signedTransaction: signedB64,
-        kind: "swap",
-        valueUsd: quote.input.valueUsd ?? quote.output.valueUsd ?? null,
-        inputMint: quote.input.address,
-        outputMint: quote.output.address,
-        inputAmount: quote.input.amountUi,
-        outputAmount: quote.output.amountUi,
-        walletAddress: publicKey.toBase58(),
-      });
-      if (submitted?.fallback && submitted?.error) {
-        throw new Error(submitted.error as string);
-      }
-      const signature = submitted.signature as string;
-      if (!signature) throw new Error("No signature returned from submit");
 
       setPhase({ name: "confirming", signature, startedAt });
       const deadline = Date.now() + POLL_TIMEOUT_MS;
