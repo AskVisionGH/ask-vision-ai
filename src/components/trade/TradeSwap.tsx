@@ -163,11 +163,22 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
   const [pickerSide, setPickerSide] = useState<"in" | "out" | null>(null);
   const [phase, setPhase] = useState<Phase>({ name: "idle" });
   const [inputBalance, setInputBalance] = useState<number | null>(null);
+  const [walletSource, setWalletSource] = useState<WalletSource>("vision");
 
   const { connection } = useConnection();
   const { publicKey, connected, signTransaction } = useWallet();
   const { setVisible } = useWalletModal();
+  const visionWallet = useVisionWallet();
+  const visionSigner = useVisionWalletSigner();
   const mounted = useRef(true);
+
+  // Active payer pubkey (string) — depends on selected wallet source.
+  const activePayerAddress: string | null =
+    walletSource === "vision"
+      ? visionWallet.solanaAddress
+      : publicKey?.toBase58() ?? null;
+  const activePayerReady =
+    walletSource === "vision" ? !!visionWallet.solanaAddress : connected;
 
   useEffect(() => {
     mounted.current = true;
