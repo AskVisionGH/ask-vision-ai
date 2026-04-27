@@ -27,6 +27,11 @@ import { useEvmBridge } from "@/hooks/useEvmBridge";
 import { useVisionEvmBridge } from "@/hooks/useVisionEvmBridge";
 import type { ChainKey, MultichainToken } from "@/components/trade/MultichainTokenPickerDialog";
 import type { WalletSource } from "@/components/trade/WalletSourcePicker";
+import {
+  recordStrandedRoute,
+  clearStrandedRoute,
+  makeStrandedId,
+} from "@/lib/stranded-routes";
 
 const SOLANA_CAIP2 = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
 const POLL_INTERVAL_MS = 1500;
@@ -164,6 +169,10 @@ export interface ExecuteParams {
   toAddress: string;
   slippageBps: number;
   dynamicSlippage: boolean;
+  /** Authed user id — needed so we can scope stranded-route recovery records.
+   *  Optional because not every caller (e.g. anonymous chat preview cards) has
+   *  one; when missing we just skip persistence. */
+  userId?: string | null;
   /**
    * UI-driven status updates. The hook never sets React state — callers
    * decide what to do (modal step, inline label, etc.).
@@ -190,9 +199,10 @@ export const useRouteExecutor = () => {
   const execute = useCallback(
     async (params: ExecuteParams): Promise<void> => {
       cancelled.current = false;
-      const { plan, fromToken, toToken, walletSource, fromAddress, toAddress, slippageBps, dynamicSlippage, onStatus } = params;
+      const { plan, fromToken, toToken, walletSource, fromAddress, toAddress, slippageBps, dynamicSlippage, userId, onStatus } = params;
       const startedAt = Date.now();
       const legHashes: { chain: ChainKey; hash: string; explorer: string }[] = [];
+      let strandedId: string | null = null;
 
       try {
         if (plan.strategy === "swap") {
@@ -278,6 +288,37 @@ export const useRouteExecutor = () => {
           (Number(swapLeg.quote.input?.amountAtomic ?? "0") /
             Math.pow(10, swapLeg.quote.input?.decimals ?? intermediate.decimals)) || 0;
 
+        // Bridge leg has settled — funds now sit on the destination chain as
+        // `intermediate`. From this point until leg 2 confirms is the
+        // "stranding window": any failure leaves the user holding the
+        // intermediate token. We persist a recovery record now so a Resume
+        // card can surface on the next mount if leg 2 doesn't land.
+        if (userId) {
+          strandedId = makeStrandedId(bridgeHash);
+          recordStrandedRoute({
+            id: strandedId,
+            userId,
+            fromSymbol: fromToken.symbol,
+            fromAddress: fromToken.address,
+            fromChain: fromToken.chainId,
+            fromAmountUi: plan.summary.fromAmountUi,
+            toSymbol: toToken.symbol,
+            toAddress: toToken.address,
+            toChain: toToken.chainId,
+            toDecimals: toToken.decimals,
+            intermediateSymbol: intermediate.symbol,
+            intermediateAddress: intermediate.address,
+            intermediateDecimals: intermediate.decimals,
+            expectedIntermediateUi: intermediateAmountUi,
+            recipientAddress: toAddress,
+            walletSource,
+            bridgeHash,
+            bridgeExplorer,
+            reason: "interrupted",
+            createdAt: Date.now(),
+          });
+        }
+
         const fresh = await supaPost("route-quote", {
           fromChain: intermediate.chain,
           toChain: intermediate.chain,
@@ -319,6 +360,10 @@ export const useRouteExecutor = () => {
         });
         legHashes.push({ chain: intermediate.chain, hash: swapHash, explorer: swapExplorer });
 
+        // Destination swap landed — funds are at their final home, recovery
+        // record is no longer needed.
+        if (strandedId) clearStrandedRoute(strandedId);
+
         onStatus({
           kind: "success",
           legHashes,
@@ -330,12 +375,31 @@ export const useRouteExecutor = () => {
         if (cancelled.current) return;
         const msg = String(e?.message ?? e ?? "Something went wrong");
         const lower = msg.toLowerCase();
-        if (
+        const isUserCancel =
           lower.includes("user rejected") ||
           lower.includes("user denied") ||
           lower.includes("rejected the request") ||
-          lower.includes("user cancelled")
-        ) {
+          lower.includes("user cancelled");
+
+        // If we already recorded a stranded route (bridge landed, leg 2
+        // failed), upgrade its reason so the resume UI can phrase the
+        // prompt correctly. We deliberately do NOT clear it — the funds
+        // are still on the destination chain.
+        if (strandedId && !isUserCancel && userId) {
+          // Re-record with upgraded reason; same id keeps it deduped.
+          // (We re-read from the closure rather than tracking the full
+          // record again to keep this branch tight.)
+          try {
+            const existing = (await import("@/lib/stranded-routes"))
+              .listStrandedRoutes(userId)
+              .find((r) => r.id === strandedId);
+            if (existing) {
+              recordStrandedRoute({ ...existing, reason: "post_bridge_failure" });
+            }
+          } catch { /* best-effort */ }
+        }
+
+        if (isUserCancel) {
           onStatus({ kind: "cancelled" });
           return;
         }
