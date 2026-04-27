@@ -199,9 +199,10 @@ export const useRouteExecutor = () => {
   const execute = useCallback(
     async (params: ExecuteParams): Promise<void> => {
       cancelled.current = false;
-      const { plan, fromToken, toToken, walletSource, fromAddress, toAddress, slippageBps, dynamicSlippage, onStatus } = params;
+      const { plan, fromToken, toToken, walletSource, fromAddress, toAddress, slippageBps, dynamicSlippage, userId, onStatus } = params;
       const startedAt = Date.now();
       const legHashes: { chain: ChainKey; hash: string; explorer: string }[] = [];
+      let strandedId: string | null = null;
 
       try {
         if (plan.strategy === "swap") {
