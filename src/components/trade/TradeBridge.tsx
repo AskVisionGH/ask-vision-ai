@@ -26,6 +26,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { useEvmBridge } from "@/hooks/useEvmBridge";
 import { findEvmChain } from "@/lib/evm-chains";
 import { BridgeProgressModal } from "@/components/trade/BridgeProgressModal";
+import { useVisionWallet } from "@/hooks/useVisionWallet";
+import { useVisionWalletSigner } from "@/hooks/useVisionWalletSigner";
+import {
+  WalletSourcePicker,
+  type WalletSource,
+} from "@/components/trade/WalletSourcePicker";
+
+// CAIP-2 chain ID for Solana mainnet-beta — required by Privy's RPC.
+const SOLANA_CAIP2 = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
 
 // LI.FI uses numeric ids for every chain. Solana's id is this constant.
 const SOLANA_CHAIN_ID = 1151111081099710 as const;
@@ -290,17 +299,41 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
   // tight (single signature) so it keeps the inline CTA label.
   const [evmProgress, setEvmProgress] = useState<EvmProgressState | null>(null);
 
-  // EVM hooks (active whenever source is an EVM chain).
+  // Wallet source — Vision Wallet is the recommended default. External is
+  // available for users who want full self-custody control, or who need EVM
+  // source bridges (Vision Wallet doesn't yet support EVM source bridges due
+  // to the per-chain switching + ERC-20 approval flow).
+  const [walletSource, setWalletSource] = useState<WalletSource>("vision");
+
+  // EVM hooks (active whenever source is an EVM chain AND user picked external).
   const { address: evmAddress, isConnected: evmConnected } = useAccount();
   const { sendBridgeTx } = useEvmBridge();
+  const visionWallet = useVisionWallet();
+  const visionSigner = useVisionWalletSigner();
 
   const fromIsEvm = fromChain?.chainType === "EVM";
   const fromIsSvm = fromChain?.chainType === "SVM" || fromChain?.id === SOLANA_CHAIN_ID;
-  const fromAddress = useMemo(() => {
+
+  // External-wallet source address (the original behaviour).
+  const externalFromAddress = useMemo(() => {
     if (fromIsEvm) return evmConnected && evmAddress ? evmAddress : null;
     if (fromIsSvm) return connected && publicKey ? publicKey.toBase58() : null;
     return null;
   }, [fromIsEvm, fromIsSvm, evmConnected, evmAddress, connected, publicKey]);
+
+  // Vision Wallet source address on the right chain family.
+  const visionFromAddress = useMemo(() => {
+    if (fromIsEvm) return visionWallet.evmAddress ?? null;
+    if (fromIsSvm) return visionWallet.solanaAddress ?? null;
+    return null;
+  }, [fromIsEvm, fromIsSvm, visionWallet.evmAddress, visionWallet.solanaAddress]);
+
+  // Vision Wallet currently does NOT support EVM source bridges (ERC-20
+  // approval + per-chain switch flow not yet wired through Privy RPC).
+  const visionEvmUnsupported = walletSource === "vision" && fromIsEvm;
+
+  // The address we'll actually quote/build/sign against.
+  const fromAddress = walletSource === "vision" ? visionFromAddress : externalFromAddress;
 
   // 1s ticker while bridging so the countdown label re-renders every second.
   const [nowTick, setNowTick] = useState(() => Date.now());
@@ -377,11 +410,18 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
   });
 
   useEffect(() => {
-    // Solana balance branch (RPC parsed token accounts).
-    if (fromIsSvm && connected && publicKey && fromToken && fromToken.chainId === SOLANA_CHAIN_ID) {
+    // Solana balance branch (RPC parsed token accounts) — scoped to whichever
+    // wallet is selected (Vision Wallet OR external).
+    if (fromIsSvm && fromAddress && fromToken && fromToken.chainId === SOLANA_CHAIN_ID) {
       let cancelled = false;
       setFromBalance(null);
-      const owner = new PublicKey(publicKey.toBase58());
+      let owner: PublicKey;
+      try {
+        owner = new PublicKey(fromAddress);
+      } catch {
+        setFromBalance(null);
+        return;
+      }
       (async () => {
         try {
           const isNative =
@@ -438,7 +478,7 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
 
     setFromBalance(null);
   }, [
-    fromIsSvm, fromIsEvm, connected, publicKey, evmConnected, evmAddress,
+    fromIsSvm, fromIsEvm, fromAddress, evmConnected, evmAddress,
     fromToken, fromChain?.id, connection, evmNativeBalance,
   ]);
 
@@ -574,6 +614,13 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
 
       // ============ EVM source path ============
       if (fromIsEvm) {
+        // Vision Wallet doesn't yet support EVM source bridges (per-chain
+        // switch + ERC-20 approval flow not wired through Privy RPC).
+        if (walletSource === "vision") {
+          throw new Error(
+            "Bridging from EVM with Vision Wallet is coming soon. For now, switch to External wallet (or use Solana as the source).",
+          );
+        }
         const txReq = built.transactionRequest;
         if (!txReq?.to || !txReq?.data) {
           throw new Error("Bridge route returned no EVM transaction.");
@@ -613,7 +660,6 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
           throw e;
         }
 
-        const explorer = `https://etherscan.io/tx/${sourceTxHash}`; // overridden per-chain below if available
         const sourceExplorer = buildExplorerUrl(Number(fromChain.id), sourceTxHash);
 
         setPhase({
@@ -636,43 +682,67 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
         return;
       }
 
-      // ============ Solana source path (existing) ============
-      if (!signTransaction || !publicKey) throw new Error("Connect your Solana wallet first.");
+      // ============ Solana source path ============
       const txB64 = built.solanaTransaction ?? built.transactionRequest?.data;
       if (!txB64) throw new Error("Bridge route returned no Solana transaction");
 
-      setPhase({ name: "awaiting_signature" });
-      const txBytes = Uint8Array.from(atob(txB64), (c) => c.charCodeAt(0));
-      const tx = VersionedTransaction.deserialize(txBytes);
+      let signature: string;
 
-      let signed: VersionedTransaction;
-      try {
-        signed = await signTransaction(tx);
-      } catch {
-        if (mounted.current) setPhase({
-          name: "cancelled",
-          fromAmountUi: numericAmount,
-          fromSymbol: fromToken.symbol,
-          toAmountUi: outAmountUi,
-          toSymbol: toToken.symbol,
+      if (walletSource === "vision") {
+        // ---- Vision Wallet path: Privy server signs + broadcasts.
+        // The 1% LiFi integrator fee is already baked into the route by
+        // bridge-build — do NOT bypass it.
+        if (!visionWallet.solanaAddress) {
+          throw new Error("Create your Vision Wallet first.");
+        }
+        setPhase({ name: "awaiting_signature" });
+        const result = await visionSigner.signAndSend({
+          chain: "solana",
+          caip2: SOLANA_CAIP2,
+          transaction: txB64, // already base64-serialized
+          method: "signAndSendTransaction",
         });
-        return;
-      }
+        if (!result.hash) throw new Error("No signature returned from Vision Wallet");
+        signature = result.hash;
+      } else {
+        // ---- External wallet path (existing behaviour).
+        if (!signTransaction || !publicKey) {
+          throw new Error("Connect your Solana wallet first.");
+        }
+        setPhase({ name: "awaiting_signature" });
+        const txBytes = Uint8Array.from(atob(txB64), (c) => c.charCodeAt(0));
+        const tx = VersionedTransaction.deserialize(txBytes);
 
-      setPhase({ name: "submitting" });
-      const signedB64 = btoa(String.fromCharCode(...signed.serialize()));
-      const submitted = await supaPost("tx-submit", {
-        signedTransaction: signedB64,
-        kind: "bridge",
-        valueUsd: quote.fromAmountUsd ?? quote.toAmountUsd ?? null,
-        inputMint: fromToken.address,
-        outputMint: toToken.address,
-        inputAmount: numericAmount,
-        outputAmount: outAmountUi,
-        walletAddress: publicKey.toBase58(),
-      });
-      const signature = submitted.signature as string;
-      if (!signature) throw new Error("No signature returned from submit");
+        let signed: VersionedTransaction;
+        try {
+          signed = await signTransaction(tx);
+        } catch {
+          if (mounted.current) setPhase({
+            name: "cancelled",
+            fromAmountUi: numericAmount,
+            fromSymbol: fromToken.symbol,
+            toAmountUi: outAmountUi,
+            toSymbol: toToken.symbol,
+          });
+          return;
+        }
+
+        setPhase({ name: "submitting" });
+        const signedB64 = btoa(String.fromCharCode(...signed.serialize()));
+        const submitted = await supaPost("tx-submit", {
+          signedTransaction: signedB64,
+          kind: "bridge",
+          valueUsd: quote.fromAmountUsd ?? quote.toAmountUsd ?? null,
+          inputMint: fromToken.address,
+          outputMint: toToken.address,
+          inputAmount: numericAmount,
+          outputAmount: outAmountUi,
+          walletAddress: publicKey.toBase58(),
+        });
+        const sig = submitted.signature as string;
+        if (!sig) throw new Error("No signature returned from submit");
+        signature = sig;
+      }
 
       const sourceExplorer = `https://solscan.io/tx/${signature}`;
       setPhase({
@@ -708,7 +778,11 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
           : p,
       );
     }
-  }, [quote, fromToken, toToken, fromChain, fromAddress, fromIsEvm, sendBridgeTx, signTransaction, publicKey, numericAmount]);
+  }, [
+    quote, fromToken, toToken, fromChain, fromAddress, fromIsEvm,
+    sendBridgeTx, signTransaction, publicKey, numericAmount,
+    walletSource, visionWallet.solanaAddress, visionSigner,
+  ]);
 
   const reset = () => {
     setAmount("");
@@ -819,7 +893,7 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
   if (phase.name === "building") busyLabel = "Building transaction…";
   else if (phase.name === "switching_chain") busyLabel = "Switch network in wallet…";
   else if (phase.name === "approving") busyLabel = "Approving token…";
-  else if (phase.name === "awaiting_signature") busyLabel = "Approve in wallet…";
+  else if (phase.name === "awaiting_signature") busyLabel = walletSource === "vision" ? "Signing with Vision Wallet…" : "Approve in wallet…";
   else if (phase.name === "submitting") busyLabel = "Submitting…";
   else if (phase.name === "bridging") {
     const elapsedSec = Math.max(0, (nowTick - phase.startedAt) / 1000);
@@ -840,12 +914,21 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
   // CTA needs to know whether the *source-chain* wallet is connected.
   const sourceConnected = !!fromAddress;
 
-  let ctaLabel = "Bridge";
+  let ctaLabel = walletSource === "vision" ? "Bridge with Vision Wallet" : "Bridge";
   let ctaDisabled = false;
   let ctaAction: (() => void) | null = handleBridge;
   if (!fromChain || !fromToken) {
     ctaLabel = "Select source chain";
     ctaDisabled = true; ctaAction = null;
+  } else if (visionEvmUnsupported) {
+    ctaLabel = "EVM source unavailable for Vision Wallet";
+    ctaDisabled = true; ctaAction = null;
+  } else if (walletSource === "vision" && fromIsSvm && !visionWallet.solanaAddress) {
+    ctaLabel = visionWallet.working ? "Creating Vision Wallet…" : "Create Vision Wallet";
+    ctaDisabled = visionWallet.working;
+    ctaAction = visionWallet.working
+      ? null
+      : () => { visionWallet.createWallet().catch(() => { /* hook toasts */ }); };
   } else if (!sourceConnected) {
     ctaLabel = fromIsEvm ? "Connect EVM wallet" : "Connect Solana wallet";
     ctaAction = null; // The Connect button is rendered separately below.
@@ -899,6 +982,32 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
         </div>
 
         <div className="space-y-3 p-4">
+          {/* Wallet source picker — Vision Wallet recommended */}
+          <WalletSourcePicker
+            value={walletSource}
+            onChange={setWalletSource}
+            visionAvailable={
+              fromIsEvm ? !!visionWallet.evmAddress : !!visionWallet.solanaAddress
+            }
+            externalAvailable={!!externalFromAddress}
+            onCreateVision={() => {
+              visionWallet.createWallet().catch(() => { /* hook toasts */ });
+            }}
+            onConnectExternal={() => {
+              if (fromIsSvm) setVisible(true);
+              // EVM connect is handled by the inline RainbowKit button below.
+            }}
+          />
+
+          {visionEvmUnsupported && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+              <p className="font-mono text-[10px] leading-relaxed text-amber-200">
+                Vision Wallet currently only supports Solana as the source chain.
+                Switch source to Solana, or pick External wallet to bridge from EVM.
+              </p>
+            </div>
+          )}
+
           {/* From row — chain + token picker both unlocked */}
           <PanelRow
             label="From"
