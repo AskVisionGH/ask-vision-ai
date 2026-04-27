@@ -604,6 +604,7 @@ export const useRouteExecutor = () => {
       await waitForSolanaConfirm(signature);
 
       void supaPost("record-swap-fee", {
+        chain: "solana",
         signature,
         valueUsd: quote.input?.valueUsd ?? quote.output?.valueUsd ?? null,
         feeUsd: quote.platformFee?.valueUsd ?? null,
@@ -612,6 +613,7 @@ export const useRouteExecutor = () => {
         feeMint: toToken.address,
         inputMint: fromToken.address,
         outputMint: toToken.address,
+        bridgeSignature: bridgeSignature ?? null,
       }).catch((e) => console.warn("record-swap-fee failed:", e));
 
       return { hash: signature, explorer };
