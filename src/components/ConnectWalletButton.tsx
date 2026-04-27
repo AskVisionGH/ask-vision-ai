@@ -305,6 +305,23 @@ export const ConnectWalletButton = ({ className, size = "lg" }: Props) => {
   }
 
   // ---------- 3. Nothing yet — connect or create ----------
+  // While the Vision Wallet record is still loading for the first time,
+  // render a stable neutral placeholder instead of the "Connect wallet" CTA.
+  // Otherwise navigating between pages would briefly flash this CTA before
+  // the Vision pill resolves.
+  if (vision.loading && !hasVision && !externalConnected) {
+    return (
+      <div
+        aria-hidden
+        className={cn(
+          "h-10 w-40 rounded-full border border-border/60 bg-secondary/40 animate-pulse",
+          size === "lg" && "h-11 w-48",
+          className,
+        )}
+      />
+    );
+  }
+
   return (
     <>
       <Button
