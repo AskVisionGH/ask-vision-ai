@@ -310,7 +310,7 @@ export function WalletActivityPanel() {
       )}
 
       {/* Infinite-scroll sentinel + manual fallback */}
-      {hasMore && chainFilter === "all" && (
+      {hasMore && !filtersActive && (
         <div ref={sentinelRef} className="flex items-center justify-center py-4">
           {loadingMore ? (
             <span className="flex items-center gap-2 text-[11px] text-muted-foreground">
@@ -326,7 +326,7 @@ export function WalletActivityPanel() {
           )}
         </div>
       )}
-      {hasMore && chainFilter !== "all" && (
+      {hasMore && filtersActive && (
         <p className="py-4 text-center text-[10px] text-muted-foreground/70">
           Filter is on — switch to All to load older events.
         </p>
