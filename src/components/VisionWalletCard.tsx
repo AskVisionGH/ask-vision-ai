@@ -3,7 +3,8 @@ import { useVisionWallet } from "@/hooks/useVisionWallet";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Check, Copy, Loader2, Wallet } from "lucide-react";
+import { ArrowDownToLine, Check, Copy, Loader2, Wallet } from "lucide-react";
+import { FundVisionWalletDialog } from "@/components/wallet/FundVisionWalletDialog";
 import {
   AccordionContent,
   AccordionItem,
