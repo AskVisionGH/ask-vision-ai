@@ -152,6 +152,17 @@ serve(async (req) => {
     if (looksLikeMint || knownSolanaMint) {
       const expected = (knownSolanaMint ?? cleaned).toLowerCase();
       pairs = pairs.filter((p: any) => String(p.baseToken?.address ?? "").toLowerCase() === expected);
+    } else {
+      // Ticker search: DexScreener's /search is fuzzy and matches pair names,
+      // descriptions, and quote tokens too — so "HENRY" can return pairs whose
+      // BASE is something else entirely (e.g. $LBTC paired against a meme token
+      // that contains "henry" in its name). Strictly require baseToken.symbol
+      // to match the requested ticker so we never chart the wrong token.
+      const wantSymbol = upper;
+      const symbolMatches = pairs.filter(
+        (p: any) => String(p.baseToken?.symbol ?? "").toUpperCase() === wantSymbol,
+      );
+      if (symbolMatches.length > 0) pairs = symbolMatches;
     }
 
     if (pairs.length === 0) return json({ error: `No token found for "${cleaned}"` }, 404);
