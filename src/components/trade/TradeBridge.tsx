@@ -614,6 +614,13 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
 
       // ============ EVM source path ============
       if (fromIsEvm) {
+        // Vision Wallet doesn't yet support EVM source bridges (per-chain
+        // switch + ERC-20 approval flow not wired through Privy RPC).
+        if (walletSource === "vision") {
+          throw new Error(
+            "Bridging from EVM with Vision Wallet is coming soon. For now, switch to External wallet (or use Solana as the source).",
+          );
+        }
         const txReq = built.transactionRequest;
         if (!txReq?.to || !txReq?.data) {
           throw new Error("Bridge route returned no EVM transaction.");
@@ -653,7 +660,6 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
           throw e;
         }
 
-        const explorer = `https://etherscan.io/tx/${sourceTxHash}`; // overridden per-chain below if available
         const sourceExplorer = buildExplorerUrl(Number(fromChain.id), sourceTxHash);
 
         setPhase({
@@ -676,43 +682,67 @@ export const TradeBridge = ({ tab, onTabChange }: TradeBridgeProps) => {
         return;
       }
 
-      // ============ Solana source path (existing) ============
-      if (!signTransaction || !publicKey) throw new Error("Connect your Solana wallet first.");
+      // ============ Solana source path ============
       const txB64 = built.solanaTransaction ?? built.transactionRequest?.data;
       if (!txB64) throw new Error("Bridge route returned no Solana transaction");
 
-      setPhase({ name: "awaiting_signature" });
-      const txBytes = Uint8Array.from(atob(txB64), (c) => c.charCodeAt(0));
-      const tx = VersionedTransaction.deserialize(txBytes);
+      let signature: string;
 
-      let signed: VersionedTransaction;
-      try {
-        signed = await signTransaction(tx);
-      } catch {
-        if (mounted.current) setPhase({
-          name: "cancelled",
-          fromAmountUi: numericAmount,
-          fromSymbol: fromToken.symbol,
-          toAmountUi: outAmountUi,
-          toSymbol: toToken.symbol,
+      if (walletSource === "vision") {
+        // ---- Vision Wallet path: Privy server signs + broadcasts.
+        // The 1% LiFi integrator fee is already baked into the route by
+        // bridge-build — do NOT bypass it.
+        if (!visionWallet.solanaAddress) {
+          throw new Error("Create your Vision Wallet first.");
+        }
+        setPhase({ name: "awaiting_signature" });
+        const result = await visionSigner.signAndSend({
+          chain: "solana",
+          caip2: SOLANA_CAIP2,
+          transaction: txB64, // already base64-serialized
+          method: "signAndSendTransaction",
         });
-        return;
-      }
+        if (!result.hash) throw new Error("No signature returned from Vision Wallet");
+        signature = result.hash;
+      } else {
+        // ---- External wallet path (existing behaviour).
+        if (!signTransaction || !publicKey) {
+          throw new Error("Connect your Solana wallet first.");
+        }
+        setPhase({ name: "awaiting_signature" });
+        const txBytes = Uint8Array.from(atob(txB64), (c) => c.charCodeAt(0));
+        const tx = VersionedTransaction.deserialize(txBytes);
 
-      setPhase({ name: "submitting" });
-      const signedB64 = btoa(String.fromCharCode(...signed.serialize()));
-      const submitted = await supaPost("tx-submit", {
-        signedTransaction: signedB64,
-        kind: "bridge",
-        valueUsd: quote.fromAmountUsd ?? quote.toAmountUsd ?? null,
-        inputMint: fromToken.address,
-        outputMint: toToken.address,
-        inputAmount: numericAmount,
-        outputAmount: outAmountUi,
-        walletAddress: publicKey.toBase58(),
-      });
-      const signature = submitted.signature as string;
-      if (!signature) throw new Error("No signature returned from submit");
+        let signed: VersionedTransaction;
+        try {
+          signed = await signTransaction(tx);
+        } catch {
+          if (mounted.current) setPhase({
+            name: "cancelled",
+            fromAmountUi: numericAmount,
+            fromSymbol: fromToken.symbol,
+            toAmountUi: outAmountUi,
+            toSymbol: toToken.symbol,
+          });
+          return;
+        }
+
+        setPhase({ name: "submitting" });
+        const signedB64 = btoa(String.fromCharCode(...signed.serialize()));
+        const submitted = await supaPost("tx-submit", {
+          signedTransaction: signedB64,
+          kind: "bridge",
+          valueUsd: quote.fromAmountUsd ?? quote.toAmountUsd ?? null,
+          inputMint: fromToken.address,
+          outputMint: toToken.address,
+          inputAmount: numericAmount,
+          outputAmount: outAmountUi,
+          walletAddress: publicKey.toBase58(),
+        });
+        const sig = submitted.signature as string;
+        if (!sig) throw new Error("No signature returned from submit");
+        signature = sig;
+      }
 
       const sourceExplorer = `https://solscan.io/tx/${signature}`;
       setPhase({
