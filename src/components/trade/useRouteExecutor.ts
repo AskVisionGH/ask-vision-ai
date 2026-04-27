@@ -357,6 +357,7 @@ export const useRouteExecutor = () => {
           fromAddress: toAddress,
           slippageBps,
           dynamicSlippage,
+          bridgeSignature: bridgeHash,
           onStatus,
         });
         legHashes.push({ chain: intermediate.chain, hash: swapHash, explorer: swapExplorer });
@@ -495,6 +496,7 @@ export const useRouteExecutor = () => {
           fromAddress: route.recipientAddress,
           slippageBps,
           dynamicSlippage,
+          bridgeSignature: route.bridgeHash,
           onStatus,
         });
 
@@ -542,11 +544,15 @@ export const useRouteExecutor = () => {
     fromAddress: string;
     slippageBps: number;
     dynamicSlippage: boolean;
+    /** When this swap is the destination leg of a bridge_then_swap (or a
+     *  resume of one), pass the bridge tx hash so the recorded fee row can
+     *  be grouped with its bridge in the admin view. */
+    bridgeSignature?: string;
     onStatus: (s: ExecutorStatus) => void;
   };
 
   async function runSwapLeg(args: SwapLegArgs): Promise<{ hash: string; explorer: string }> {
-    const { legIndex, chain, quote, fromToken, toToken, walletSource, fromAddress, slippageBps, dynamicSlippage, onStatus } = args;
+    const { legIndex, chain, quote, fromToken, toToken, walletSource, fromAddress, slippageBps, dynamicSlippage, bridgeSignature, onStatus } = args;
     onStatus({ kind: "building", legIndex, legKind: "swap" });
 
     if (isSol(chain)) {
@@ -600,6 +606,7 @@ export const useRouteExecutor = () => {
       await waitForSolanaConfirm(signature);
 
       void supaPost("record-swap-fee", {
+        chain: "solana",
         signature,
         valueUsd: quote.input?.valueUsd ?? quote.output?.valueUsd ?? null,
         feeUsd: quote.platformFee?.valueUsd ?? null,
@@ -608,6 +615,7 @@ export const useRouteExecutor = () => {
         feeMint: toToken.address,
         inputMint: fromToken.address,
         outputMint: toToken.address,
+        bridgeSignature: bridgeSignature ?? null,
       }).catch((e) => console.warn("record-swap-fee failed:", e));
 
       return { hash: signature, explorer };
@@ -649,6 +657,30 @@ export const useRouteExecutor = () => {
     });
 
     const explorer = explorerUrl(chain, hash);
+
+    // Record the 1% integrator fee that 0x paid into the EVM treasury inside
+    // this swap tx. We rely on `built.platformFee*` echoes from evm-swap-build
+    // (which configures the 0x router with swapFeeRecipient = EVM_TREASURY).
+    // For multi-leg trades, `bridgeSignature` ties this fee to its bridge in
+    // the admin view.
+    const feeAtomic = built.platformFeeAtomic ? Number(built.platformFeeAtomic) : null;
+    const feeAmountUi = feeAtomic != null && feeAtomic > 0
+      ? feeAtomic / Math.pow(10, toToken.decimals)
+      : null;
+    void supaPost("record-swap-fee", {
+      chain: "evm",
+      chainId,
+      signature: hash,
+      valueUsd: quote.input?.valueUsd ?? quote.output?.valueUsd ?? null,
+      feeUsd: quote.platformFee?.valueUsd ?? null,
+      feeAmountUi,
+      feeSymbol: quote.platformFee?.symbol ?? toToken.symbol,
+      feeMint: built.platformFeeToken ?? toToken.address,
+      inputMint: fromToken.address,
+      outputMint: toToken.address,
+      bridgeSignature: bridgeSignature ?? null,
+    }).catch((e) => console.warn("record-swap-fee (evm) failed:", e));
+
     return { hash, explorer };
   }
 

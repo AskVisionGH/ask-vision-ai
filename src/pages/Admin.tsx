@@ -1329,9 +1329,25 @@ const TreasuryTab = () => {
                 </TableRow>
               ) : null}
               {filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((f) => {
+                // EVM fees from EVM-chain swaps live under chain='ethereum'
+                // but carry the actual chainId in metadata so we can build a
+                // chain-correct explorer link (Base, Arbitrum, etc.).
+                const evmChainId = (f.metadata as { chainId?: number } | null)?.chainId;
+                const evmExplorers: Record<number, string> = {
+                  1: "https://etherscan.io/tx/",
+                  10: "https://optimistic.etherscan.io/tx/",
+                  56: "https://bscscan.com/tx/",
+                  137: "https://polygonscan.com/tx/",
+                  8453: "https://basescan.org/tx/",
+                  42161: "https://arbiscan.io/tx/",
+                  43114: "https://snowtrace.io/tx/",
+                  59144: "https://lineascan.build/tx/",
+                  534352: "https://scrollscan.com/tx/",
+                };
                 const explorer = f.chain === "solana"
                   ? `https://solscan.io/tx/${f.signature}`
-                  : `https://etherscan.io/tx/${f.signature}`;
+                  : `${evmChainId ? evmExplorers[evmChainId] ?? "https://etherscan.io/tx/" : "https://etherscan.io/tx/"}${f.signature}`;
+                const bridgeSig = (f.metadata as { bridgeSignature?: string } | null)?.bridgeSignature;
                 return (
                   <TableRow key={f.id}>
                     <TableCell className="text-xs">{format(new Date(f.block_time), "MMM d HH:mm")}</TableCell>
@@ -1347,7 +1363,16 @@ const TreasuryTab = () => {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="text-xs capitalize">{f.chain}</Badge>
+                      <div className="flex items-center gap-1">
+                        <Badge variant="outline" className="text-xs capitalize">
+                          {f.chain === "ethereum" && evmChainId ? `EVM · ${evmChainId}` : f.chain}
+                        </Badge>
+                        {bridgeSig && (
+                          <Badge variant="outline" className="text-[10px] text-muted-foreground" title={`Bridge tx: ${bridgeSig}`}>
+                            via bridge
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <Badge variant="secondary" className="text-xs">{SOURCE_LABELS[f.source_kind]}</Badge>
