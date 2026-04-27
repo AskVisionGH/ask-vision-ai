@@ -236,7 +236,7 @@ export function WalletActivityPanel() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex flex-wrap gap-1.5">
           {(["all", "solana", "evm"] as const).map((f) => (
@@ -267,6 +267,23 @@ export function WalletActivityPanel() {
             <RefreshCw className="h-3.5 w-3.5" />
           )}
         </Button>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        {(["all", "swap", "bridge", "transfer", "deposit"] as const).map((k) => (
+          <button
+            key={k}
+            onClick={() => setKindFilter(k)}
+            className={cn(
+              "ease-vision rounded-full border px-2.5 py-0.5 text-[10px] uppercase tracking-wider",
+              kindFilter === k
+                ? "border-primary/60 bg-primary/10 text-foreground"
+                : "border-border/60 bg-secondary/30 text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {k}
+          </button>
+        ))}
       </div>
 
       {error && <p className="text-xs text-destructive">{error}</p>}
