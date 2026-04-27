@@ -376,8 +376,97 @@ export const TradeLadder = ({ expirySeconds }: Props) => {
 
   // ---- Submit: sign each rung sequentially ----
   const placeLadder = useCallback(async () => {
-    if (!connected || !publicKey || !signTransaction) return;
+    if (!signer.ready || !activePayerAddress) return;
     if (validation || rungs.length === 0) return;
+
+    try {
+      setPhase({ name: "preparing" });
+      const total = rungs.length;
+      const expiredAt = expirySeconds
+        ? Math.floor(Date.now() / 1000) + expirySeconds
+        : null;
+
+      let firstSig: string | null = null;
+      let placed = 0;
+
+      for (let i = 0; i < rungs.length; i++) {
+        const rung = rungs[i];
+        const inputMint = spendToken.address;
+        const outputMint = recvToken.address;
+        const makingAmount = Math.floor(rung.spendUi * Math.pow(10, spendToken.decimals));
+        const takingAmount = Math.floor(rung.recvUi * Math.pow(10, recvToken.decimals));
+        if (makingAmount <= 0 || takingAmount <= 0) {
+          throw new Error(`Rung ${i + 1} amount too small`);
+        }
+
+        const built = await supaPost("limit-order-build", {
+          maker: activePayerAddress,
+          inputMint,
+          outputMint,
+          makingAmount: String(makingAmount),
+          takingAmount: String(takingAmount),
+          expiredAt,
+        });
+        const requestId = built?.requestId as string | undefined;
+        const txB64 = built?.transaction as string | undefined;
+        if (!requestId || !txB64) throw new Error(`Rung ${i + 1}: build failed`);
+
+        if (!mounted.current) return;
+        setPhase({ name: "signing", current: i + 1, total });
+        const txBytes = Uint8Array.from(atob(txB64), (c) => c.charCodeAt(0));
+        const tx = VersionedTransaction.deserialize(txBytes);
+
+        // Sign-only — Jupiter Trigger requires execute via their endpoint.
+        let signedB64: string;
+        try {
+          signedB64 = await signer.signOnly(tx);
+        } catch {
+          if (mounted.current) {
+            setPhase({
+              name: "error",
+              message:
+                placed > 0
+                  ? `Cancelled at rung ${i + 1}. ${placed} rung${placed === 1 ? "" : "s"} placed successfully.`
+                  : "Cancelled — try again.",
+              placedSoFar: placed,
+            });
+          }
+          return;
+        }
+
+        if (!mounted.current) return;
+        setPhase({ name: "submitting", current: i + 1, total });
+        const exec = await supaPost("limit-order-execute", {
+          requestId,
+          signedTransaction: signedB64,
+        });
+        const sig = exec?.signature as string | undefined;
+        const status = exec?.status as string | undefined;
+        if (!sig) throw new Error(`Rung ${i + 1}: ${exec?.error ?? "no signature"}`);
+        if (status && status.toLowerCase() === "failed") {
+          throw new Error(`Rung ${i + 1}: ${exec?.error ?? "submission failed"}`);
+        }
+        if (firstSig === null) firstSig = sig;
+        placed++;
+      }
+
+      if (!mounted.current) return;
+      setPhase({ name: "success", placed, total, firstSig });
+      setOrdersRefreshKey((x) => x + 1);
+    } catch (e) {
+      if (!mounted.current) return;
+      const placedNow = phase.name === "submitting" || phase.name === "signing"
+        ? Math.max(0, phase.current - 1) : 0;
+      setPhase({
+        name: "error",
+        message: e instanceof Error ? e.message : "Something went wrong.",
+        placedSoFar: placedNow,
+      });
+    }
+  }, [
+    signer, activePayerAddress, validation, rungs, expirySeconds,
+    spendToken, recvToken, phase,
+  ]);
 
     try {
       setPhase({ name: "preparing" });
