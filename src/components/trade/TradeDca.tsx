@@ -25,8 +25,18 @@ import {
   type TokenMeta,
 } from "@/components/trade/TokenPickerDialog";
 import { DcaOpenOrders } from "@/components/trade/DcaOpenOrders";
+import {
+  WalletSourcePicker,
+  type WalletSource,
+} from "@/components/trade/WalletSourcePicker";
+import { FundVisionWalletDialog } from "@/components/wallet/FundVisionWalletDialog";
+import { useTradeSigner } from "@/hooks/useTradeSigner";
+import { useVisionWallet } from "@/hooks/useVisionWallet";
+import { useVisionWalletSigner } from "@/hooks/useVisionWalletSigner";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+
+const SOLANA_CAIP2 = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
 
 // Time-based DCA via Jupiter Recurring v1.
 // User signs the create transaction with their own wallet (no vault).
@@ -134,9 +144,20 @@ export const TradeDca = () => {
   );
   const [outputUsdPrice, setOutputUsdPrice] = useState<number | null>(null);
 
-  const { publicKey, connected, signTransaction } = useWallet();
+  const [walletSource, setWalletSource] = useState<WalletSource>("vision");
+  const [fundOpen, setFundOpen] = useState(false);
+
+  const { publicKey, connected } = useWallet();
   const { setVisible } = useWalletModal();
+  const visionWallet = useVisionWallet();
+  const visionSigner = useVisionWalletSigner();
+  const signer = useTradeSigner(walletSource);
   const mounted = useRef(true);
+
+  const activePayerAddress =
+    walletSource === "vision"
+      ? visionWallet.solanaAddress
+      : publicKey?.toBase58() ?? null;
 
   useEffect(() => {
     mounted.current = true;
@@ -248,7 +269,7 @@ export const TradeDca = () => {
 
   // ---- Submit ----
   const placeDca = useCallback(async () => {
-    if (!connected || !publicKey || !signTransaction) return;
+    if (!signer.ready || !activePayerAddress) return;
     if (validation) return;
     try {
       setPhase({ name: "preparing" });
@@ -256,8 +277,11 @@ export const TradeDca = () => {
       if (inAmountAtomic <= 0) throw new Error("Amount too small");
 
       // ---- Step 1: Collect 1% upfront platform fee ----
+      // For Vision Wallet: sign + broadcast in one shot via Privy.
+      // For external wallets: sign locally, then submit via tx-submit so
+      // we get the existing fee accounting / treasury hooks.
       const feeBuilt = await supaPost("dca-fee-build", {
-        user: publicKey.toBase58(),
+        user: activePayerAddress,
         inputMint: inputToken.address,
         totalAmountAtomic: String(inAmountAtomic),
         decimals: inputToken.decimals,
@@ -268,30 +292,50 @@ export const TradeDca = () => {
       setPhase({ name: "awaiting_fee_signature" });
       const feeBytes = Uint8Array.from(atob(feeTxB64), (c) => c.charCodeAt(0));
       const feeTx = Transaction.from(feeBytes);
-      let signedFee: Transaction;
+
       try {
-        signedFee = await signTransaction(feeTx);
+        if (walletSource === "vision") {
+          // Privy signs + broadcasts. We still log the transfer via tx-submit
+          // for treasury accounting parity.
+          setPhase({ name: "submitting_fee" });
+          const res = await visionSigner.signAndSend({
+            chain: "solana",
+            caip2: SOLANA_CAIP2,
+            transaction: feeTxB64,
+            method: "signAndSendTransaction",
+          });
+          const feeSig = res.hash ?? res.signature ?? null;
+          if (feeSig) {
+            // Best-effort treasury logging (don't fail the whole flow).
+            await supaPost("tx-submit", {
+              signature: feeSig,
+              kind: "transfer",
+              inputMint: inputToken.address,
+              recipient: "treasury",
+              walletAddress: activePayerAddress,
+              metadata: { source: "dca_platform_fee", wallet_source: "vision" },
+            }).catch(() => { /* logging is best-effort */ });
+          }
+        } else {
+          const signedFee = await signer.signOnly(feeTx);
+          setPhase({ name: "submitting_fee" });
+          await supaPost("tx-submit", {
+            signedTransaction: signedFee,
+            kind: "transfer",
+            inputMint: inputToken.address,
+            recipient: "treasury",
+            walletAddress: activePayerAddress,
+            metadata: { source: "dca_platform_fee" },
+          });
+        }
       } catch {
         if (mounted.current) setPhase({ name: "cancelled" });
         return;
       }
-      const signedFeeB64 = btoa(
-        String.fromCharCode(...signedFee.serialize({ requireAllSignatures: true })),
-      );
-
-      setPhase({ name: "submitting_fee" });
-      await supaPost("tx-submit", {
-        signedTransaction: signedFeeB64,
-        kind: "transfer",
-        inputMint: inputToken.address,
-        recipient: "treasury",
-        walletAddress: publicKey.toBase58(),
-        metadata: { source: "dca_platform_fee" },
-      });
 
       // ---- Step 2: Build the Jupiter recurring create transaction ----
       const created = await supaPost("recurring-create", {
-        user: publicKey.toBase58(),
+        user: activePayerAddress,
         inputMint: inputToken.address,
         outputMint: outputToken.address,
         inAmount: String(inAmountAtomic),
@@ -307,14 +351,16 @@ export const TradeDca = () => {
       setPhase({ name: "awaiting_signature" });
       const txBytes = Uint8Array.from(atob(txB64), (c) => c.charCodeAt(0));
       const tx = VersionedTransaction.deserialize(txBytes);
-      let signed: VersionedTransaction;
+
+      // Jupiter Recurring requires execute-via-Jupiter, so we sign-only
+      // for both wallet sources and POST to recurring-execute.
+      let signedB64: string;
       try {
-        signed = await signTransaction(tx);
+        signedB64 = await signer.signOnly(tx);
       } catch {
         if (mounted.current) setPhase({ name: "cancelled" });
         return;
       }
-      const signedB64 = btoa(String.fromCharCode(...signed.serialize()));
 
       setPhase({ name: "submitting" });
       const executed = await supaPost("recurring-execute", {
@@ -334,9 +380,10 @@ export const TradeDca = () => {
       });
     }
   }, [
-    connected,
-    publicKey,
-    signTransaction,
+    signer,
+    visionSigner,
+    walletSource,
+    activePayerAddress,
     validation,
     numericTotal,
     inputToken,
@@ -442,15 +489,16 @@ export const TradeDca = () => {
     phase.name === "submitting_fee" ||
     phase.name === "awaiting_signature" ||
     phase.name === "submitting";
+  const isVision = walletSource === "vision";
   const busyLabel =
     phase.name === "preparing"
       ? "Preparing fee…"
       : phase.name === "awaiting_fee_signature"
-        ? "Approve fee in wallet…"
+        ? isVision ? "Signing fee with Vision Wallet…" : "Approve fee in wallet…"
         : phase.name === "submitting_fee"
           ? "Sending fee…"
           : phase.name === "awaiting_signature"
-            ? "Approve DCA in wallet…"
+            ? isVision ? "Signing DCA with Vision Wallet…" : "Approve DCA in wallet…"
             : phase.name === "submitting"
               ? "Submitting DCA…"
               : "";
@@ -458,7 +506,13 @@ export const TradeDca = () => {
   let ctaLabel = "Start DCA";
   let ctaDisabled = false;
   let ctaAction: (() => void) | null = placeDca;
-  if (!connected) {
+  if (isVision && !visionWallet.solanaAddress) {
+    ctaLabel = visionWallet.working ? "Creating wallet…" : "Create Vision Wallet";
+    ctaDisabled = visionWallet.working;
+    ctaAction = () => {
+      visionWallet.createWallet().catch(() => { /* hook toasts */ });
+    };
+  } else if (!isVision && !connected) {
     ctaLabel = "Connect wallet";
     ctaAction = () => setVisible(true);
   } else if (validation) {
@@ -483,6 +537,18 @@ export const TradeDca = () => {
   return (
     <TooltipProvider delayDuration={150}>
       <div className="w-full max-w-[440px] space-y-4">
+        {/* Wallet source picker */}
+        <WalletSourcePicker
+          value={walletSource}
+          onChange={setWalletSource}
+          visionAvailable
+          externalAvailable={connected}
+          onCreateVision={() => {
+            visionWallet.createWallet().catch(() => { /* hook toasts */ });
+          }}
+          onConnectExternal={() => setVisible(true)}
+        />
+
         {/* Card */}
         <div className="overflow-hidden rounded-2xl border border-border bg-card/60 shadow-soft backdrop-blur-sm">
           {/* Total to spend */}
@@ -764,6 +830,13 @@ export const TradeDca = () => {
                 ? inputToken.address
                 : undefined
           }
+        />
+
+        {/* Fund Vision Wallet */}
+        <FundVisionWalletDialog
+          open={fundOpen}
+          onOpenChange={setFundOpen}
+          defaultChain="solana"
         />
       </div>
     </TooltipProvider>

@@ -34,6 +34,14 @@ import {
 } from "@/components/trade/TokenPickerDialog";
 import { LimitPriceField } from "@/components/trade/LimitPriceField";
 import { OpenOrdersList } from "@/components/trade/OpenOrdersList";
+import {
+  WalletSourcePicker,
+  type WalletSource,
+} from "@/components/trade/WalletSourcePicker";
+import { FundVisionWalletDialog } from "@/components/wallet/FundVisionWalletDialog";
+import { ArrowDownToLine } from "lucide-react";
+import { useTradeSigner } from "@/hooks/useTradeSigner";
+import { useVisionWallet } from "@/hooks/useVisionWallet";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -149,10 +157,22 @@ export const TradeLimit = ({ tab, onTabChange }: Props) => {
   const [ordersRefreshKey, setOrdersRefreshKey] = useState(0);
   const [confirmInstantFill, setConfirmInstantFill] = useState(false);
 
+  const [walletSource, setWalletSource] = useState<WalletSource>("vision");
+  const [fundOpen, setFundOpen] = useState(false);
+
   const { connection } = useConnection();
-  const { publicKey, connected, signTransaction } = useWallet();
+  const { publicKey, connected } = useWallet();
   const { setVisible } = useWalletModal();
+  const visionWallet = useVisionWallet();
+  const signer = useTradeSigner(walletSource);
   const mounted = useRef(true);
+
+  const activePayerAddress =
+    walletSource === "vision"
+      ? visionWallet.solanaAddress
+      : publicKey?.toBase58() ?? null;
+  const activePayerReady =
+    walletSource === "vision" ? !!visionWallet.solanaAddress : connected;
 
   useEffect(() => {
     mounted.current = true;
@@ -161,14 +181,20 @@ export const TradeLimit = ({ tab, onTabChange }: Props) => {
     };
   }, []);
 
-  // Balance — same logic as TradeSwap.
+  // Balance — scoped to whichever wallet source is active.
   useEffect(() => {
-    if (!connected || !publicKey) {
+    if (!activePayerAddress) {
       setInputBalance(null);
       return;
     }
     let cancelled = false;
-    const owner = new PublicKey(publicKey.toBase58());
+    let owner: PublicKey;
+    try {
+      owner = new PublicKey(activePayerAddress);
+    } catch {
+      setInputBalance(null);
+      return;
+    }
     setInputBalance(null);
     (async () => {
       try {
@@ -192,7 +218,7 @@ export const TradeLimit = ({ tab, onTabChange }: Props) => {
     return () => {
       cancelled = true;
     };
-  }, [connected, publicKey, connection, inputToken.address, phase.name]);
+  }, [activePayerAddress, connection, inputToken.address, phase.name]);
 
   // Probe market rate using a representative amount of the input token.
   // Uses 1 unit; we re-quote whenever the pair changes or refresh tick fires.
@@ -306,7 +332,7 @@ export const TradeLimit = ({ tab, onTabChange }: Props) => {
   const tooSmall = sellUsd != null && sellUsd > 0 && sellUsd < MIN_USD_VALUE;
 
   const placeOrder = useCallback(async () => {
-    if (!connected || !publicKey || !signTransaction) return;
+    if (!signer.ready || !activePayerAddress) return;
     if (numericSell <= 0 || numericPrice <= 0) return;
     const startedAt = Date.now();
     try {
@@ -321,7 +347,7 @@ export const TradeLimit = ({ tab, onTabChange }: Props) => {
       const expiredAt = expirySeconds ? Math.floor(Date.now() / 1000) + expirySeconds : null;
 
       const built = await supaPost("limit-order-build", {
-        maker: publicKey.toBase58(),
+        maker: activePayerAddress,
         inputMint: inputToken.address,
         outputMint: outputToken.address,
         makingAmount: String(makingAmountAtomic),
@@ -336,9 +362,11 @@ export const TradeLimit = ({ tab, onTabChange }: Props) => {
       const txBytes = Uint8Array.from(atob(txB64), (c) => c.charCodeAt(0));
       const tx = VersionedTransaction.deserialize(txBytes);
 
-      let signed: VersionedTransaction;
+      // Sign — Vision Wallet uses Privy server-side, external uses adapter.
+      // Both return base64 signed tx that Jupiter Trigger /execute accepts.
+      let signedB64: string;
       try {
-        signed = await signTransaction(tx);
+        signedB64 = await signer.signOnly(tx);
       } catch {
         if (mounted.current) setPhase({
           name: "cancelled",
@@ -351,7 +379,6 @@ export const TradeLimit = ({ tab, onTabChange }: Props) => {
       }
 
       setPhase({ name: "submitting" });
-      const signedB64 = btoa(String.fromCharCode(...signed.serialize()));
       const exec = await supaPost("limit-order-execute", {
         requestId,
         signedTransaction: signedB64,
@@ -382,9 +409,8 @@ export const TradeLimit = ({ tab, onTabChange }: Props) => {
       setPhase({ name: "error", message: e instanceof Error ? e.message : "Something went wrong." });
     }
   }, [
-    connected,
-    publicKey,
-    signTransaction,
+    signer,
+    activePayerAddress,
     numericSell,
     numericPrice,
     buyAmount,
@@ -485,7 +511,9 @@ export const TradeLimit = ({ tab, onTabChange }: Props) => {
     phase.name === "building"
       ? "Building order…"
       : phase.name === "awaiting_signature"
-        ? "Approve in wallet…"
+        ? walletSource === "vision"
+          ? "Signing with Vision Wallet…"
+          : "Approve in wallet…"
         : phase.name === "submitting"
           ? "Submitting…"
           : "";
@@ -494,7 +522,13 @@ export const TradeLimit = ({ tab, onTabChange }: Props) => {
   let ctaDisabled = false;
   let ctaAction: (() => void) | null = placeOrder;
 
-  if (!connected) {
+  if (walletSource === "vision" && !visionWallet.solanaAddress) {
+    ctaLabel = visionWallet.working ? "Creating wallet…" : "Create Vision Wallet";
+    ctaDisabled = visionWallet.working;
+    ctaAction = () => {
+      visionWallet.createWallet().catch(() => { /* hook toasts */ });
+    };
+  } else if (walletSource === "external" && !connected) {
     ctaLabel = "Connect wallet";
     ctaAction = () => setVisible(true);
   } else if (numericSell <= 0) {
@@ -566,6 +600,18 @@ export const TradeLimit = ({ tab, onTabChange }: Props) => {
           </Popover>
         </div>
 
+        {/* Wallet source picker — Vision recommended */}
+        <WalletSourcePicker
+          value={walletSource}
+          onChange={setWalletSource}
+          visionAvailable
+          externalAvailable={connected}
+          onCreateVision={() => {
+            visionWallet.createWallet().catch(() => { /* hook toasts */ });
+          }}
+          onConnectExternal={() => setVisible(true)}
+        />
+
         {/* Card */}
         <div className="overflow-hidden rounded-2xl border border-border bg-card/60 backdrop-blur-sm shadow-soft">
           {/* Sell side */}
@@ -580,6 +626,23 @@ export const TradeLimit = ({ tab, onTabChange }: Props) => {
             onPickToken={() => setPickerSide("in")}
             readOnly={false}
           />
+
+          {/* Fund prompt — Vision Wallet selected, exists, but balance is 0 */}
+          {walletSource === "vision" &&
+            visionWallet.solanaAddress &&
+            inputBalance === 0 && (
+              <button
+                type="button"
+                onClick={() => setFundOpen(true)}
+                className="ease-vision flex w-full items-center justify-between border-t border-border/60 bg-primary/5 px-4 py-2.5 text-left text-xs text-primary transition-colors hover:bg-primary/10"
+              >
+                <span className="flex items-center gap-2">
+                  <ArrowDownToLine className="h-3.5 w-3.5" />
+                  No {inputToken.symbol} in your Vision Wallet — fund it to place this order
+                </span>
+                <span className="font-medium">Deposit →</span>
+              </button>
+            )}
 
           {/* Flip */}
           <div className="relative">
@@ -724,6 +787,13 @@ export const TradeLimit = ({ tab, onTabChange }: Props) => {
           excludeAddress={
             pickerSide === "in" ? outputToken.address : pickerSide === "out" ? inputToken.address : undefined
           }
+        />
+
+        {/* Fund Vision Wallet */}
+        <FundVisionWalletDialog
+          open={fundOpen}
+          onOpenChange={setFundOpen}
+          defaultChain="solana"
         />
       </div>
     </TooltipProvider>

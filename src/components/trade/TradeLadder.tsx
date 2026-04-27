@@ -28,6 +28,14 @@ import {
   type TokenMeta,
 } from "@/components/trade/TokenPickerDialog";
 import { OpenOrdersList } from "@/components/trade/OpenOrdersList";
+import {
+  WalletSourcePicker,
+  type WalletSource,
+} from "@/components/trade/WalletSourcePicker";
+import { FundVisionWalletDialog } from "@/components/wallet/FundVisionWalletDialog";
+import { ArrowDownToLine } from "lucide-react";
+import { useTradeSigner } from "@/hooks/useTradeSigner";
+import { useVisionWallet } from "@/hooks/useVisionWallet";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -149,10 +157,20 @@ export const TradeLadder = ({ expirySeconds }: Props) => {
   const [balance, setBalance] = useState<number | null>(null);
   const [ordersRefreshKey, setOrdersRefreshKey] = useState(0);
 
+  const [walletSource, setWalletSource] = useState<WalletSource>("vision");
+  const [fundOpen, setFundOpen] = useState(false);
+
   const { connection } = useConnection();
-  const { publicKey, connected, signTransaction } = useWallet();
+  const { publicKey, connected } = useWallet();
   const { setVisible } = useWalletModal();
+  const visionWallet = useVisionWallet();
+  const signer = useTradeSigner(walletSource);
   const mounted = useRef(true);
+
+  const activePayerAddress =
+    walletSource === "vision"
+      ? visionWallet.solanaAddress
+      : publicKey?.toBase58() ?? null;
 
   useEffect(() => {
     mounted.current = true;
@@ -164,14 +182,20 @@ export const TradeLadder = ({ expirySeconds }: Props) => {
   const spendToken = side === "buy" ? quoteToken : assetToken;
   const recvToken = side === "buy" ? assetToken : quoteToken;
 
-  // Balance for the spend-side token
+  // Balance for the spend-side token (scoped to active wallet source)
   useEffect(() => {
-    if (!connected || !publicKey) {
+    if (!activePayerAddress) {
       setBalance(null);
       return;
     }
     let cancelled = false;
-    const owner = new PublicKey(publicKey.toBase58());
+    let owner: PublicKey;
+    try {
+      owner = new PublicKey(activePayerAddress);
+    } catch {
+      setBalance(null);
+      return;
+    }
     setBalance(null);
     (async () => {
       try {
@@ -193,7 +217,7 @@ export const TradeLadder = ({ expirySeconds }: Props) => {
       }
     })();
     return () => { cancelled = true; };
-  }, [connected, publicKey, connection, spendToken.address, phase.name]);
+  }, [activePayerAddress, connection, spendToken.address, phase.name]);
 
   // Live USD price of the asset token
   useEffect(() => {
@@ -352,7 +376,7 @@ export const TradeLadder = ({ expirySeconds }: Props) => {
 
   // ---- Submit: sign each rung sequentially ----
   const placeLadder = useCallback(async () => {
-    if (!connected || !publicKey || !signTransaction) return;
+    if (!signer.ready || !activePayerAddress) return;
     if (validation || rungs.length === 0) return;
 
     try {
@@ -376,7 +400,7 @@ export const TradeLadder = ({ expirySeconds }: Props) => {
         }
 
         const built = await supaPost("limit-order-build", {
-          maker: publicKey.toBase58(),
+          maker: activePayerAddress,
           inputMint,
           outputMint,
           makingAmount: String(makingAmount),
@@ -392,9 +416,10 @@ export const TradeLadder = ({ expirySeconds }: Props) => {
         const txBytes = Uint8Array.from(atob(txB64), (c) => c.charCodeAt(0));
         const tx = VersionedTransaction.deserialize(txBytes);
 
-        let signed: VersionedTransaction;
+        // Sign-only — Jupiter Trigger requires execute via their endpoint.
+        let signedB64: string;
         try {
-          signed = await signTransaction(tx);
+          signedB64 = await signer.signOnly(tx);
         } catch {
           if (mounted.current) {
             setPhase({
@@ -411,7 +436,6 @@ export const TradeLadder = ({ expirySeconds }: Props) => {
 
         if (!mounted.current) return;
         setPhase({ name: "submitting", current: i + 1, total });
-        const signedB64 = btoa(String.fromCharCode(...signed.serialize()));
         const exec = await supaPost("limit-order-execute", {
           requestId,
           signedTransaction: signedB64,
@@ -440,9 +464,10 @@ export const TradeLadder = ({ expirySeconds }: Props) => {
       });
     }
   }, [
-    connected, publicKey, signTransaction, validation, rungs, expirySeconds,
+    signer, activePayerAddress, validation, rungs, expirySeconds,
     spendToken, recvToken, phase,
   ]);
+
 
   const reset = () => {
     setTotalAmount("");
@@ -511,7 +536,13 @@ export const TradeLadder = ({ expirySeconds }: Props) => {
   let ctaLabel = `Place ${rungCount}-rung ${side === "buy" ? "buy" : "sell"} ladder`;
   let ctaDisabled = false;
   let ctaAction: (() => void) | null = placeLadder;
-  if (!connected) {
+  if (walletSource === "vision" && !visionWallet.solanaAddress) {
+    ctaLabel = visionWallet.working ? "Creating wallet…" : "Create Vision Wallet";
+    ctaDisabled = visionWallet.working;
+    ctaAction = () => {
+      visionWallet.createWallet().catch(() => { /* hook toasts */ });
+    };
+  } else if (walletSource === "external" && !connected) {
     ctaLabel = "Connect wallet";
     ctaAction = () => setVisible(true);
   } else if (validation) {
@@ -527,6 +558,16 @@ export const TradeLadder = ({ expirySeconds }: Props) => {
   return (
     <TooltipProvider delayDuration={150}>
       <div className="w-full max-w-[440px] space-y-4">
+        <WalletSourcePicker
+          value={walletSource}
+          onChange={setWalletSource}
+          visionAvailable
+          externalAvailable={connected}
+          onCreateVision={() => {
+            visionWallet.createWallet().catch(() => { /* hook toasts */ });
+          }}
+          onConnectExternal={() => setVisible(true)}
+        />
         <div className="overflow-hidden rounded-2xl border border-border bg-card/60 backdrop-blur-sm shadow-soft">
           {/* Side toggle */}
           <div className="flex items-center gap-1 border-b border-border/60 bg-secondary/20 p-1">
