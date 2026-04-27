@@ -697,6 +697,20 @@ export const MultichainTokenPickerDialog = ({
                   ))}
                 </div>
               )}
+              {(visibleTrending.length > 0 || trendingLoading) && (
+                <div className="px-2 py-2">
+                  <SectionLabel>Trending</SectionLabel>
+                  {trendingLoading && visibleTrending.length === 0 ? (
+                    <div className="flex items-center justify-center py-4 text-muted-foreground/60">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    </div>
+                  ) : (
+                    visibleTrending.map((t) => (
+                      <TokenRow key={`t-${tokenKey(t)}`} token={t} onSelect={pick} />
+                    ))
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>
