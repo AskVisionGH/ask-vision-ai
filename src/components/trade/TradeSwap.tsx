@@ -764,30 +764,8 @@ export const TradeSwap = ({ tab, onTabChange }: TradeSwapProps) => {
             </div>
           )}
 
-          {status.kind === "error" && (
-            <div className="flex items-start gap-2 border-t border-destructive/30 bg-destructive/5 px-5 py-3">
-              <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-destructive" />
-              <p className="font-mono text-[11px] leading-relaxed text-destructive">{status.message}</p>
-            </div>
-          )}
-
-          {/* In-progress hint for cross-chain (so users don't think it's stuck) */}
-          {(status.kind === "bridging" || status.kind === "confirming") && (
-            <div className="flex items-start gap-2 border-t border-primary/30 bg-primary/5 px-5 py-3">
-              <Loader2 className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 animate-spin text-primary" />
-              <p className="font-mono text-[11px] leading-relaxed text-primary">
-                {status.kind === "bridging" ? "Bridge in flight — this can take a few minutes." : "Waiting for on-chain confirmation."}
-                {"explorer" in status && (
-                  <>
-                    {" "}
-                    <a href={status.explorer} target="_blank" rel="noopener noreferrer" className="underline">
-                      View tx
-                    </a>
-                  </>
-                )}
-              </p>
-            </div>
-          )}
+          {/* In-flight, error, and cancelled states are surfaced via
+              <RouteProgressModal /> below — no inline banners here. */}
 
           {/* CTA */}
           <div className="border-t border-border/40 bg-secondary/30 p-3">
