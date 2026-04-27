@@ -593,7 +593,7 @@ const ShareTokenRow = ({ token }: { token: TokenPnL }) => {
       style={{ background: "hsl(240 7% 11% / 0.7)" }}
     >
       <div className="flex items-center gap-3">
-        <TokenLogo logo={token.logo} symbol={token.symbol} />
+        <TokenLogo logo={token.logo} symbol={token.symbol} crossOrigin />
         <div>
           <p className="font-mono text-[16px] font-medium leading-tight">
             ${token.symbol}
